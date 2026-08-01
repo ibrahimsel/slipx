@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.1.0/limits.schema.json",
+  "title": "SlipX actuator and electrical limits",
+  "description": "limits.yaml: what the car cannot exceed. Kept separate from dynamics.yaml because limits are a property of the hardware fitted, and swapping a servo or a battery changes this file and nothing else.\n\nSeveral fields below are accepted and validated but not yet consumed: the ESC and servo models are CORE-08 and CORE-10 and arrive with L2 in P1. They are in the schema now so that a car directory written today is still valid then, and so that a team measuring their car has somewhere to put the numbers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "steering", "drivetrain"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+
+    "steering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_angle"],
+      "properties": {
+        "max_angle": {
+          "description": "Road wheel travel, symmetric, as a positive magnitude. [rad] Not a servo pulse width and not degrees. Consumed from L0.",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.2
+        },
+        "max_rate": {
+          "description": "Servo slew rate limit. [rad/s] Consumed from L2 (CORE-10). Identifiable by commanding a step and timing the response.",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 50.0
+        },
+        "bandwidth": {
+          "description": "Second-order servo natural frequency. [rad/s] Consumed from L2 (CORE-10).",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 500.0
+        },
+        "damping": {
+          "description": "Second-order servo damping ratio. [-] Consumed from L2.",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 5.0
+        }
+      }
+    },
+
+    "drivetrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accel_max", "decel_max", "v_max"],
+      "properties": {
+        "accel_max": {
+          "description": "Peak forward acceleration the drivetrain can deliver. [m/s^2] At L0 and L1 this is the whole drivetrain model; from L2 it is superseded by the ESC torque-speed curve and becomes a bound rather than the mechanism.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 40.0
+        },
+        "decel_max": {
+          "description": "Peak braking deceleration, as a positive magnitude. [m/s^2] Brake bias deliberately does not appear: a 1/10 car brakes through the motor, and a brake bias field would be a parameter nobody can set (CORE-08).",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 40.0
+        },
+        "v_max": {
+          "description": "Top speed. [m/s]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 40.0
+        }
+      }
+    },
+
+    "electrical": {
+      "description": "Consumed from L2 (CORE-08, CORE-09). Battery sag is what makes the last lap slower than the first, and a car tuned without it is tuned for a battery state that lasts thirty seconds.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pack_nominal_v": {
+          "description": "Nominal pack voltage. [V] 11.1 for a 3S lithium polymer.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 60.0
+        },
+        "pack_capacity_ah": {
+          "description": "Pack capacity. [A h]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 20.0
+        },
+        "pack_internal_resistance": {
+          "description": "Internal resistance, which is what produces sag under load. [ohm]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0
+        },
+        "current_max": {
+          "description": "ESC current limit. [A]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 300.0
+        },
+        "regen_current_max": {
+          "description": "Regenerative braking current limit, its own limit and usually well below current_max. [A]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 300.0
+        }
+      }
+    }
+  }
+}

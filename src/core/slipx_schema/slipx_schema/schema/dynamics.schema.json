@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.1.0/dynamics.schema.json",
+  "title": "SlipX vehicle dynamics parameters",
+  "description": "dynamics.yaml: mass, inertia, geometry, tyre references and drivetrain. This is the file slipx_id emits (P2) and the file a registry entry consists of. SI units throughout, no exceptions: metres, kilograms, seconds, radians, newtons. Every bound below is a physical or competition bound, and none of them is a default. Silent defaulting is prohibited (SCH-02), so every field the physics needs is required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mass", "inertia", "geometry", "tyres", "drivetrain", "resistance"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+
+    "mass": {
+      "description": "Total mass, sprung plus unsprung, as the car is raced: battery in, bodyshell on. [kg] The upper bound is generous for the 1/10 class rather than a rule.",
+      "type": "number",
+      "exclusiveMinimum": 0.5,
+      "maximum": 15.0
+    },
+
+    "inertia": {
+      "description": "Inertia tensor about the CoG, in the body frame. [kg m^2] Only izz affects any tier below L3, but all three principal moments are required: an inertia tensor with a hole in it cannot be checked for physical consistency (SCH-04), and a value that is absent today gets guessed tomorrow.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ixx", "iyy", "izz"],
+      "properties": {
+        "ixx": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 5.0 },
+        "iyy": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 5.0 },
+        "izz": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 5.0 },
+        "ixy": { "type": "number", "minimum": -5.0, "maximum": 5.0 },
+        "ixz": { "type": "number", "minimum": -5.0, "maximum": 5.0 },
+        "iyz": { "type": "number", "minimum": -5.0, "maximum": 5.0 }
+      }
+    },
+
+    "geometry": {
+      "description": "Distances in metres, ISO 8855 frame: x forward, y left, z up.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lf", "lr", "track_front", "track_rear", "h_cog", "wheel_radius", "length", "width"],
+      "properties": {
+        "lf": {
+          "description": "CoG to front axle, positive forward. [m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.6
+        },
+        "lr": {
+          "description": "CoG to rear axle, positive rearward. [m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.6
+        },
+        "track_front": {
+          "description": "Front track width, wheel centre to wheel centre. [m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.5
+        },
+        "track_rear": {
+          "description": "Rear track width. [m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.5
+        },
+        "h_cog": {
+          "description": "CoG height above the ground plane. [m] No effect below L2, which has no mechanism to transfer load; that is deliberate (SRS 2.4).",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.3
+        },
+        "wheel_radius": {
+          "description": "Effective rolling radius, loaded. Not the moulded radius. [m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.15
+        },
+        "length": {
+          "description": "Overall length including bodywork. [m] Checked against the RoboRacer dimensional rules (SCH-03).",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.5
+        },
+        "width": {
+          "description": "Overall width including bodywork. [m] Checked against the RoboRacer dimensional rules (SCH-03).",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0
+        }
+      }
+    },
+
+    "tyres": {
+      "description": "Tyres are REFERENCED, never embedded (SCH-05). A tyre is a (compound, surface) pair, because the same car on carpet and on polished concrete is two different vehicles. Embedding the coefficients in the car file is how asphalt numbers end up being used on a sports hall floor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["front", "rear"],
+      "properties": {
+        "front": { "$ref": "#/$defs/tyre_reference" },
+        "rear": { "$ref": "#/$defs/tyre_reference" }
+      }
+    },
+
+    "drivetrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "differential"],
+      "properties": {
+        "layout": {
+          "description": "Driven axles. The RoboRacer rules permit 2WD and 4WD (SCH-03).",
+          "type": "string",
+          "enum": ["2WD_rear", "2WD_front", "4WD"]
+        },
+        "differential": {
+          "description": "Differential type. Modelled from L2 (CORE-11, P1); below that it cannot affect the trajectory.",
+          "type": "string",
+          "enum": ["spool", "open", "lsd"]
+        },
+        "lsd_preload": {
+          "description": "Locking preload torque, required when differential is lsd. [N m]",
+          "type": "number", "minimum": 0.0, "maximum": 20.0
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "differential": { "const": "lsd" } }, "required": ["differential"] },
+          "then": { "required": ["lsd_preload"] }
+        }
+      ]
+    },
+
+    "resistance": {
+      "description": "Longitudinal resistance. Both terms are identifiable from a coastdown (ID-02), and both are needed: rolling resistance is speed-independent and drag goes as v^2, so a coastdown at one speed cannot separate them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drag_coeff", "roll_resist"],
+      "properties": {
+        "drag_coeff": {
+          "description": "0.5 * rho * Cd * A. [kg/m] Close to negligible below about 15 m/s at 1/10 scale, and retained because coastdown fitting needs it, not because it changes lap times.",
+          "type": "number", "minimum": 0.0, "maximum": 1.0
+        },
+        "roll_resist": {
+          "description": "Rolling resistance coefficient, dimensionless. [-]",
+          "type": "number", "minimum": 0.0, "maximum": 0.2
+        }
+      }
+    },
+
+    "numerics": {
+      "description": "Not physics. Exposed because it changes the model and therefore belongs in the manifest hash (SIM-06) rather than hiding as a constant in the source.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "v_eps": {
+          "description": "Speed floor used in slip-angle denominators, mitigating the single-track model's singularity at standstill. [m/s]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 2.0
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "tyre_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compound", "surface"],
+      "properties": {
+        "compound": {
+          "description": "Tyre compound. The RoboRacer rules permit sponge and rubber (SCH-03).",
+          "type": "string",
+          "enum": ["sponge", "rubber"]
+        },
+        "surface": {
+          "description": "The surface these coefficients were obtained on. Free text rather than an enum: surfaces are a community vocabulary and hard-coding a list would make a contributor's polished-concrete sports hall unrepresentable.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "maxLength": 64
+        }
+      }
+    }
+  }
+}

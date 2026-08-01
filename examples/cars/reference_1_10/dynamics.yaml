@@ -1,0 +1,73 @@
+# Vehicle dynamics parameters. SI units, ISO 8855 frame (x forward, y left,
+# z up). See src/core/slipx_core/include/slipx/conventions.hpp, which is the
+# normative statement of both.
+#
+# PROVISIONAL. See provenance.yaml.
+
+schema_version: "0.1.0"
+
+# Total mass as raced: chassis, battery, electronics, bodyshell.       [kg]
+mass: 3.5
+
+# Inertia tensor about the CoG.                                   [kg m^2]
+#
+# Only izz affects anything below L3, but all three are required so that the
+# tensor can be checked for physical consistency (SCH-04). These are the
+# moments of a uniform box of this mass and footprint, scaled down to reflect
+# that a real car concentrates its mass low and centrally.
+inertia:
+  ixx: 0.025
+  iyy: 0.070
+  izz: 0.050
+
+geometry:
+  # CoG to each axle. Equal here, so the static weight distribution is 50/50.
+  #
+  # With the same tyre on both axles that makes this car exactly neutral
+  # steering: the understeer gradient (m/L)(lr/C_f - lf/C_r) is zero, so it
+  # needs the same steer angle for a given radius at every speed. That is a
+  # convenient thing for a tutorial and an unusual thing for a real car, which
+  # is normally rear-biased and therefore has a gradient of one sign or the
+  # other. Weighing the car on four scales is the cheapest measurement in the
+  # whole identification programme and the first one worth doing.        [m]
+  lf: 0.160
+  lr: 0.160
+
+  track_front: 0.240
+  track_rear: 0.240
+
+  # Battery and electronics sit on the deck, so the CoG is above the axle
+  # line. No effect below L2, which has no mechanism to transfer load.   [m]
+  h_cog: 0.060
+
+  # Loaded rolling radius, not the moulded radius.                       [m]
+  wheel_radius: 0.050
+
+  # Overall, including bodywork. Both are inside the RoboRacer limits
+  # (SCH-03): 454 to 654 mm long, 238 to 341 mm wide.                    [m]
+  length: 0.550
+  width: 0.300
+
+# Referenced, not embedded (SCH-05). The same car on carpet and on polished
+# concrete is two different vehicles, and writing the coefficients in here
+# would make that difference invisible.
+tyres:
+  front:
+    compound: sponge
+    surface: carpet
+  rear:
+    compound: sponge
+    surface: carpet
+
+drivetrain:
+  # Rear-wheel drive with a locked rear axle, which is what most 1/10
+  # competition cars run. Neither field affects anything below L2 (CORE-11).
+  layout: 2WD_rear
+  differential: spool
+
+resistance:
+  # 0.5 * rho * Cd * A. Near-negligible below about 15 m/s at this scale, and
+  # present because a coastdown fit needs it: without a drag term the fit puts
+  # the whole deceleration into rolling resistance and gets both wrong.
+  drag_coeff: 0.015    #                                            [kg/m]
+  roll_resist: 0.015   #                                               [-]

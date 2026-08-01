@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.1.0/provenance.schema.json",
+  "title": "SlipX parameter provenance",
+  "description": "Where a set of numbers came from (NFR-08, SCH-06).\n\nThis file is required, and its label is printed by tooling rather than only documented, because the failure mode it prevents is specific and observed: a plausible-looking number enters a config file, nobody records that it was guessed, and six months later somebody is tuning a controller against it in good faith. No parameter set in SlipX has been validated against a real car; until an outside contributor supplies a fitted set with a validation report, the honest phrasing is 'physically structured and identifiable', not 'validated'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "label", "source", "method", "date"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "label": {
+      "description": "How these numbers were obtained. provisional: derived from literature or plausibility, measured against nothing. identified: fitted from vehicle data by slipx_id, with residuals. measured: directly measured on a scale, a rig or a coastdown with instrumentation. The weakest applicable label is the correct one.",
+      "type": "string",
+      "enum": ["provisional", "identified", "measured"]
+    },
+    "source": {
+      "description": "What the numbers came from: a vehicle, a paper, a manufacturer datasheet, or an honest statement that they were estimated.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "method": {
+      "description": "How. For an identified set, the manoeuvres and the fitting procedure. For a provisional set, the reasoning.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "date": {
+      "description": "ISO 8601 date the parameters were obtained, not the date the file was edited.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "contributor": {
+      "description": "Who. Required for registry submission (SCH-06, P2).",
+      "type": "string",
+      "maxLength": 200
+    },
+    "vehicle": {
+      "description": "The physical car, where there was one: chassis, motor, ESC, servo, tyres, ballast.",
+      "type": "string",
+      "maxLength": 500
+    },
+    "residuals": {
+      "description": "Per-parameter fit residuals and confidence intervals (ID-03). Required for an identified set: an identified parameter without a residual is a provisional parameter with a better title.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["value", "stddev"],
+        "properties": {
+          "value": { "type": "number" },
+          "stddev": { "type": "number", "minimum": 0.0 },
+          "unit": { "type": "string", "maxLength": 32 }
+        }
+      }
+    },
+    "validation_report": {
+      "description": "Path or URL to the replay validation report (ID-04): measured inputs through the fitted model, with divergence in yaw rate, lateral acceleration and speed.",
+      "type": "string",
+      "maxLength": 500
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "label": { "const": "identified" } },
+        "required": ["label"]
+      },
+      "then": {
+        "required": ["residuals", "contributor"]
+      }
+    }
+  ]
+}

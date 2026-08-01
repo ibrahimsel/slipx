@@ -1,0 +1,23 @@
+# The reference car directory.
+#
+# It exists so that the loader, the bindings and the tutorials have something
+# concrete to open, and so that a team starting their own car has a file to
+# copy rather than a schema to read.
+#
+# NOTHING IN HERE HAS BEEN MEASURED AGAINST A REAL VEHICLE. Every number is
+# provisional: plausible for a 1/10-scale competition car, derived from
+# published class rules and from what the components physically are, and
+# checked against nothing. provenance.yaml says so, the tooling prints it
+# (NFR-08), and it will keep saying so until somebody contributes a fitted set
+# with a validation report.
+
+schema_version: "0.1.0"
+name: reference_1_10
+description: >-
+  Provisional 1/10-scale competition car. Plausible geometry and mass for the
+  RoboRacer class; no parameter has been identified from vehicle data.
+
+dynamics: dynamics.yaml
+limits: limits.yaml
+sensors: sensors.yaml
+provenance: provenance.yaml

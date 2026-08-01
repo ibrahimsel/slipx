@@ -1,0 +1,32 @@
+# Where these numbers came from (NFR-08, SCH-06).
+#
+# The answer is: nowhere. They were reasoned about, not measured. This file
+# exists so that fact travels with the parameters instead of being lost the
+# first time somebody copies dynamics.yaml into their own project.
+
+schema_version: "0.1.0"
+
+label: provisional
+
+source: >-
+  No vehicle. Geometry and mass are typical of a 1/10-scale competition
+  chassis and sit inside the published RoboRacer dimensional rules. Inertias
+  are computed from a uniform box of this mass and footprint, scaled to
+  reflect that a real car concentrates its mass low and centrally.
+
+method: >-
+  Plausibility reasoning from published class rules and from what the
+  components physically are. No manoeuvre was driven, no data was recorded,
+  and no parameter was fitted. Every number is an estimate whose only claim is
+  that it is not absurd.
+
+date: "2026-08-01"
+
+notes: >-
+  This set is here so that the loader, the bindings and the tutorials have a
+  car to open. It is not a claim about any vehicle. It is deliberately labelled
+  provisional and will stay that way: the correct fix is not for us to guess
+  more carefully, it is for a team with a car to run the identification
+  manoeuvres and contribute a set with a validation report (P2). Until then the
+  honest phrasing for anything built on these numbers is "physically structured
+  and identifiable", not "validated".

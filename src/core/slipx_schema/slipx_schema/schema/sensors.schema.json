@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.1.0/sensors.schema.json",
+  "title": "SlipX sensor configuration",
+  "description": "sensors.yaml: sensor instances, their rates, phases, noise and latency.\n\nNothing consumes this at schema 0.1.0. slipx_sense arrives in P1 (SENSE-01 to SENSE-05) and the 3D scan patterns in P4. It is defined now because the shape of the file determines the shape of the car directory, and a car directory written during P0 should still validate in P1.\n\nThe one structural decision already made here: rate and latency are configured independently (SENSE-02), and each sensor carries a phase. Sensors do not run on the physics step; the physics runs at 1 kHz and sensors sample on their own schedule, which is what makes motion distortion emerge from the integration rather than being applied to it afterwards (SENSE-01).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sensors"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "sensors": {
+      "description": "May be empty. A car with no sensors is a legal car for a dynamics-only study, and requiring at least one would make the L0 and L1 tutorials carry a LiDAR they never read.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/sensor" }
+    }
+  },
+  "$defs": {
+    "sensor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "rate"],
+      "properties": {
+        "name": {
+          "description": "Instance name. Becomes the topic name under the agent namespace, so it follows the same character rules as a ROS name.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "maxLength": 64
+        },
+        "type": {
+          "description": "Sensor model. lidar_2d, imu and wheel_encoder arrive in P1; lidar_3d in P4 (SENSE-06).",
+          "type": "string",
+          "enum": ["lidar_2d", "lidar_3d", "imu", "wheel_encoder"]
+        },
+        "rate": {
+          "description": "Sample rate. [Hz] Independent of the physics rate and of the latency below.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 10000.0
+        },
+        "phase": {
+          "description": "Offset of this sensor's first sample within its period, as a fraction. [-] Two sensors at the same rate with different phases do not sample together, which is the normal situation on a real car and a common source of surprise in a simulator that ignores it.",
+          "type": "number", "minimum": 0.0, "exclusiveMaximum": 1.0
+        },
+        "mount": {
+          "description": "Name of the frame in the URDF this sensor is mounted to. The TF tree that runs on the real car owns the transform, so it is referenced here rather than duplicated.",
+          "type": "string", "maxLength": 128
+        },
+        "latency": {
+          "description": "Transport and processing delay, modelled separately from rate (SENSE-02).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "constant": { "description": "[s]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "jitter_stddev": { "description": "[s]", "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          }
+        },
+        "noise": {
+          "description": "Sensor-specific noise parameters. Left open at 0.1.0 because the fields differ per sensor type and slipx_sense has not yet fixed them; it is validated as a free object rather than pretending to a structure that has not been designed.",
+          "type": "object"
+        },
+        "dropout_probability": {
+          "description": "Per-sample dropout probability (SENSE-03). [-]",
+          "type": "number", "minimum": 0.0, "maximum": 1.0
+        }
+      }
+    }
+  }
+}

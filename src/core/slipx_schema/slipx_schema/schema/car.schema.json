@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.1.0/car.schema.json",
+  "title": "SlipX car manifest",
+  "description": "car.yaml: the manifest of a car directory. It names the files that describe the vehicle and nothing else; every actual parameter lives in one of them. Keeping the manifest empty of physics is what allows dynamics.yaml to be replaced by an identified set (P2) without touching anything else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "dynamics", "limits", "provenance"],
+  "properties": {
+    "schema_version": {
+      "description": "Semantic version of the schema this file is written against (SCH-01). An unknown major is refused; a known older minor is migrated.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "description": "Identifier for this car. Lower case, no spaces, so it can be a directory name, a ROS namespace and a registry key without transformation.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "description": {
+      "description": "Free text for humans.",
+      "type": "string",
+      "maxLength": 1000
+    },
+    "dynamics": {
+      "description": "Path to the dynamics file, relative to the car directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "limits": {
+      "description": "Path to the actuator and electrical limits file, relative to the car directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sensors": {
+      "description": "Path to the sensor configuration, relative to the car directory. Optional at schema 0.1.0 because nothing consumes it until slipx_sense lands in P1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "provenance": {
+      "description": "Path to the provenance file, relative to the car directory. Required, not optional: an unlabelled parameter set is exactly what NFR-08 exists to prevent.",
+      "type": "string",
+      "minLength": 1
+    },
+    "urdf": {
+      "description": "Path to the URDF or xacro owning frames, link geometry, inertias and sensor mount transforms. Optional at 0.1.0; it becomes load-bearing when slipx_ros needs a TF tree in P1. It owns nothing about dynamics, because it cannot express any of it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "tyres_dir": {
+      "description": "Directory holding local tyre files, relative to the car directory. Tyre references resolve here first and against the registry second (SCH-05). When absent the loader looks in 'tyres/' and reports the directory it used; that is a path convention, not a defaulted parameter.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

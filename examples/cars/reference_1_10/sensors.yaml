@@ -1,0 +1,48 @@
+# Sensor configuration.
+#
+# NOTHING CONSUMES THIS YET. slipx_sense arrives in P1 (SENSE-01 to SENSE-05)
+# and the 3D scan patterns in P4. The file is here, and validated, so that a
+# car directory written during P0 still validates afterwards, and so the shape
+# of the directory is settled before anything depends on it.
+#
+# The sensors below describe a typical RoboRacer build. Their rates and
+# latencies are plausible for the hardware named, and none of them has been
+# measured; when slipx_sense lands, these are numbers to replace, not to trust.
+
+schema_version: "0.1.0"
+
+sensors:
+  - name: scan
+    type: lidar_2d
+    # A 2D scanner of the Hokuyo UST-10LX class.
+    rate: 40.0        #                                                [Hz]
+    phase: 0.0        # fraction of the period                          [-]
+    mount: laser_frame
+    latency:
+      # Modelled separately from rate (SENSE-02), because they are separate
+      # things and a sensor that publishes at 40 Hz with 25 ms of delay is not
+      # the same as one that publishes at 40 Hz without it.
+      constant: 0.012      #                                            [s]
+      jitter_stddev: 0.002 #                                            [s]
+    dropout_probability: 0.001
+
+  - name: imu
+    type: imu
+    rate: 200.0
+    # Deliberately out of phase with the scanner: two sensors at different
+    # rates do not sample together on a real car, and a simulator that lets
+    # them is hiding a synchronisation problem the stack will meet later.
+    phase: 0.25
+    mount: imu_frame
+    latency:
+      constant: 0.002
+      jitter_stddev: 0.0005
+
+  - name: wheel_encoder
+    type: wheel_encoder
+    rate: 100.0
+    phase: 0.5
+    mount: base_link
+    latency:
+      constant: 0.001
+      jitter_stddev: 0.0002

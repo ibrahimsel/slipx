@@ -1,0 +1,68 @@
+# Sponge tyre on carpet.
+#
+# One (compound, surface) pair. This file is a property of the tyre and the
+# surface, not of the car wearing it, which is why cornering stiffness is
+# stated per tyre rather than per axle: an axle has two of them, and the number
+# of tyres on an axle is the car's business.
+#
+# PROVISIONAL. Nothing here was measured. Every parameter is one that COULD be
+# identified from a manoeuvre drivable in a car park with the sensors already
+# on a competition car, which is the whole point of the list; none of them has
+# been.
+
+schema_version: "0.1.0"
+
+compound: sponge
+surface: carpet
+
+# Static load per tyre on a 3.5 kg car with 50/50 weight distribution. The
+# friction and stiffness numbers below are stated at this load; without it
+# they are not stated at anything.                                       [N]
+nominal_load: 8.6
+
+linear:
+  # Cornering stiffness per tyre at the nominal load, positive. The restoring
+  # sign lives in the force law, Fy = -C_alpha * alpha (ISO 8855), not here.
+  # Identifiable from the low-slip region of a skidpad.               [N/rad]
+  c_alpha: 60.0
+
+friction:
+  # Peak lateral and longitudinal friction at the nominal load. Sponge on
+  # carpet grips well; above 1 is normal for this combination and would be
+  # suspicious on asphalt.                                                [-]
+  mu_y0: 1.10
+  mu_x0: 1.05
+
+  # Load sensitivity exponent: mu = mu_0 * (Fz / nominal_load)^(-k_mu).
+  # Identifiable from a skidpad at two ballast configurations, which is why it
+  # is in the list and Pacejka's several load-dependence terms are not.
+  # Consumed from L2 (CORE-06).                                           [-]
+  k_mu: 0.15
+
+# Reduced Magic Formula shape factors (CORE-06, L2, P1). With c_alpha and
+# mu_y0 above, these put the peak at roughly 9 degrees of slip, which is where
+# a sponge tyre of this size on carpet plausibly peaks.
+mf_lite:
+  B: 9.0
+  C: 1.45
+  E: 0.90
+
+relaxation:
+  # The distance the tyre must roll for lateral force to reach 63% of its
+  # steady value. Of the order of the contact patch length. Identifiable from
+  # the step-steer transient. Consumed from L2 (CORE-07).                 [m]
+  sigma: 0.045
+
+provenance:
+  schema_version: "0.1.0"
+  label: provisional
+  source: >-
+    No tyre. Values chosen so that the implied saturation slip angle and the
+    shape of the curve are typical of a small sponge tyre on carpet.
+  method: >-
+    Plausibility reasoning. No slip sweep was driven and no force was measured.
+  date: "2026-08-01"
+  notes: >-
+    A fitted replacement for this file is the single most valuable thing an
+    outside contributor could produce, and it needs no equipment beyond a car,
+    a carpet and a rosbag.
