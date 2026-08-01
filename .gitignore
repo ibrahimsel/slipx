@@ -1,0 +1,23 @@
+docs/spec
+
+# build output
+build/
+build-*/
+_skbuild/
+dist/
+*.egg-info/
+*.so
+*.a
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# determinism artefacts produced by a local run
+*.manifest.json
+
+# Agents
+
+CLAUDE.local.md

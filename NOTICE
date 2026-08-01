@@ -1,0 +1,16 @@
+SlipX
+Copyright 2026 The SlipX Authors
+
+This product includes software developed by The SlipX Authors.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+slipx_core has no third-party dependencies: it links only the C++ standard
+library (NFR-01, CORE-01). Layers above the core carry their own dependencies,
+all of which are permissively licensed:
+
+  slipx_schema   PyYAML (MIT), jsonschema (MIT)
+  slipx          pybind11 (BSD-3-Clause)
+
+No copyleft dependency appears anywhere in this repository, and none may be
+added to slipx_core.
