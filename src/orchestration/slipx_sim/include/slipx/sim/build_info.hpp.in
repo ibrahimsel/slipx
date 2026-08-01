@@ -1,0 +1,39 @@
+// Copyright 2026 The SlipX Authors
+// SPDX-License-Identifier: Apache-2.0
+//
+// GENERATED FILE. Edit build_info.hpp.in, not this.
+//
+// The build's identity, captured at configure time and hashed into every run
+// manifest (SIM-06). NFR-02 scopes bit-identity to a fixed (platform,
+// compiler, flag set), so a manifest that does not record which one it was is
+// not evidence of anything: two runs that disagree need to be distinguishable
+// from two builds that disagree.
+//
+// The git SHA is captured when CMake configures, not when the build runs.
+// Committing and rebuilding without reconfiguring leaves it stale, so the
+// value carries a "-dirty" suffix when the working tree had uncommitted
+// changes, and CI configures from a clean checkout every time. A dirty or
+// unknown SHA in a published result is a red flag by design rather than a
+// missing field.
+
+#ifndef SLIPX_SIM_BUILD_INFO_HPP
+#define SLIPX_SIM_BUILD_INFO_HPP
+
+namespace slipx {
+namespace sim {
+
+inline constexpr const char* kBuildCompilerId = "@CMAKE_CXX_COMPILER_ID@";
+inline constexpr const char* kBuildCompilerVersion =
+    "@CMAKE_CXX_COMPILER_VERSION@";
+inline constexpr const char* kBuildCxxFlags = "@SLIPX_EFFECTIVE_CXX_FLAGS@";
+inline constexpr const char* kBuildType = "@CMAKE_BUILD_TYPE@";
+inline constexpr const char* kBuildSystemName = "@CMAKE_SYSTEM_NAME@";
+inline constexpr const char* kBuildSystemProcessor =
+    "@CMAKE_SYSTEM_PROCESSOR@";
+inline constexpr const char* kBuildGitSha = "@SLIPX_GIT_SHA@";
+inline constexpr const char* kBuildCoreVersion = "@PROJECT_VERSION@";
+
+}  // namespace sim
+}  // namespace slipx
+
+#endif  // SLIPX_SIM_BUILD_INFO_HPP
