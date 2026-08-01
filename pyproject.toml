@@ -1,0 +1,87 @@
+# One distribution, `slipx`, providing two importable packages: `slipx` (the
+# bindings plus the car loader) and `slipx_schema` (the schemas and the
+# reference parser).
+#
+# Two packages in one distribution rather than two distributions, because a
+# student typing `pip install slipx` should get something that can open a car
+# file. They stay separately versioned (NFR-09) and the dependency between
+# them still runs one way only, which is what the architecture requires; what
+# is shared is the installer, not the version number.
+#
+# slipx_core is not on PyPI and never will be. It is a C++ library, and the
+# way to depend on it is add_subdirectory or find_package, with no Python
+# anywhere near it (CORE-01).
+
+[build-system]
+requires = ["scikit-build-core>=0.8", "pybind11>=2.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "slipx"
+version = "0.1.0"
+description = "Vehicle dynamics for 1/10-scale autonomous racecars"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "The SlipX Authors" }]
+keywords = [
+    "vehicle-dynamics", "simulation", "f1tenth", "roboracer", "robotics",
+    "tyre-model", "system-identification",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Only what the parser needs. The extension module itself has no Python
+# dependencies at all, and someone who wants the physics without the file
+# format can ignore both of these.
+dependencies = [
+    "pyyaml>=6.0",
+    "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/slipx/slipx"
+Repository = "https://github.com/slipx/slipx"
+
+[project.scripts]
+# The P0 exit gate, reachable without building anything: run the canonical
+# step steer and print its trajectory hash.
+slipx-conformance = "slipx.conformance:main"
+
+[tool.scikit-build]
+cmake.version = ">=3.20"
+cmake.build-type = "RelWithDebInfo"
+wheel.packages = [
+    "src/bindings/slipx/slipx",
+    "src/core/slipx_schema/slipx_schema",
+]
+sdist.exclude = ["build/", ".github/", "docs/spec/"]
+
+[tool.scikit-build.cmake.define]
+SLIPX_BUILD_PYTHON = "ON"
+SLIPX_BUILD_SIM = "ON"
+# The C++ test suites are not built for a wheel. They are run in CI against the
+# CMake build, where GoogleTest is available and where the determinism job can
+# compare hashes against a known compiler and flag set (NFR-02).
+SLIPX_BUILD_TESTS = "OFF"
+
+[tool.pytest.ini_options]
+# Working in the repository without installing: both packages are importable
+# from the source tree, and the extension is built in place next to the slipx
+# package by a plain `cmake --build`.
+pythonpath = ["src/bindings/slipx", "src/core/slipx_schema"]
+testpaths = [
+    "src/bindings/slipx/tests",
+    "src/core/slipx_schema/tests",
+]
