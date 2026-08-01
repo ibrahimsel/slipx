@@ -1,0 +1,34 @@
+# Published reference trajectory hashes for the canonical conformance run
+# (NFR-02, NFR-03). Tab-separated. Checked by tools/check_conformance.py.
+#
+# READ THIS BEFORE ADDING A ROW OR CHANGING ONE.
+#
+# Each row is a published claim: on this architecture, with this compiler
+# major and this build type, the canonical step steer produces exactly this
+# 64-bit hash. Within one such build, a different hash is a determinism bug
+# (NFR-02). Across builds, a different hash is expected and is not a failure:
+# cross-platform bit-identity is explicitly NOT promised (NFR-03), because
+# libm is not correctly rounded and does not agree between platforms.
+#
+# Changing an existing hash invalidates every result anybody has ever compared
+# against it. It is a release event, it belongs in the release notes, and it
+# needs a reason in the commit message: a physics change, an integrator
+# change, a change to the conformance scenario, or a change to the state
+# layout the hash covers. "The test was failing" is not a reason.
+#
+# The conformance scenario is defined once, in
+# src/orchestration/slipx_sim/include/slipx/sim/manoeuvres.hpp. It uses the
+# VehicleParams struct defaults, which are PROVISIONAL and describe no
+# measured vehicle (NFR-08). These hashes certify that the arithmetic is
+# reproducible. They certify nothing whatsoever about a real car.
+#
+# Columns:
+#   system_processor  compiler_id  compiler_major  build_type  tier  integrator  hash
+x86_64	GNU	11	RelWithDebInfo	L0	rk4	d74f90169a5951c2
+x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
+x86_64	GNU	11	RelWithDebInfo	L1	rk4	d44a9a68616ec899
+x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d
+x86_64	Clang	18	RelWithDebInfo	L0	rk4	d74f90169a5951c2
+x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
+x86_64	Clang	18	RelWithDebInfo	L1	rk4	d44a9a68616ec899
+x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d

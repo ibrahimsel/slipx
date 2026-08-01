@@ -1,0 +1,214 @@
+# SlipX CI.
+#
+# Four things are checked here that a test suite alone would not establish,
+# and each corresponds to a requirement that is otherwise only a promise in a
+# document:
+#
+#   dependency-lint    NFR-06. slipx_core must not acquire a dependency on any
+#                      layer above it. This will be broken by accident, not on
+#                      purpose, and a build that breaks is the only reliable
+#                      way to notice.
+#   licence            NFR-01. Apache-2.0 throughout, no copyleft anywhere.
+#   determinism        NFR-02. The canonical run's trajectory hash, compared
+#                      against the published reference for this exact build.
+#   core-only          CORE-01. The core builds and passes its full test suite
+#                      with every layer above it absent, including
+#                      slipx_schema. Asserted by configuring with them off,
+#                      because the claim is otherwise unfalsifiable.
+#
+# The cross-architecture job is NFR-03: bit-identity across platforms is not
+# promised, and the job exists to show what the difference actually is rather
+# than to assert it away.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------- policy
+  #
+  # Cheap, fast, and they fail for reasons a compiler never would. Run first
+  # so that a pull request breaking the architecture hears about it in under a
+  # minute rather than after a matrix build.
+  policy:
+    name: Architecture and licence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependency direction (NFR-06)
+        run: python3 tools/dep_lint.py
+
+      - name: Licence scan (NFR-01)
+        run: python3 tools/licence_scan.py
+
+  # ------------------------------------------------------------- core only
+  core-only:
+    name: slipx_core alone (CORE-01)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GoogleTest
+        # The only dependency this job is allowed, and it is test-only: it
+        # never appears in slipx_core's link line, which tools/dep_lint.py
+        # checks separately.
+        run: sudo apt-get update && sudo apt-get install -y libgtest-dev
+
+      - name: Configure with every layer above the core switched off
+        # SLIPX_CORE_ONLY drops slipx_sim, the bindings and everything else
+        # from the build. slipx_schema is a Python package and is simply not
+        # installed in this job. If the core needs any of them, this fails.
+        run: cmake -S . -B build -DSLIPX_CORE_ONLY=ON -DSLIPX_WERROR=ON
+             -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Full core test suite, with slipx_schema absent
+        run: ctest --test-dir build --output-on-failure
+
+  # ------------------------------------------------------------------ build
+  build:
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, RelWithDebInfo]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pybind11 pyyaml jsonschema pytest
+
+      - name: Configure
+        env:
+          CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
+        run: cmake -S . -B build
+             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+             -DSLIPX_BUILD_PYTHON=ON
+             -DSLIPX_WERROR=ON
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: C++ tests
+        run: ctest --test-dir build --output-on-failure -j"$(nproc)"
+
+      - name: Python tests
+        run: python3 -m pytest -q
+
+      # The two bindings are the same code compiled twice. If they disagree,
+      # every published reference hash becomes ambiguous about which one it
+      # referred to.
+      - name: C++ and Python agree on the conformance hash
+        run: |
+          from_cpp="$(build/src/orchestration/slipx_sim/slipx_conformance --quiet | tail -1)"
+          from_py="$(python3 -m slipx.conformance --quiet | tail -1)"
+          echo "C++    $from_cpp"
+          echo "Python $from_py"
+          test "$from_cpp" = "$from_py"
+        env:
+          PYTHONPATH: src/bindings/slipx:src/core/slipx_schema
+
+  # ------------------------------------------------------------ determinism
+  #
+  # The job the leaderboard and replay claims rest on. It runs on a fixed
+  # build, because that is the only scope in which bit-identity is promised
+  # (NFR-02), and compares against the published reference for that build.
+  determinism:
+    name: Determinism conformance (NFR-02)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      # --require-row: this is a designated reference runner, so a build with
+      # no published row is a failure here even though it is merely
+      # unremarkable elsewhere.
+      - name: Compare against the published reference hashes
+        run: python3 tools/check_conformance.py --require-row
+
+      - name: The same build, run twice, must agree bit for bit
+        run: |
+          first="$(build/src/orchestration/slipx_sim/slipx_conformance --quiet | tail -1)"
+          second="$(build/src/orchestration/slipx_sim/slipx_conformance --quiet | tail -1)"
+          echo "$first"
+          test "$first" = "$second"
+
+      - name: Publish the manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-manifests
+          path: build/src/orchestration/slipx_sim/*.manifest.json
+
+  # ------------------------------------------------------- cross-architecture
+  #
+  # NFR-03: cross-platform bit-identity is explicitly NOT guaranteed, and the
+  # conformance suite asserts agreement within a stated tolerance instead.
+  #
+  # This job is deliberately non-blocking and deliberately verbose. Its output
+  # is the evidence behind the documented limitation: if the aarch64 hash
+  # matches x86-64, that is worth knowing and is still not promised; if it
+  # differs, the trajectory comparison below says by how much, and that number
+  # is what the tolerance should be set from.
+  cross-arch:
+    name: aarch64 agreement (NFR-03)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y cmake g++ git python3
+          run: |
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                                -DSLIPX_BUILD_TESTS=OFF
+            cmake --build build -j"$(nproc)"
+            echo "--- aarch64 conformance ---"
+            build/src/orchestration/slipx_sim/slipx_conformance
+            echo
+            echo "Compare the trajectory hash and the final state above with"
+            echo "the x86-64 reference. NFR-03 promises agreement to a stated"
+            echo "tolerance, not bit-identity; a differing hash here is the"
+            echo "documented behaviour and not a bug."
