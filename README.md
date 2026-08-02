@@ -198,8 +198,18 @@ pinned image with a pinned compiler for exactly the reason the determinism job
 does.
 
 So `slipx-conformance` on your own machine printing something other than
-`d44a9a68616ec899` is the expected outcome unless you are on x86-64 with one of
-the compilers in that file. That is the promise working, not failing.
+`d44a9a68616ec899` is the expected outcome. That is the promise working, not
+failing.
+
+Matching it takes more than the right architecture, and the first published
+wheels demonstrated this rather than predicting it. `math.hpp` calls `sin`,
+`cos` and `atan2`, a wheel resolves them against the host's C library at run
+time rather than carrying its own, and those functions are not correctly
+rounded. The same `manylinux` wheel run against glibc 2.28 and against glibc
+2.39 agrees to every digit the summary line prints and still hashes
+differently. The published rows were produced against the newer one. The
+compiler, by contrast, is visibly not the variable: every x86-64 row in that
+file carries the same hash across GCC 11, GCC 13 and Clang 18.
 
 ### Building it
 
