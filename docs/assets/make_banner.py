@@ -3,9 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Render the animated README banner: a 1/10-scale car drifting on a skidpad.
 
-The motion is not keyframed. It comes from a single-track model with a reduced
-Magic Formula tyre, closed-loop on a circle of fixed radius, which is the same
-class of model SlipX exists to make identifiable. Run:
+This script does not use SlipX. It was written before the library existed, to
+see what the project would look like, and it carries its own single-track model
+and its own Magic Formula tyre in `tyre_fy` and `step` below. The motion is not
+keyframed, but neither is it evidence about `slipx_core`: the drift it shows
+needs a tyre with a falling branch, which the shipped tiers do not have.
+
+Replace it with a rollout from `slipx_core` once the double-track tier and
+MF-lite land, and delete the local model when you do. Run:
 
     python3 docs/assets/make_banner.py
 

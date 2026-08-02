@@ -244,11 +244,13 @@ The component diagram is in
 and the release history is in
 [`CHANGELOG.md`](https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md).
 
-The banner at the top is a real rollout, not an animation: a single-track car
-with a reduced Magic Formula tyre, closed loop on a skidpad, settled into a
-sustained drift at about 42 degrees of body slip on opposite lock, integrated at
-1 kHz and sampled over one lap. Regenerate it with
-`python3 docs/assets/make_banner.py`.
+The banner at the top is an illustration, and it was not produced by this
+library. `docs/assets/make_banner.py` carries its own single-track model and its
+own Magic Formula tyre, and it predates the code it advertises. It shows a car
+in a sustained drift, which is a manoeuvre the shipped tiers cannot reproduce,
+because a clipped linear tyre has no falling branch and so cannot spin a car. It
+will be regenerated from `slipx_core` once the double-track tier and MF-lite
+land, and that regeneration is a fair test of both.
 
 ## Licence
 
