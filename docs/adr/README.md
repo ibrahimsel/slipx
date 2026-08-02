@@ -51,6 +51,7 @@ Use [`template.md`](template.md) for a new record.
 | [0011](0011-schema-refuses-a-newer-minor.md) | The parser refuses a newer minor rather than ignoring fields it does not know | Accepted |
 | [0012](0012-no-scale-branching.md) | No `if (scale == ...)` branching in code | Accepted |
 | [0013](0013-provenance-labels-are-printed.md) | Every parameter set carries a provenance label and the tooling prints it | Accepted |
+| [0023](0023-mf-lite-derives-b-from-cornering-stiffness.md) | MF-lite derives the stiffness factor `B` rather than reading it | Accepted |
 
 ## Licence, packaging and release
 

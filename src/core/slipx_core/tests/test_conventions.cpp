@@ -13,6 +13,7 @@
 
 #include <cmath>
 
+#include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
 
@@ -215,6 +216,32 @@ TEST(ConventionsL1, PerWheelSlipIsNaNAtASingleTrackTier) {
     EXPECT_TRUE(std::isnan(d.fz[i])) << "wheel " << i;
   }
   EXPECT_FALSE(std::isnan(d.alpha_front));
+}
+
+// The ISO restoring sign, in MF-lite rather than in a model (CORE-06). This is
+// the single most common place ISO and SAE get mixed up: under SAE the slip
+// angle carries the opposite sign and the same tyre is written
+// Fy = +C_alpha * alpha. Both describe a restoring force, and a paper that
+// disagrees with this test is almost always an SAE paper.
+TEST(ConventionsTyre, MfLiteRestoresAgainstTheSlipAngle) {
+  slipx::TyreCoefficients c;
+  const slipx::MfLite t = slipx::make_mf_lite(c, 61.0, 8.4);
+
+  // Positive alpha: the wheel's velocity lies to the LEFT of the wheel plane,
+  // and the force pushes it back to the right, so Fy is negative.
+  EXPECT_LT(slipx::mf_lite_fy(t, 0.05, 8.4), 0.0);
+  EXPECT_GT(slipx::mf_lite_fy(t, -0.05, 8.4), 0.0);
+  EXPECT_EQ(slipx::mf_lite_fy(t, 0.0, 8.4), 0.0);
+
+  // The same sign L1's linear tyre carries, and the same magnitude at small
+  // slip, which is what makes the two tiers describe one car.
+  EXPECT_NEAR(slipx::mf_lite_fy(t, 1e-5, 8.4), -61.0 * 1e-5, 1e-9);
+
+  // Past the peak the force falls but never changes sign: the tyre stops
+  // resisting harder, it does not start pushing the wrong way.
+  for (const double alpha : {0.3, 0.8, 1.5, 3.0}) {
+    EXPECT_LT(slipx::mf_lite_fy(t, alpha, 8.4), 0.0) << "at alpha " << alpha;
+  }
 }
 
 // Wheel ordering is fixed library-wide; an off-by-one here would silently swap

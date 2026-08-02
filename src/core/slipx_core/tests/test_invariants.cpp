@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "slipx/load_transfer.hpp"
+#include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
 
@@ -537,6 +538,195 @@ TEST(InvariantsLoadTransfer, LoadsStayFiniteNonNegativeAndSumToTheWeight) {
         ASSERT_TRUE(std::isfinite(w.transfer_long));
         ASSERT_TRUE(std::isfinite(w.transfer_lat));
       }
+    }
+  }
+}
+
+// --------------------------------------------------------- MF-lite (CORE-06)
+//
+// The closed-form properties are in test_analytical.cpp. What is here is what
+// no single operating point can establish: exact oddness, and the bounds and
+// monotonicity holding over a swept space of tyres rather than at one
+// convenient set of coefficients.
+
+using slipx::CombinedForce;
+using slipx::MfLite;
+using slipx::TyreCoefficients;
+
+// Tyres spanning the ranges tyre.schema.json admits, at the extremes as well as
+// the middle: a hard low-grip compound through a soft sticky one, no load
+// sensitivity through the maximum, and shape factors at both ends of the band
+// that still describes a tyre. Deterministic and closed form (CORE-04).
+std::vector<TyreCoefficients> tyre_sweep() {
+  std::vector<TyreCoefficients> out;
+  for (const double mu_y : {0.55, 1.15, 2.20}) {
+    for (const double k_mu : {0.0, 0.22, 0.60}) {
+      for (const double shape_c : {1.05, 1.43, 1.90}) {
+        for (const double curvature_e : {-2.0, 0.0, 0.87}) {
+          TyreCoefficients t;
+          t.mu_y0 = mu_y;
+          t.mu_x0 = mu_y * 1.15;
+          t.k_mu = k_mu;
+          t.shape_c = shape_c;
+          t.curvature_e = curvature_e;
+          out.push_back(t);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+constexpr double kSweepCAlpha = 61.0;  // per tyre                    [N/rad]
+constexpr double kSweepFzNom = 8.4;    //                                 [N]
+
+// A tyre must behave identically in both directions. Asserted bit for bit
+// rather than within a tolerance: mf_shape is composed of odd functions, so any
+// asymmetry here has been introduced rather than tolerated. This is the
+// invariant that catches a one-sided clamp or a fabs where a sign belonged,
+// which is the shape of the zero-load guard.
+TEST(InvariantsMfLite, LateralForceIsExactlyOddInSlipAngle) {
+  for (const TyreCoefficients& c : tyre_sweep()) {
+    const MfLite t = slipx::make_mf_lite(c, kSweepCAlpha, kSweepFzNom);
+    for (const double fz : {0.0, 2.0, 8.4, 30.0}) {
+      for (const double alpha : {1e-4, 0.03, 0.15, 0.8, 3.0}) {
+        ASSERT_EQ(slipx::mf_lite_fy(t, -alpha, fz),
+                  -slipx::mf_lite_fy(t, alpha, fz))
+            << "mu_y0 " << c.mu_y0 << " C " << c.shape_c << " E "
+            << c.curvature_e << " Fz " << fz << " alpha " << alpha;
+      }
+      ASSERT_EQ(slipx::mf_lite_fy(t, 0.0, fz), 0.0);
+    }
+  }
+}
+
+// No tyre in the sweep, at any slip angle or load, may exceed its friction
+// budget or produce a NaN. This is the bound everything downstream rests on:
+// the friction ellipse, the saturation flag and the claim that L2 has a limit
+// at all are only as good as |Fy| <= mu Fz holding everywhere.
+TEST(InvariantsMfLite, ForceNeverExceedsTheFrictionBudget) {
+  for (const TyreCoefficients& c : tyre_sweep()) {
+    const MfLite t = slipx::make_mf_lite(c, kSweepCAlpha, kSweepFzNom);
+    for (const double fz : {0.0, 0.4, 8.4, 30.0}) {
+      const double budget = slipx::peak_lateral_force(t, fz);
+      ASSERT_TRUE(std::isfinite(budget));
+      ASSERT_GE(budget, 0.0);
+
+      for (int i = -400; i <= 400; ++i) {
+        const double alpha = 0.01 * static_cast<double>(i);
+        const double fy = slipx::mf_lite_fy(t, alpha, fz);
+        ASSERT_TRUE(std::isfinite(fy))
+            << "mu_y0 " << c.mu_y0 << " Fz " << fz << " alpha " << alpha;
+        ASSERT_LE(std::fabs(fy), budget * (1.0 + 1e-12))
+            << "mu_y0 " << c.mu_y0 << " Fz " << fz << " alpha " << alpha;
+      }
+    }
+  }
+}
+
+// Below the peak, more slip angle means more force, at every tyre in the
+// sweep. A curve that was not monotone up to its peak would have two slip
+// angles delivering the same force on the rising side, which is not a tyre and
+// is what the schema's bound of E <= 1 exists to prevent.
+TEST(InvariantsMfLite, ForceRisesMonotonicallyUpToThePeak) {
+  for (const TyreCoefficients& c : tyre_sweep()) {
+    const MfLite t = slipx::make_mf_lite(c, kSweepCAlpha, kSweepFzNom);
+    const double budget = slipx::peak_lateral_force(t, kSweepFzNom);
+
+    double previous = -1.0;
+    for (int i = 0; i <= 2000; ++i) {
+      const double alpha = 0.001 * static_cast<double>(i);
+      const double fy = std::fabs(slipx::mf_lite_fy(t, alpha, kSweepFzNom));
+      // Stop at the peak; the falling branch beyond it is checked in
+      // test_analytical.cpp and is not monotone by design.
+      if (fy < previous) break;
+      ASSERT_GE(fy, previous) << "C " << c.shape_c << " E " << c.curvature_e
+                              << " alpha " << alpha;
+      ASSERT_LE(fy, budget * (1.0 + 1e-12));
+      previous = fy;
+    }
+    // The rise has to get somewhere near the budget rather than stalling.
+    ASSERT_GT(previous, 0.5 * budget) << "C " << c.shape_c;
+  }
+}
+
+// More load is more grip, always, even though the coefficient falls. The two
+// pull in opposite directions and the product must still increase, which is
+// what k_mu < 1 means physically; a k_mu above 1 would describe a tyre that
+// grips less the harder you push it, and the schema bounds it at 1 for that
+// reason.
+TEST(InvariantsMfLite, MoreLoadIsAlwaysMoreForceButLessCoefficient) {
+  for (const TyreCoefficients& c : tyre_sweep()) {
+    const MfLite t = slipx::make_mf_lite(c, kSweepCAlpha, kSweepFzNom);
+
+    double previous_force = -1.0;
+    double previous_mu = 1e9;
+    for (const double fz : {0.5, 2.0, 8.4, 20.0, 40.0}) {
+      const double force = slipx::peak_lateral_force(t, fz);
+      const double mu = slipx::mu_at_load(c.mu_y0, c.k_mu, fz, kSweepFzNom);
+      ASSERT_GT(force, previous_force) << "mu_y0 " << c.mu_y0 << " Fz " << fz;
+      if (c.k_mu > 0.0) {
+        ASSERT_LT(mu, previous_mu) << "mu_y0 " << c.mu_y0 << " Fz " << fz;
+      } else {
+        ASSERT_EQ(mu, c.mu_y0);
+      }
+      previous_force = force;
+      previous_mu = mu;
+    }
+  }
+}
+
+// The ellipse never returns more than the budget, never reverses a component,
+// and never produces a NaN, over a grid of demands and budgets that includes
+// the degenerate ones.
+TEST(InvariantsCombinedSlip, TheResultAlwaysLiesInsideTheEllipse) {
+  for (const double fx_max : {0.0, 0.7, 9.7}) {
+    for (const double fy_max : {0.0, 1.3, 8.3}) {
+      for (const double fx : {-40.0, -9.7, -0.2, 0.0, 0.2, 9.7, 40.0}) {
+        for (const double fy : {-40.0, -8.3, -0.2, 0.0, 0.2, 8.3, 40.0}) {
+          const CombinedForce r =
+              slipx::friction_ellipse(fx, fy, fx_max, fy_max);
+
+          ASSERT_TRUE(std::isfinite(r.fx)) << fx << " " << fy;
+          ASSERT_TRUE(std::isfinite(r.fy)) << fx << " " << fy;
+          ASSERT_LE(std::fabs(r.fx), std::fabs(fx));
+          ASSERT_LE(std::fabs(r.fy), std::fabs(fy));
+          ASSERT_GE(r.fx * fx, 0.0) << "the ellipse reversed fx";
+          ASSERT_GE(r.fy * fy, 0.0) << "the ellipse reversed fy";
+
+          if (fx_max > 0.0 && fy_max > 0.0) {
+            ASSERT_LE(std::hypot(r.fx / fx_max, r.fy / fy_max), 1.0 + 1e-12)
+                << "fx " << fx << " fy " << fy;
+          } else {
+            ASSERT_EQ(r.fx, 0.0);
+            ASSERT_EQ(r.fy, 0.0);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Mirroring a demand mirrors the result exactly, in both axes independently.
+// The ellipse is symmetric about both, and a tyre that delivered slightly more
+// braking than acceleration would bias every trajectory in one direction.
+TEST(InvariantsCombinedSlip, MirroringADemandMirrorsTheResult) {
+  const double fx_max = 9.7;
+  const double fy_max = 8.3;
+  for (const double fx : {0.2, 6.0, 40.0}) {
+    for (const double fy : {0.3, 5.0, 30.0}) {
+      const CombinedForce a = slipx::friction_ellipse(fx, fy, fx_max, fy_max);
+      const CombinedForce bx = slipx::friction_ellipse(-fx, fy, fx_max,
+                                                       fy_max);
+      const CombinedForce by = slipx::friction_ellipse(fx, -fy, fx_max,
+                                                       fy_max);
+
+      ASSERT_EQ(bx.fx, -a.fx);
+      ASSERT_EQ(bx.fy, a.fy);
+      ASSERT_EQ(by.fx, a.fx);
+      ASSERT_EQ(by.fy, -a.fy);
+      ASSERT_EQ(bx.saturated, a.saturated);
+      ASSERT_EQ(by.saturated, a.saturated);
     }
   }
 }

@@ -13,6 +13,7 @@
 #include <cmath>
 
 #include "slipx/load_transfer.hpp"
+#include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
 
@@ -592,6 +593,387 @@ TEST(LoadTransfer, ZeroCoGHeightTransfersNothing) {
   for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
     EXPECT_NEAR(w.fz[i], s.fz[i], 1e-9) << "wheel " << i;
   }
+}
+
+// ----------------------------------------------------------------- MF-lite
+//
+// CORE-06, the second piece of L2. The Magic Formula has no closed-form
+// inverse and no tidy algebraic identities, so what is checked here is the set
+// of properties that make it a tyre rather than an arbitrary curve, each one
+// derived from the formula on paper and none of them read back out of
+// tyre.hpp: the slope at the origin, the height and existence of the peak, how
+// both move with vertical load, and oddness.
+
+using slipx::MfLite;
+using slipx::TyreCoefficients;
+
+// A tyre with no round numbers in it, so an omitted factor cannot cancel.
+TyreCoefficients reference_tyre() {
+  TyreCoefficients t;
+  t.mu_y0 = 1.15;
+  t.mu_x0 = 1.32;
+  t.k_mu = 0.22;
+  t.shape_c = 1.68;
+  t.curvature_e = 0.42;
+  return t;
+}
+
+constexpr double kCAlphaTyre = 61.0;  // per tyre                    [N/rad]
+constexpr double kFzNom = 8.4;        // static load on that tyre        [N]
+
+MfLite reference_mf_lite() {
+  return slipx::make_mf_lite(reference_tyre(), kCAlphaTyre, kFzNom);
+}
+
+// Largest |Fy| over a fine sweep, and the slip angle it occurred at. Sampled
+// rather than solved, because the peak has no closed form; the resolution is
+// what sets the tolerance in the tests that use it.
+struct Peak {
+  double fy = 0.0;
+  double alpha = 0.0;
+};
+
+Peak sweep_peak(const MfLite& t, double fz) {
+  Peak best;
+  // Out to 4 rad, which is far past anything a car reaches and is there so that
+  // the pathological coefficient pairs below have their peak inside the sweep
+  // rather than at its edge.
+  for (int i = 0; i <= 400000; ++i) {
+    const double alpha = 4.0 * static_cast<double>(i) / 400000.0;
+    const double fy = std::fabs(slipx::mf_lite_fy(t, alpha, fz));
+    if (fy > best.fy) {
+      best.fy = fy;
+      best.alpha = alpha;
+    }
+  }
+  return best;
+}
+
+// The one property the whole B derivation exists to buy: at the nominal load
+// and small slip, MF-lite IS L1's linear tyre, Fy = -C_alpha alpha. Not
+// approximately and not to plotting accuracy. This is what makes the cross-tier
+// convergence check a measurement of discretisation error rather than of a
+// parameter mismatch, and it is the test that a B missing its C, its mu or its
+// Fz fails immediately.
+TEST(MfLite, SmallSlipReproducesTheLinearTyre) {
+  const MfLite t = reference_mf_lite();
+
+  for (const double alpha : {1e-7, 1e-6, 1e-5}) {
+    const double fy = slipx::mf_lite_fy(t, alpha, kFzNom);
+    const double linear = -kCAlphaTyre * alpha;
+    // Relative, because the absolute force here is of order a micronewton.
+    // The formula's leading correction is cubic in alpha, so the error at
+    // 1e-5 rad is already below 1e-9 relative.
+    EXPECT_NEAR(fy / linear, 1.0, 1e-8) << "at alpha " << alpha;
+  }
+
+  // Stated once more as the derivative, which is the quantity a skidpad
+  // actually measures.
+  EXPECT_NEAR(slipx::cornering_stiffness_at_load(t, kFzNom), kCAlphaTyre,
+              1e-10);
+}
+
+// The peak is exactly mu Fz, reached at a finite slip angle, with a falling
+// branch beyond it. The falling branch is the entire difference between this
+// and L1's clip: it is the mechanism by which a car spins rather than slides
+// and recovers.
+TEST(MfLite, PeakIsMuTimesLoadAndTheCurveFallsBeyondIt) {
+  const MfLite t = reference_mf_lite();
+  const Peak peak = sweep_peak(t, kFzNom);
+
+  EXPECT_NEAR(peak.fy, reference_tyre().mu_y0 * kFzNom, 1e-6);
+
+  // At a finite slip angle, and at one the right size. The scale to measure it
+  // against is not an absolute number of degrees, which would only be a
+  // property of these provisional coefficients; it is the slip angle at which
+  // the LINEAR tyre would have reached the same peak,
+  //
+  //   alpha_lin = mu_y Fz / C_alpha
+  //
+  // A real tyre peaks at somewhere between 1.5 and 3 times that, and the
+  // multiple is set by C and E alone. See the note in tyre.hpp: a low C with a
+  // high E is legal under tyre.schema.json and gives a multiple above 20,
+  // which is a tyre whose peak no car reaches.
+  const double alpha_lin = reference_tyre().mu_y0 * kFzNom / kCAlphaTyre;
+  EXPECT_GT(peak.alpha, 1.5 * alpha_lin);
+  EXPECT_LT(peak.alpha, 3.0 * alpha_lin);
+
+  // And it falls afterwards. Checked at three points so a single flat spot
+  // cannot pass, and the last is well past anything a car reaches.
+  const double past_1 = std::fabs(slipx::mf_lite_fy(t, 2.0 * peak.alpha,
+                                                    kFzNom));
+  const double past_2 = std::fabs(slipx::mf_lite_fy(t, 4.0 * peak.alpha,
+                                                    kFzNom));
+  const double past_3 = std::fabs(slipx::mf_lite_fy(t, 8.0 * peak.alpha,
+                                                    kFzNom));
+  EXPECT_LT(past_1, peak.fy);
+  EXPECT_LT(past_2, past_1);
+  EXPECT_LT(past_3, past_2);
+
+  // The size of the drop matters as much as its direction: a curve that gave
+  // up 1% of its peak would not spin a car, because the moment that takes the
+  // rear axle round needs the force to fall faster than the slip angle grows.
+  EXPECT_LT(past_2, 0.9 * peak.fy);
+}
+
+// Where the peak sits, in the only units the question has an answer in.
+// alpha_peak / alpha_lin depends on C and E and on nothing else: not on the
+// cornering stiffness, not on the friction coefficient, and not on the load.
+// That independence is why C and E are the two parameters a slip sweep is for,
+// and it is what makes the trap in tyre.hpp a property of the pair rather than
+// of a particular car.
+TEST(MfLite, ThePeakSlipAngleScalesWithTheLinearTyreAndDependsOnlyOnCAndE) {
+  const TyreCoefficients c = reference_tyre();
+
+  double reference_ratio = 0.0;
+  for (const double c_alpha : {30.0, 61.0, 150.0}) {
+    for (const double fz_nom : {4.0, 8.4, 25.0}) {
+      const MfLite t = slipx::make_mf_lite(c, c_alpha, fz_nom);
+      const double alpha_lin = c.mu_y0 * fz_nom / c_alpha;
+      const double ratio = sweep_peak(t, fz_nom).alpha / alpha_lin;
+
+      if (reference_ratio == 0.0) reference_ratio = ratio;
+      // Loose only because the peak is found by sampling; the underlying
+      // quantity is exact.
+      EXPECT_NEAR(ratio, reference_ratio, 1e-3)
+          << "C_alpha " << c_alpha << " Fz_nom " << fz_nom;
+    }
+  }
+
+  // The value for the reference coefficients, quoted so that a change to C or
+  // E has to move a number in this file and be noticed.
+  EXPECT_NEAR(reference_ratio, 2.692, 2e-3);
+
+  // A larger C brings the peak in, which is the lever an identification run
+  // uses when the fitted curve peaks too late.
+  TyreCoefficients sharper = c;
+  sharper.shape_c = 2.10;
+  const MfLite s = slipx::make_mf_lite(sharper, kCAlphaTyre, kFzNom);
+  const double alpha_lin = c.mu_y0 * kFzNom / kCAlphaTyre;
+  EXPECT_LT(sweep_peak(s, kFzNom).alpha / alpha_lin, reference_ratio);
+
+  // And the trap: legal coefficients at the corners of the schema's boxes give
+  // a peak more than ten times further out than a tyre has one. Asserted so
+  // that the claim in tyre.hpp is a measurement rather than an anecdote.
+  TyreCoefficients flat = c;
+  flat.shape_c = 1.05;
+  flat.curvature_e = 0.87;
+  const MfLite f = slipx::make_mf_lite(flat, kCAlphaTyre, kFzNom);
+  EXPECT_GT(sweep_peak(f, kFzNom).alpha / alpha_lin, 10.0);
+}
+
+// mu = mu_0 (Fz / Fz_nom)^(-k_mu), and the sign of that exponent is the whole
+// of load sensitivity: friction FALLS as the tyre is pushed harder. Get it
+// backwards and load transfer starts producing grip.
+TEST(MfLite, FrictionFallsWithLoadByThePowerLaw) {
+  const TyreCoefficients c = reference_tyre();
+  const MfLite t = reference_mf_lite();
+
+  for (const double ratio : {0.4, 1.0, 1.8, 3.0}) {
+    const double fz = ratio * kFzNom;
+    const double expected_mu = c.mu_y0 * std::pow(ratio, -c.k_mu);
+
+    EXPECT_NEAR(slipx::mu_at_load(c.mu_y0, c.k_mu, fz, kFzNom), expected_mu,
+                1e-12)
+        << "at Fz/Fz_nom " << ratio;
+    EXPECT_NEAR(slipx::peak_lateral_force(t, fz), expected_mu * fz, 1e-12)
+        << "at Fz/Fz_nom " << ratio;
+    EXPECT_NEAR(slipx::peak_longitudinal_force(t, fz),
+                c.mu_x0 * std::pow(ratio, -c.k_mu) * fz, 1e-12)
+        << "at Fz/Fz_nom " << ratio;
+
+    // And through the curve, not only through the coefficient.
+    EXPECT_NEAR(sweep_peak(t, fz).fy, expected_mu * fz, 1e-5)
+        << "at Fz/Fz_nom " << ratio;
+  }
+
+  // The consequence, in the form a student meets it: doubling the load on a
+  // tyre gives less than twice the grip, so a car that has transferred its
+  // weight onto two wheels has less grip than the same car flat.
+  EXPECT_LT(slipx::peak_lateral_force(t, 2.0 * kFzNom),
+            2.0 * slipx::peak_lateral_force(t, kFzNom));
+}
+
+// Cornering stiffness inherits the load sensitivity of mu, because B is fixed:
+// C_alpha(Fz) = C_alpha(Fz_nom) (Fz / Fz_nom)^(1 - k_mu). Checked against a
+// numerical derivative of the force law rather than against the closed form
+// alone, so that the two are shown to describe one tyre.
+TEST(MfLite, CorneringStiffnessGrowsSublinearlyWithLoad) {
+  const TyreCoefficients c = reference_tyre();
+  const MfLite t = reference_mf_lite();
+  const double h = 1e-6;
+
+  for (const double ratio : {0.4, 1.0, 1.8, 3.0}) {
+    const double fz = ratio * kFzNom;
+    const double expected = kCAlphaTyre * std::pow(ratio, 1.0 - c.k_mu);
+
+    EXPECT_NEAR(slipx::cornering_stiffness_at_load(t, fz), expected, 1e-9)
+        << "at Fz/Fz_nom " << ratio;
+
+    const double slope = -(slipx::mf_lite_fy(t, h, fz) -
+                           slipx::mf_lite_fy(t, -h, fz)) / (2.0 * h);
+    EXPECT_NEAR(slope, expected, 1e-6 * expected)
+        << "at Fz/Fz_nom " << ratio;
+  }
+
+  // Sub-linear, which is the same statement as the peak one above and is the
+  // reason a heavily loaded outer tyre does not simply take over.
+  EXPECT_LT(slipx::cornering_stiffness_at_load(t, 2.0 * kFzNom),
+            2.0 * kCAlphaTyre);
+  EXPECT_GT(slipx::cornering_stiffness_at_load(t, 2.0 * kFzNom), kCAlphaTyre);
+}
+
+// A tyre with no load produces no force, and in particular does not produce a
+// NaN. mu(Fz) diverges at Fz = 0, so the naive mu(Fz) * Fz is inf * 0. This is
+// not a hypothetical: quasi_static_loads clamps a lifted wheel to exactly zero,
+// so any car that reaches its rollover threshold takes this path, and a single
+// NaN entering the state poisons the whole trajectory and its hash.
+TEST(MfLite, ALiftedWheelProducesZeroForceAndNotNaN) {
+  for (const double k_mu : {0.0, 0.15, 0.5, 1.0}) {
+    TyreCoefficients c = reference_tyre();
+    c.k_mu = k_mu;
+    const MfLite t = slipx::make_mf_lite(c, kCAlphaTyre, kFzNom);
+
+    for (const double alpha : {-0.3, 0.0, 0.05, 1.2}) {
+      const double fy = slipx::mf_lite_fy(t, alpha, 0.0);
+      EXPECT_TRUE(std::isfinite(fy)) << "k_mu " << k_mu << " alpha " << alpha;
+      EXPECT_EQ(fy, 0.0) << "k_mu " << k_mu << " alpha " << alpha;
+    }
+    EXPECT_EQ(slipx::peak_lateral_force(t, 0.0), 0.0);
+    EXPECT_EQ(slipx::peak_longitudinal_force(t, 0.0), 0.0);
+  }
+}
+
+// k_mu = 0 must switch load sensitivity off completely, leaving force
+// proportional to load. It is the degenerate case a user reaches for when they
+// have not identified k_mu, and it has to behave.
+TEST(MfLite, ZeroLoadSensitivityMakesForceProportionalToLoad) {
+  TyreCoefficients c = reference_tyre();
+  c.k_mu = 0.0;
+  const MfLite t = slipx::make_mf_lite(c, kCAlphaTyre, kFzNom);
+
+  for (const double ratio : {0.5, 2.0, 3.0}) {
+    EXPECT_NEAR(slipx::peak_lateral_force(t, ratio * kFzNom),
+                ratio * c.mu_y0 * kFzNom, 1e-12);
+    EXPECT_NEAR(slipx::mf_lite_fy(t, 0.08, ratio * kFzNom),
+                ratio * slipx::mf_lite_fy(t, 0.08, kFzNom), 1e-12);
+    EXPECT_NEAR(slipx::cornering_stiffness_at_load(t, ratio * kFzNom),
+                ratio * kCAlphaTyre, 1e-10);
+  }
+}
+
+// ------------------------------------------------- combined slip (CORE-06)
+
+using slipx::CombinedForce;
+
+// Inside the ellipse the tyre delivers exactly what was asked, bit for bit.
+// Anything else would mean the combined-slip path quietly altering pure-slip
+// results, and every analytical case above would then be testing a curve the
+// model does not use.
+TEST(CombinedSlip, ADemandInsideTheEllipseIsUntouched) {
+  const double fx_max = 9.7;
+  const double fy_max = 8.3;
+
+  for (const double fx : {-4.0, 0.0, 2.5}) {
+    for (const double fy : {-3.0, 0.0, 1.5}) {
+      const CombinedForce r = slipx::friction_ellipse(fx, fy, fx_max, fy_max);
+      EXPECT_EQ(r.fx, fx);
+      EXPECT_EQ(r.fy, fy);
+      EXPECT_FALSE(r.saturated);
+    }
+  }
+}
+
+// Outside it, the result lands ON the ellipse and keeps the direction of the
+// demand. Both halves matter: landing on the ellipse is the friction budget,
+// and keeping the direction is what makes this a projection rather than two
+// independent clips. A circle of radius max(fx_max, fy_max) would pass the
+// direction half and fail the first; an axis-wise clamp the reverse.
+TEST(CombinedSlip, ADemandOutsideTheEllipseIsProjectedOntoIt) {
+  const double fx_max = 9.7;
+  const double fy_max = 8.3;
+
+  for (const double fx : {-30.0, -8.0, 6.0, 25.0}) {
+    for (const double fy : {-24.0, -7.0, 5.0, 19.0}) {
+      const CombinedForce r = slipx::friction_ellipse(fx, fy, fx_max, fy_max);
+      const double demand = std::hypot(fx / fx_max, fy / fy_max);
+      if (demand <= 1.0) continue;
+
+      EXPECT_TRUE(r.saturated) << "at fx " << fx << " fy " << fy;
+      EXPECT_NEAR(std::hypot(r.fx / fx_max, r.fy / fy_max), 1.0, 1e-12)
+          << "at fx " << fx << " fy " << fy;
+      // Same direction: the ratio is preserved, so the cross product with the
+      // demand vanishes.
+      EXPECT_NEAR(r.fx * fy - r.fy * fx, 0.0, 1e-9)
+          << "at fx " << fx << " fy " << fy;
+      // And it is a reduction, never an increase.
+      EXPECT_LT(std::hypot(r.fx, r.fy), std::hypot(fx, fy));
+    }
+  }
+}
+
+// The axis cases pin the ellipse's two semi-axes to the two peak forces, which
+// is the statement that mu_x and mu_y mean what they say. Pure braking at the
+// limit gets mu_x Fz and nothing else, and the same tyre asked for both at once
+// gets neither in full.
+TEST(CombinedSlip, PureAxisDemandsRecoverThePeakForces) {
+  const MfLite t = reference_mf_lite();
+  const double fz = kFzNom;
+  const double fx_max = slipx::peak_longitudinal_force(t, fz);
+  const double fy_max = slipx::peak_lateral_force(t, fz);
+
+  const CombinedForce braking = slipx::friction_ellipse(-99.0, 0.0, fx_max,
+                                                        fy_max);
+  EXPECT_NEAR(braking.fx, -fx_max, 1e-12);
+  EXPECT_EQ(braking.fy, 0.0);
+  EXPECT_TRUE(braking.saturated);
+
+  const CombinedForce cornering = slipx::friction_ellipse(0.0, 99.0, fx_max,
+                                                          fy_max);
+  EXPECT_EQ(cornering.fx, 0.0);
+  EXPECT_NEAR(cornering.fy, fy_max, 1e-12);
+  EXPECT_TRUE(cornering.saturated);
+
+  // Braking at the limit leaves nothing to steer with. The number is the
+  // teaching point: asking for full braking AND full cornering gives 71% of
+  // each, not 100% of one and a bit of the other.
+  //
+  // "Full" has to be expressed as a fraction of each axis's own limit rather
+  // than as two equal forces, because mu_x and mu_y differ and the budget is an
+  // ellipse rather than a circle. Demanding equal newtons on a tyre with
+  // unequal limits is a demand in some other direction, and it is projected
+  // onto some other point of the ellipse.
+  const CombinedForce both = slipx::friction_ellipse(-2.0 * fx_max,
+                                                     2.0 * fy_max, fx_max,
+                                                     fy_max);
+  EXPECT_NEAR(both.fx / fx_max, -std::sqrt(0.5), 1e-12);
+  EXPECT_NEAR(both.fy / fy_max, std::sqrt(0.5), 1e-12);
+
+  // A saturated tyre using half its braking budget still has 87% of its
+  // cornering budget, not 50%. That is the shape of the ellipse and the reason
+  // trail braking works at all. Asked for along the ray through that point,
+  // because the projection follows the direction of the demand: this function
+  // cannot be handed a longitudinal force to keep and asked what is left over,
+  // and a caller wanting that priority has to express it as a direction.
+  const CombinedForce trail = slipx::friction_ellipse(
+      -1.0 * fx_max, 2.0 * std::sqrt(0.75) * fy_max, fx_max, fy_max);
+  EXPECT_NEAR(trail.fx / fx_max, -0.5, 1e-12);
+  EXPECT_NEAR(trail.fy / fy_max, std::sqrt(0.75), 1e-12);
+}
+
+// A wheel with no load has no friction budget at all, and the division that
+// computes the ellipse is undefined there. It reports saturation, because a
+// demand that cannot be met is exactly what that flag means.
+TEST(CombinedSlip, AZeroBudgetDeliversNothingAndSaysSo) {
+  const CombinedForce asked = slipx::friction_ellipse(5.0, -3.0, 0.0, 0.0);
+  EXPECT_EQ(asked.fx, 0.0);
+  EXPECT_EQ(asked.fy, 0.0);
+  EXPECT_TRUE(asked.saturated);
+
+  const CombinedForce idle = slipx::friction_ellipse(0.0, 0.0, 0.0, 0.0);
+  EXPECT_EQ(idle.fx, 0.0);
+  EXPECT_EQ(idle.fy, 0.0);
+  EXPECT_FALSE(idle.saturated);
 }
 
 }  // namespace
