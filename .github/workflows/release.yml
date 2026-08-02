@@ -1,0 +1,232 @@
+# Publishing SlipX to an index.
+#
+# Nothing here runs on a push. Every publication is a manual dispatch against a
+# tag, because a version on PyPI can never be reused and an accidental release
+# is therefore not something a later commit can repair.
+#
+# The order of the jobs is the order of the guarantees:
+#
+#   version   the tag and the tree agree about what is being released, and the
+#             four places a version is written agree with each other (NFR-09).
+#             Everything else depends on this job, so a mismatch costs nothing
+#             but a failed run.
+#   sdist     the source distribution builds and contains what it needs to. It
+#             is the fallback for every platform not in the wheel matrix, so a
+#             broken one is a broken install for those users.
+#   wheels    cibuildwheel, and it runs the exit gate against every wheel on the
+#             platform that wheel was built for.
+#   publish   gated behind a GitHub environment, so the upload itself needs an
+#             approval that a workflow file cannot grant itself.
+#
+# Authentication is Trusted Publishing (OIDC), not an API token. A token is a
+# long-lived secret that publishes any project the account owns, from anywhere,
+# until somebody remembers to rotate it. Trusted Publishing mints a credential
+# per run, scoped to this repository, this workflow file and this environment,
+# valid for minutes. For a project whose entire argument is that provenance
+# should be checkable, a shared secret in a settings page is the wrong shape.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Index to publish to"
+        required: true
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      publish:
+        description: "Actually upload. Leave unchecked to build and verify only."
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------- version
+  version:
+    name: Version agreement (NFR-09)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The tag and the tree must be the same release
+        id: check
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            expected="${GITHUB_REF_NAME#v}"
+            echo "dispatched from tag ${GITHUB_REF_NAME}, expecting ${expected}"
+            python3 tools/version_check.py --expect "${expected}"
+          else
+            # Running from a branch is allowed for a TestPyPI rehearsal and is
+            # refused for PyPI below. There is no tag to compare against, so
+            # only the internal consistency of the tree is checked.
+            echo "not dispatched from a tag; checking internal consistency only"
+            python3 tools/version_check.py
+          fi
+          echo "version=$(python3 tools/version_check.py --print)" >> "$GITHUB_OUTPUT"
+
+      - name: A real release comes from a tag
+        if: inputs.target == 'pypi' && github.ref_type != 'tag'
+        run: |
+          echo "::error::Publishing to PyPI must be dispatched from a tag." \
+               "An artefact on PyPI is permanent and has to be traceable to a" \
+               "commit that cannot move afterwards. Tag the release first."
+          exit 1
+
+  # ------------------------------------------------------------------ sdist
+  sdist:
+    name: Source distribution
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python3 -m pip install --upgrade pip build twine
+
+      - name: Build
+        run: python3 -m build --sdist
+
+      # The sdist is what every platform outside the wheel matrix installs
+      # from, so "it built" is not enough: it has to still contain the CMake
+      # project, the core headers and the reference car.
+      - name: The sdist contains what it needs to build and to load a car
+        run: |
+          tarball="$(ls dist/*.tar.gz)"
+          echo "checking ${tarball}"
+          listing="$(tar -tzf "${tarball}")"
+          missing=0
+          for required in \
+            "CMakeLists.txt" \
+            "cmake/SlipxDeterminism.cmake" \
+            "src/core/slipx_core/include/slipx/version.hpp" \
+            "src/bindings/slipx/slipx/__init__.py" \
+            "src/core/slipx_schema/slipx_schema/version.py" \
+            "examples/cars/reference_1_10/car.yaml" \
+            "LICENSE" \
+            "NOTICE"
+          do
+            if ! echo "${listing}" | grep -q "/${required}$"; then
+              echo "::error::sdist is missing ${required}"
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Metadata renders on an index (twine check)
+        run: python3 -m twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+
+  # ----------------------------------------------------------------- wheels
+  #
+  # One job per platform, wheels built serially within each. The matrix is
+  # justified in [tool.cibuildwheel] in pyproject.toml rather than here,
+  # because the reasoning belongs next to the build configuration and not next
+  # to the runner names.
+  #
+  # aarch64 is built on a native ARM runner rather than under QEMU. It is the
+  # architecture of every Jetson, which is the computer actually bolted to an
+  # F1TENTH car, so it is not an afterthought platform here; and emulated
+  # builds take roughly an order of magnitude longer for the same result.
+  wheels:
+    name: ${{ matrix.name }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,     name: "manylinux x86_64" }
+          - { os: ubuntu-24.04-arm,  name: "manylinux aarch64" }
+          - { os: macos-13,          name: "macOS x86_64" }
+          - { os: macos-14,          name: "macOS arm64" }
+          - { os: windows-latest,    name: "Windows AMD64" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pypa/cibuildwheel@v2.21.3
+
+      # The hashes the exit gate printed during the wheel tests. They are
+      # evidence, not claims: none of these builds has a row in
+      # conformance/reference_hashes.tsv, and adding one is a separate,
+      # deliberate commit rather than something a release job does on its own.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  # ---------------------------------------------------------------- publish
+  #
+  # Split in two so that the PyPI path can carry a GitHub environment with a
+  # required reviewer while the TestPyPI rehearsal does not need one.
+  #
+  # Both need `id-token: write`. That permission is what mints the OIDC
+  # credential; without it Trusted Publishing cannot work, and with it no
+  # secret needs to exist anywhere in this repository.
+  publish-testpypi:
+    name: Upload to TestPyPI
+    if: inputs.publish && inputs.target == 'testpypi'
+    needs: [version, sdist, wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/slipx
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - run: ls -la dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # A rehearsal that has already been run once should not fail the
+          # whole workflow on its second attempt. TestPyPI is not permanent in
+          # the way that matters and nobody pins from it.
+          skip-existing: true
+
+  publish-pypi:
+    name: Upload to PyPI
+    if: inputs.publish && inputs.target == 'pypi'
+    needs: [version, sdist, wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/slipx
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - run: ls -la dist
+
+      # No skip-existing here. On the real index, an upload that collides with
+      # an existing version means the version number was wrong, and the right
+      # outcome is a loud failure rather than a quiet partial release.
+      - uses: pypa/gh-action-pypi-publish@release/v1
