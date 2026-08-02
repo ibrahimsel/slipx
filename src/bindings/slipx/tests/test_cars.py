@@ -100,3 +100,33 @@ def test_repr_leads_with_what_matters() -> None:
     text = repr(slipx.load_car(REFERENCE_CAR))
     assert "reference_1_10" in text
     assert "provisional" in text
+
+
+def test_the_reference_car_is_reachable_without_knowing_where_it_is() -> None:
+    """NFR-10, and the second clause of the P0 exit gate.
+
+    An installed wheel carries the car directory inside the package; a
+    checkout has it under examples/cars. Both are resolved by the same call,
+    so a user who has never seen the repository layout can still load a car.
+    """
+    path = slipx.reference_car_path()
+    assert path.is_dir()
+    assert (path / "car.yaml").is_file()
+
+    car = slipx.load_reference_car()
+    assert car.name == "reference_1_10"
+    assert car.provenance.label == "provisional"
+
+
+def test_the_two_reference_car_locations_are_the_same_car() -> None:
+    """The install copies the repository directory rather than duplicating it.
+
+    If these ever disagree, a hash reproduced from an installed wheel would
+    stop meaning what the same hash reproduced from a checkout means, which
+    is the whole content of the exit gate.
+    """
+    resolved = slipx.load_car(slipx.reference_car_path())
+    explicit = slipx.load_car(REFERENCE_CAR)
+    assert resolved.params.mass == explicit.params.mass
+    assert resolved.params.izz == explicit.params.izz
+    assert resolved.params.c_alpha_f == explicit.params.c_alpha_f

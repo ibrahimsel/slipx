@@ -131,6 +131,65 @@ jobs:
         env:
           PYTHONPATH: src/bindings/slipx:src/core/slipx_schema
 
+  # ------------------------------------------------------------------ wheel
+  #
+  # The P0 exit gate, run as written: "a third party can pip install the
+  # package, load a car directory, integrate a step-steer manoeuvre and get the
+  # same trajectory hash as CI."
+  #
+  # This is the only job that exercises pyproject.toml. Every other job builds
+  # through CMake directly and puts the extension next to the package sources,
+  # which is convenient in a checkout and is not what an outside user does. A
+  # wheel built by scikit-build-core is a different code path, and until it is
+  # run in CI the exit gate is a claim rather than a fact.
+  #
+  # The run step deliberately works from an empty directory with PYTHONPATH
+  # cleared. Testing an install from the repository root proves nothing: Python
+  # puts the working directory on sys.path, so the checkout would satisfy the
+  # imports whether the wheel contained anything or not.
+  # Pinned for the same reason the determinism job is: this job compares
+  # against a published hash, so it must run on a build that has one.
+  wheel:
+    name: pip install and exit gate (P0)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and install the wheel
+        run: python3 -m pip install --upgrade pip && python3 -m pip install .
+
+      # Copied out of the checkout and run from elsewhere. The script is the
+      # gate; the copy is what stops the checkout from satisfying the imports.
+      - name: The exit gate, run outside the checkout
+        env:
+          PYTHONPATH: ""
+        run: |
+          mkdir -p "${RUNNER_TEMP}/elsewhere"
+          cp tools/exit_gate.py "${RUNNER_TEMP}/elsewhere/"
+          cd "${RUNNER_TEMP}/elsewhere"
+          python3 exit_gate.py --expect "$EXPECTED_HASH"
+
+      # The console script by name, because the gate is about what a person
+      # types and `slipx-conformance` is the thing they are told to type.
+      - name: The console script agrees
+        env:
+          PYTHONPATH: ""
+        run: |
+          cd "${RUNNER_TEMP}"
+          hash="$(slipx-conformance --quiet | tail -1)"
+          echo "installed wheel: $hash"
+          test "$hash" = "$EXPECTED_HASH"
+    env:
+      # The L1/rk4 row from conformance/reference_hashes.tsv. Pinned literally
+      # rather than read from the file, because this job is asserting that an
+      # independently built artefact agrees with the published number, and
+      # reading the number from the repository the artefact was built from
+      # would make the check circular.
+      EXPECTED_HASH: d44a9a68616ec899
+
   # ------------------------------------------------------------ determinism
   #
   # The job the leaderboard and replay claims rest on. It runs on a fixed

@@ -136,6 +136,24 @@ so its slip angles are NaN and a plot of them is empty; L1 has no way to
 transfer load, so its load transfer terms are NaN. Zero is a number somebody
 would plot and believe.
 
+### Installing it
+
+```
+pip install .
+slipx-conformance
+```
+
+That builds the extension through scikit-build-core, installs `slipx` and
+`slipx_schema`, and ships the reference car inside the package, so there is
+something to load without cloning anything. The last line prints the canonical
+step steer's trajectory hash. On a build with a published row in
+`conformance/reference_hashes.tsv` it should match; on anything else it is a
+number about which nothing has been claimed, which is NFR-03 rather than a
+fault. `python3 tools/exit_gate.py --expect <hash>` runs the whole check.
+
+There is no PyPI release yet, so `pip install slipx` does not work and the
+package name is not reserved.
+
 ### Building it
 
 ```
@@ -168,7 +186,7 @@ target_link_libraries(your_simulator PRIVATE slipx::core)
 ```python
 import slipx
 
-car = slipx.load_car("examples/cars/reference_1_10")
+car = slipx.load_reference_car()      # or load_car("examples/cars/reference_1_10")
 print(car.summary())        # leads with the provenance label. It says PROVISIONAL.
 
 model = slipx.VehicleModel.create(slipx.Tier.L1_Bicycle, car.params)

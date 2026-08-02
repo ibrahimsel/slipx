@@ -135,6 +135,41 @@ class Car:
         )
 
 
+def reference_car_path() -> Path:
+    """Where the reference 1/10-scale car directory is (NFR-10).
+
+    Two locations, because there are two ways to have SlipX. An installed
+    wheel carries the directory inside the package; a checkout has it at
+    ``examples/cars``. It is the same car either way, installed from the
+    repository copy rather than duplicated into the package sources, so the
+    two cannot drift into disagreeing reference cars.
+
+    The parameters are labelled ``provisional`` and describe no measured
+    vehicle (NFR-08). It is a car that validates, not a car that is right.
+    """
+    installed = Path(__file__).resolve().parent / "examples" / "reference_1_10"
+    if installed.is_dir():
+        return installed
+
+    in_tree = (
+        Path(__file__).resolve().parents[4]
+        / "examples" / "cars" / "reference_1_10"
+    )
+    if in_tree.is_dir():
+        return in_tree
+
+    raise FileNotFoundError(
+        "the reference car is neither installed beside the package nor "
+        "present in a source checkout. If this is an installed wheel, the "
+        "package data is missing and the install is incomplete."
+    )
+
+
+def load_reference_car(strict: bool = False) -> Car:
+    """Load the reference car. The shortest path to a steppable model."""
+    return load_car(reference_car_path(), strict=strict)
+
+
 def load_car(directory: str | Path, strict: bool = False) -> Car:
     """Load, validate and convert a car directory.
 

@@ -42,6 +42,18 @@ slipx_apply_determinism_flags(_slipx)
 # in-tree copy is gitignored.
 if(DEFINED SKBUILD)
   install(TARGETS _slipx LIBRARY DESTINATION slipx)
+
+  # The reference car travels with the wheel (NFR-10). Without it, a fresh
+  # `pip install slipx` gives you a parser, six schemas and nothing to parse,
+  # and the P0 exit gate asks a third party to load a car directory. Shipping
+  # one directory is the difference between an installed package that can be
+  # tried and one that first requires cloning the repository.
+  #
+  # It is the same directory the repository serves from examples/cars, not a
+  # copy: slipx.reference_car_path() looks in both places, so the two paths
+  # cannot drift apart into two different reference cars.
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/cars/reference_1_10
+          DESTINATION slipx/examples)
 else()
   set_target_properties(_slipx PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/slipx)

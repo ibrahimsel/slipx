@@ -64,7 +64,13 @@ from ._slipx import (  # noqa: F401
     make_conformance_run,
     step_steer,
 )
-from .cars import Car, load_car, to_vehicle_params
+from .cars import (
+    Car,
+    load_car,
+    load_reference_car,
+    reference_car_path,
+    to_vehicle_params,
+)
 from .version import __version__
 
 __all__ = [
@@ -93,7 +99,9 @@ __all__ = [
     "hash_text",
     "hold_speed",
     "load_car",
+    "load_reference_car",
     "make_conformance_run",
+    "reference_car_path",
     "step_steer",
     "to_vehicle_params",
 ]
