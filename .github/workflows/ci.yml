@@ -11,6 +11,9 @@
 #   licence            NFR-01. Apache-2.0 throughout, no copyleft anywhere.
 #   determinism        NFR-02. The canonical run's trajectory hash, compared
 #                      against the published reference for this exact build.
+#   version            NFR-09. The version is written in four places and they
+#                      have to agree, and the schema version is a separate
+#                      number that must not be quietly coupled to them.
 #   core-only          CORE-01. The core builds and passes its full test suite
 #                      with every layer above it absent, including
 #                      slipx_schema. Asserted by configuring with them off,
@@ -52,6 +55,13 @@ jobs:
 
       - name: Licence scan (NFR-01)
         run: python3 tools/licence_scan.py
+
+      # Run on every commit rather than only at release time. The failure it
+      # catches is a version written in three places out of four, and the
+      # moment to find that is while the commit that did it is still on
+      # screen, not while a tag is being cut.
+      - name: Version agreement (NFR-09)
+        run: python3 tools/version_check.py
 
   # ------------------------------------------------------------- core only
   core-only:

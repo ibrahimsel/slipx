@@ -20,11 +20,21 @@ import slipx
 
 
 def test_versions_are_reported_and_independent() -> None:
-    assert slipx.__version__ == "0.1.0"
-    assert slipx.core_version == "0.1.0"
+    # Deliberately not a literal. A literal here would be a fifth place the
+    # version is written, and the failure it catches is one tools/version_check.py
+    # already catches earlier and with a better message.
+    #
+    # What is worth asserting is the thing that check cannot see: __version__
+    # comes from the Python source and core_version comes from the compiled
+    # extension, so an equality here is the two languages agreeing at runtime.
+    # A stale extension left in the tree by an interrupted build fails this.
+    assert slipx.__version__ == slipx.core_version
+    assert slipx.__version__.startswith("0.")
 
     # slipx_schema is versioned independently (NFR-09), so this is a separate
-    # number that happens to agree today and need not tomorrow.
+    # number that happens to agree today and need not tomorrow. Asserting only
+    # that it exists is the point: asserting it equalled slipx.__version__
+    # would encode exactly the coupling NFR-09 forbids.
     import slipx_schema
 
     assert slipx_schema.SCHEMA_VERSION

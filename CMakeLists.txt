@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
+# PROJECT_VERSION is the numeric triple only: CMake cannot express a PEP 440
+# pre-release suffix. The full string, suffix included, lives in
+# include/slipx/version.hpp and is what reaches the run manifest and PyPI.
+# tools/version_check.py holds the two in agreement.
 project(slipx
   VERSION 0.1.0
   DESCRIPTION "Vehicle dynamics for 1/10-scale autonomous racecars"

@@ -18,8 +18,20 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "slipx"
-version = "0.1.0"
+version = "0.1.0a1"
+# The summary line on the PyPI index page, and the only text most people will
+# read before deciding. It says what the library is and does not characterise
+# how good it is: "identifiable", "validated" and "accurate" are all claims
+# this project is not yet entitled to make about any shipped parameter set
+# (NFR-08), and a one-line summary is the worst place to start making them.
 description = "Vehicle dynamics for 1/10-scale autonomous racecars"
+
+# The whole README becomes the PyPI long description. That is deliberate: a
+# second, shorter description written for PyPI would be a second place the
+# scope and the limitations are stated, and the two would drift. The cost is
+# that every link and image in README.md must be an absolute URL, because PyPI
+# serves the text from a different origin and resolves nothing relative to the
+# repository.
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
@@ -28,13 +40,26 @@ keywords = [
     "vehicle-dynamics", "simulation", "f1tenth", "roboracer", "robotics",
     "tyre-model", "system-identification",
 ]
+# Development Status is 3 - Alpha and stays there until L2 exists and at least
+# one parameter set has a validation report attached (P2). It is not a
+# placeholder to be bumped when the code feels finished; it is the same claim
+# the README's second paragraph makes, in the one field a package index can
+# actually index on.
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Education",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -51,8 +76,10 @@ dependencies = [
 dev = ["pytest>=7.0"]
 
 [project.urls]
-Homepage = "https://github.com/slipx/slipx"
-Repository = "https://github.com/slipx/slipx"
+Homepage = "https://github.com/ibrahimsel/slipx"
+Repository = "https://github.com/ibrahimsel/slipx"
+Issues = "https://github.com/ibrahimsel/slipx/issues"
+Changelog = "https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md"
 
 [project.scripts]
 # The P0 exit gate, reachable without building anything: run the canonical
@@ -75,6 +102,39 @@ SLIPX_BUILD_SIM = "ON"
 # CMake build, where GoogleTest is available and where the determinism job can
 # compare hashes against a known compiler and flag set (NFR-02).
 SLIPX_BUILD_TESTS = "OFF"
+
+[tool.cibuildwheel]
+# Which wheels exist, and the reasoning, because every entry is a platform
+# somebody is then entitled to expect to keep working.
+#
+#   CPython 3.9 to 3.13   3.9 is the Python on Ubuntu 20.04, which is still
+#                         under a lot of ROS 2 Foxy-era hardware. Dropping it
+#                         would exclude exactly the teams this is for.
+#   no PyPy               pybind11 works there, but nobody running a physics
+#                         rollout is on PyPy, and it is two more builds.
+#   no musllinux          Alpine is not a robotics platform. The sdist is still
+#                         there for anybody who disagrees.
+#   no 32-bit             the state vectors are double precision throughout.
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = "pp* *-musllinux_* *_i686 *-win32"
+
+# manylinux_2_28 rather than the older 2_17: it is glibc 2.28, which covers
+# Ubuntu 20.04 onwards and every Jetson image in current use, and it ships a
+# compiler that does not need coaxing into C++17.
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+
+# The exit gate, minus its --expect argument, run against each wheel on the
+# platform it was built for. cibuildwheel runs this from a temporary directory,
+# so the imports are satisfied by the installed wheel rather than by the
+# checkout, which is the whole point of the gate.
+#
+# --expect is deliberately absent. These builds have no published row in
+# conformance/reference_hashes.tsv and NFR-03 does not promise their hash will
+# match one. What is verified here is what holds on every platform: the wheel
+# installs, the reference car loads out of it, and a step steer integrates.
+# The hash is printed for the record and is not graded.
+test-command = "python {project}/tools/exit_gate.py && slipx-conformance"
 
 [tool.pytest.ini_options]
 # Working in the repository without installing: both packages are importable
