@@ -104,6 +104,12 @@ a script and not a paragraph.
 The full component diagram, including the adoption surface it is aimed at, is in
 [`docs/architecture/slipx.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/architecture/slipx.md).
 
+Why the stack is shaped this way, and why several of the more annoying rules
+exist, is in [`docs/adr`](https://github.com/ibrahimsel/slipx/tree/main/docs/adr):
+one numbered record per decision, each stating what was considered and what the
+decision costs. Start there before proposing to change any of them, since most
+of the tempting simplifications have a record explaining what they break.
+
 ### Core interface
 
 Sketch, not final. What matters is the shape: no hidden state, `step` is `const`,
