@@ -22,6 +22,13 @@
 # measured vehicle (NFR-08). These hashes certify that the arithmetic is
 # reproducible. They certify nothing whatsoever about a real car.
 #
+# As an observation and not a promise: every x86_64 row below carries the same
+# hash for the same case, across GCC 11, GCC 13 and Clang 18. That is evidence
+# that the arithmetic does not depend on the compiler here. It is recorded as
+# separate rows anyway, because the moment it is collapsed into one row the
+# file stops being able to express a compiler that disagrees, and NFR-03 exists
+# precisely because one eventually will.
+#
 # Columns:
 #   system_processor  compiler_id  compiler_major  build_type  tier  integrator  hash
 x86_64	GNU	11	RelWithDebInfo	L0	rk4	d74f90169a5951c2
@@ -32,3 +39,7 @@ x86_64	Clang	18	RelWithDebInfo	L0	rk4	d74f90169a5951c2
 x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
 x86_64	Clang	18	RelWithDebInfo	L1	rk4	d44a9a68616ec899
 x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d
+x86_64	GNU	13	RelWithDebInfo	L0	rk4	d74f90169a5951c2
+x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
+x86_64	GNU	13	RelWithDebInfo	L1	rk4	d44a9a68616ec899
+x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d

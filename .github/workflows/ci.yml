@@ -136,9 +136,22 @@ jobs:
   # The job the leaderboard and replay claims rest on. It runs on a fixed
   # build, because that is the only scope in which bit-identity is promised
   # (NFR-02), and compares against the published reference for that build.
+  #
+  # The image and the compiler are pinned deliberately, and ubuntu-latest is
+  # wrong here specifically. This job runs with --require-row, which means a
+  # build with no published reference row fails. Under ubuntu-latest, GitHub
+  # rotating the image changes the default compiler, which changes the key the
+  # reference file is looked up by, and the job then fails for a reason that
+  # has nothing to do with determinism. That already happened once, when the
+  # image moved from GCC 11 to GCC 13.
+  #
+  # Moving these pins is a deliberate act: it needs new reference rows recorded
+  # in the same commit. That is the intended cost. Every other job stays on
+  # ubuntu-latest, so a new toolchain is still exercised, just not by the job
+  # whose whole purpose is to hold one build fixed.
   determinism:
     name: Determinism conformance (NFR-02)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -148,10 +161,11 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtest-dev
+          sudo apt-get install -y libgtest-dev g++-13
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+             -DCMAKE_CXX_COMPILER=g++-13
 
       - name: Build
         run: cmake --build build -j"$(nproc)"
