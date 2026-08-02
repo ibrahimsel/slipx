@@ -155,7 +155,12 @@ jobs:
         include:
           - { os: ubuntu-latest,     name: "manylinux x86_64" }
           - { os: ubuntu-24.04-arm,  name: "manylinux aarch64" }
-          - { os: macos-13,          name: "macOS x86_64" }
+          # macos-15-intel, not macos-13: the macOS 13 image was retired on
+          # 2025-12-04 and its label now queues forever rather than failing.
+          # This is the last x86_64 macOS image GitHub will offer; the
+          # architecture goes away entirely in August 2027, at which point this
+          # row is deleted rather than repointed.
+          - { os: macos-15-intel,    name: "macOS x86_64" }
           - { os: macos-14,          name: "macOS arm64" }
           - { os: windows-latest,    name: "Windows AMD64" }
     steps:
