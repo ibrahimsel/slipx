@@ -5,246 +5,45 @@
      origin where a relative path resolves to nothing. -->
 ![SlipX: vehicle dynamics for 1/10-scale racecars](https://raw.githubusercontent.com/ibrahimsel/slipx/main/docs/assets/slipx-banner.gif)
 
-SlipX is a vehicle dynamics library for 1/10-scale autonomous racecars, plus the
-simulation, ROS 2 and race control layers needed to make it usable. Apache-2.0,
-C++17, CPU-only, no display server required.
+[![PyPI](https://img.shields.io/pypi/v/slipx)](https://pypi.org/project/slipx/)
+[![Python](https://img.shields.io/pypi/pyversions/slipx)](https://pypi.org/project/slipx/)
+[![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](https://github.com/ibrahimsel/slipx/blob/main/LICENSE)
+[![CI](https://github.com/ibrahimsel/slipx/actions/workflows/ci.yml/badge.svg)](https://github.com/ibrahimsel/slipx/actions/workflows/ci.yml)
 
-**P0 is built. Everything after it is a plan.** What exists today is
-`slipx_core` with tiers L0 and L1, the fixed-step orchestrator, `slipx_schema`
-v0.1.0 with its reference parser, the Python bindings, and a determinism
-harness. L2, the tier at which different cars actually behave differently, is
-P1 and asking for it raises rather than quietly giving you L1. No parameter set
-here has been checked against a real car, and the tooling says so every time it
-loads one.
+Vehicle dynamics for 1/10-scale autonomous racecars, the RoboRacer and F1TENTH
+class. C++17, CPU-only, headless, Apache-2.0.
 
-## Why
+Two things make it different from the physics in a game engine. It is a library
+before it is a simulator, so `slipx_core` depends on the C++ standard library
+and nothing else and can go inside a stack you already run. And every tyre
+parameter is one you can identify from a manoeuvre driven in a car park with the
+sensors already bolted to a competition car: wheel encoders, an IMU, LiDAR pose.
+No dyno, no tyre rig, nothing to guess.
 
-Take the tyre model in a game engine. Unity's `WheelCollider` and PhysX friction
-curves are parameterised by extremum and asymptote points in the slip/force
-curve. Nobody can measure those. You can't fit them to a rosbag, and there is no
-principled way to express, in those terms, the difference between a sponge tyre
-and a rubber tyre on the same floor. So the numbers get guessed, and once
-they're in a config file somebody starts trusting them.
+**Status: P0.** Tiers L0 and L1 are built and tested. L2, the tier at which two
+different cars start behaving differently, is next, and asking for it today
+raises rather than quietly handing back L1. No parameter set here has been
+fitted to a real vehicle, and the tooling says so every time it loads one.
 
-The parameters in SlipX are quantities you can go and measure. Cornering
-stiffness, peak friction, load sensitivity, relaxation length: each one is
-identifiable from a manoeuvre you can drive in a car park with the sensors
-already on a competition car, meaning wheel encoders, an IMU, and LiDAR-based
-pose. No dyno, no tyre rig, no force platform. That constraint is what the rest
-of the design is arranged around.
-
-## The library is the product, not the simulator
-
-`slipx_core` is a C++17 library with no dependencies at all: the standard
-library, and nothing else. The simulator consumes it. This ordering is
-deliberate: there are already four or five 1/10-scale simulators, and shipping a
-sixth is a poor bet. Being the physics layer inside the existing ones is a
-better one.
-
-Eigen was in that sentence until P0 started, and is not any more. The core needs
-no solver, no decomposition and no dynamic sizing; every tier is a small
-explicit expression in two and three dimensions. What Eigen would have
-contributed was expression templates we do not use, a `find_package` in every
-consumer's build, and one more thing to pin per platform in the determinism
-argument. It was replaced by a 180-line header. Embedding SlipX now costs two
-lines of CMake and no transitive dependency, which is the whole strategy stated
-as a build system fact rather than as an intention.
-
-Three consequences, all load-bearing:
-
-`slipx_core` never grows a dependency on anything above it. No ROS, no threads,
-no I/O, no logging framework, no allocation inside `step`. It has to build and
-pass its whole test suite with `slipx_schema` absent, because parameters arrive
-as a plain struct and parsing is somebody else's problem. CI breaks the build if
-that stops being true.
-
-The licence stays permissive. Apache-2.0 throughout. Copyleft anywhere in the
-core would make embedding legally awkward, which defeats the point.
-
-Bindings are written alongside the core rather than bolted on later: Python
-through pybind11, a C ABI shim, and FMI 3.0 export for Simulink and similar
-toolchains once there is something worth exporting.
-
-The two-year target is `slipx_core` turning up as a dependency in a project we
-don't maintain. Not a user count.
-
-## Who it's for
-
-| Segment | Need | Entry point |
-|---|---|---|
-| RoboRacer / F1TENTH teams | Tune a car before building it, test the stack before crashing it | ROS 2 simulator |
-| RL researchers | Fast, deterministic, batchable rollouts with credible dynamics | Python / Gymnasium |
-| Course instructors | Reproducible assignments that grade automatically and run on a student laptop | Headless CI mode |
-| Competition organisers | A leaderboard that survives an appeal, and replay that isn't machine-specific | Deterministic mode + event stream |
-| Simulator authors | A dynamics model better than the one currently in there | `slipx_core` C++ / C ABI |
-
-## Layout of the stack
-
-Dependencies point downward only. CI enforces it.
-
-```
-slipx_registry   community parameter sets (data only, no code)          P2
-slipx_id         system identification: manoeuvres, fitting, reports    P2
-slipx_ros        ROS 2 wrapper: topics, TF, /clock, rosbag, launch      P1
-slipx            Python package: pybind11 bindings + Gymnasium adapter  built
-slipx_sim        orchestrator: N agents, fixed step, lockstep, replay   built
-slipx_scene      track loading, BVH, contact, race control, events      P1/P3
-slipx_sense      sensor simulation: raycasting, noise, latency          P1
-slipx_schema     JSON Schema definitions + reference parser             built
-slipx_core       vehicle dynamics. Depends on: the C++ standard
-                 library. Nothing else.                                 built
-```
-
-`tools/dep_lint.py` enforces this on every commit: it reads the includes, the
-link lines and the Python imports, and fails the build if `slipx_core` acquires
-a dependency on anything above it or on anything outside the standard library.
-The rule will be broken by accident rather than on purpose, which is why it is
-a script and not a paragraph.
-
-The full component diagram, including the adoption surface it is aimed at, is in
-[`docs/architecture/slipx.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/architecture/slipx.md).
-
-Why the stack is shaped this way, and why several of the more annoying rules
-exist, is in [`docs/adr`](https://github.com/ibrahimsel/slipx/tree/main/docs/adr):
-one numbered record per decision, each stating what was considered and what the
-decision costs. Start there before proposing to change any of them, since most
-of the tempting simplifications have a record explaining what they break.
-
-### Core interface
-
-Sketch, not final. What matters is the shape: no hidden state, `step` is `const`,
-no allocation, no RNG, no clock. N instances then parallelise trivially and
-snapshot/restore is a `memcpy`.
-
-```cpp
-namespace slipx {
-
-enum class Tier { L0_Kinematic, L1_Bicycle, L2_DoubleTrack, L3_Extended };
-
-struct DriveInput { double steer_cmd; double accel_cmd; };  // commanded, pre-actuator
-
-class VehicleModel {
-public:
-  static std::unique_ptr<VehicleModel> create(Tier, const VehicleParams&);
-  virtual void step(VehicleState&, const DriveInput&, double dt,
-                    StepDiagnostics* out = nullptr) const = 0;
-  virtual Tier tier() const = 0;
-  virtual ~VehicleModel() = default;
-};
-
-}  // namespace slipx
-```
-
-`StepDiagnostics` is optional so the hot path stays cheap. When you ask for it
-you get slip angles, slip ratios, per-tyre forces, load transfer terms and
-actuator saturation flags, which between them let a student plot exactly why the
-car spun.
-
-Anything a tier cannot represent comes back as NaN, never zero. L0 has no tyres,
-so its slip angles are NaN and a plot of them is empty; L1 has no way to
-transfer load, so its load transfer terms are NaN. Zero is a number somebody
-would plot and believe.
-
-### Installing it
+## Quickstart
 
 ```
 pip install slipx
 slipx-conformance
 ```
 
-The published releases are pre-releases (`0.1.0a1` and onwards), so plain
-`pip install slipx` resolves to one only while no final release exists. To pin
-one deliberately, `pip install slipx==0.1.0a1`. The pre-release marker is not
-false modesty about the code, which is tested and has a determinism job behind
-it; it is about the version number being the one part of a release that can
-never be withdrawn, so the first artefacts published under a name are spent
-proving the packaging rather than being pinned by anybody.
+Wheels cover Linux, macOS and Windows on CPython 3.9 to 3.13, so the normal case
+needs no compiler. `slipx-conformance` integrates the canonical step steer and
+prints the run manifest and its trajectory hash.
 
-Wheels are built for Linux, macOS and Windows on CPython 3.9 to 3.13, so the
-normal case needs no compiler. Anything outside that list falls back to the
-source distribution and needs CMake 3.20 and a C++17 compiler.
-
-Installing from a checkout instead:
-
-```
-pip install .
-slipx-conformance
-```
-
-Either builds the extension through scikit-build-core, installs `slipx` and
-`slipx_schema`, and ships the reference car inside the package, so there is
-something to load without cloning anything. The last line prints the canonical
-step steer's trajectory hash. On a build with a published row in
-`conformance/reference_hashes.tsv` it should match; on anything else it is a
-number about which nothing has been claimed, which is NFR-03 rather than a
-fault. `python3 tools/exit_gate.py --expect <hash>` runs the whole check.
-
-**A released wheel makes no claim about its own trajectory hash, and this is
-not an oversight.** The published rows in `conformance/reference_hashes.tsv`
-are keyed by architecture, compiler and build type, and none of them describes
-a manylinux, macOS or Windows wheel-building image. Shipping a wheel that
-asserted a hash would mean either publishing rows for toolchains whose compiler
-version moves whenever the image is rebuilt, or weakening the check to a
-tolerance. Both are worse than the honest answer, which NFR-03 already gives:
-outside a build with a published row, the number is a number and nothing has
-been claimed about it.
-
-What the release process does instead is verify, on every platform it builds
-for, the three clauses of the exit gate that hold everywhere: the wheel
-installs, the reference car loads out of it, and a step steer integrates to a
-finite trajectory. It prints the hash and does not grade it. The one build that
-is compared against a published row is the `wheel` job in CI, which runs on a
-pinned image with a pinned compiler for exactly the reason the determinism job
-does.
-
-So `slipx-conformance` on your own machine printing something other than
-`d44a9a68616ec899` is the expected outcome. That is the promise working, not
-failing.
-
-Matching it takes more than the right architecture, and the first published
-wheels demonstrated this rather than predicting it. `math.hpp` calls `sin`,
-`cos` and `atan2`, a wheel resolves them against the host's C library at run
-time rather than carrying its own, and those functions are not correctly
-rounded. The same `manylinux` wheel run against glibc 2.28 and against glibc
-2.39 agrees to every digit the summary line prints and still hashes
-differently. The published rows were produced against the newer one. The
-compiler, by contrast, is visibly not the variable: every x86-64 row in that
-file carries the same hash across GCC 11, GCC 13 and Clang 18.
-
-### Building it
-
-```
-cmake -S . -B build -DSLIPX_BUILD_PYTHON=ON
-cmake --build build -j
-ctest --test-dir build
-python3 -m pytest
-```
-
-Needs CMake 3.20 and a C++17 compiler. GoogleTest is fetched if it is not
-installed; the Python parts want PyYAML, jsonschema and pybind11. None of that
-touches `slipx_core`, which builds on its own:
-
-```
-cmake -S . -B build -DSLIPX_CORE_ONLY=ON && cmake --build build && ctest --test-dir build
-```
-
-That configuration switches off every layer above the core and runs its full
-test suite without them, which is how CORE-01 is checked rather than asserted.
-
-Embedding it is two lines:
-
-```cmake
-add_subdirectory(slipx)
-target_link_libraries(your_simulator PRIVATE slipx::core)
-```
-
-### Using it
+Releases are pre-releases for now (`0.1.0a1` and onwards), which `pip` selects
+only while no final release exists. Pin one with `pip install slipx==0.1.0a1`.
 
 ```python
 import slipx
 
-car = slipx.load_reference_car()      # or load_car("examples/cars/reference_1_10")
-print(car.summary())        # leads with the provenance label. It says PROVISIONAL.
+car = slipx.load_reference_car()   # or load_car("examples/cars/reference_1_10")
+print(car.summary())               # leads with the provenance label: PROVISIONAL
 
 model = slipx.VehicleModel.create(slipx.Tier.L1_Bicycle, car.params)
 state = slipx.VehicleState()
@@ -257,30 +56,44 @@ for _ in range(1000):
 print(state.yaw_rate, diagnostics.alpha_front, diagnostics.ay)
 ```
 
-Same names, same units, same signs as the C++. A tutorial written in one
-translates into the other line by line, because there is no second set of
-semantics to keep in step.
+That is one second of a step steer at 1 kHz. `StepDiagnostics` is optional so
+the hot path stays cheap; ask for it and you get slip angles, slip ratios,
+per-tyre forces, load transfer terms and actuator saturation flags, which
+between them let a student plot exactly why the car spun.
 
-The banner at the top runs on that same class of model: a single-track car with
-a reduced Magic Formula tyre, closed loop on a skidpad, settled into a sustained
-drift at about 42 degrees of body slip on opposite lock. It isn't an animation,
-it's a 1 kHz integration sampled over one lap.
-Run `python3 docs/assets/make_banner.py` to regenerate it.
+Anything a tier cannot represent comes back as **NaN, never zero**. L0 has no
+tyres, so its slip angles are NaN and a plot of them is empty. Zero is a number
+somebody would plot and believe.
 
-### The tyre model
+## Tiers
 
-A reduced Magic Formula (MF-lite) with load sensitivity and combined slip. It
-arrives with L2 in P1; what L1 has today is a linear tyre, `Fy = -C_alpha *
-alpha`, clipped at `mu * Fz`. A clip is not a Magic Formula. There is no peak,
-no falling branch beyond it, and therefore no mechanism by which the car spins:
-L1 slides at the limit and recovers the moment the slip angle comes back. That
-limitation is reported rather than hidden, since `StepDiagnostics` raises
+Fidelity levels selected at construction, all behind one `VehicleModel`
+interface, so moving between them is one argument rather than a rewrite.
+
+| Tier | Model | States | Status |
+|---|---|---|---|
+| `L0_Kinematic` | Kinematic bicycle | 4 | built |
+| `L1_Bicycle` | Dynamic bicycle, linear tyres | 6 | built |
+| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres | ~15 | P1, raises today |
+| `L3_Extended` | Adds thermal and suspension | | later, raises today |
+
+Below L2 nothing represents CoG height, weight distribution, differential or
+tyre compound, so those parameters correctly have no effect. That is the
+teaching artefact rather than a bug: the tier where your change stops mattering
+tells you what the model is actually made of.
+
+## The tyre model
+
+L1 ships a linear tyre, `Fy = -C_alpha * alpha`, clipped at `mu * Fz`. A clip is
+not a Magic Formula: there is no peak, no falling branch beyond it, and
+therefore no mechanism by which the car spins. `StepDiagnostics` raises
 `tyre_saturated` the instant the clip engages, so the point where L1 stops being
 believable is a number you can plot rather than a feeling you develop.
 
-The schema already accepts and validates the full MF-lite parameter set, so an
-identified tyre file contributed today will still be correct when L2 lands.
-Every parameter earns its place by being identifiable:
+MF-lite, a reduced Magic Formula with load sensitivity and combined slip,
+arrives with L2. The schema already accepts and validates its full parameter
+set, so a tyre file identified today will still be correct when L2 lands. Every
+parameter earns its place by being identifiable:
 
 | Symbol | Meaning | Identifiable from |
 |---|---|---|
@@ -291,7 +104,7 @@ Every parameter earns its place by being identifiable:
 | `sigma` | Relaxation length | Step steer transient |
 
 Full Pacejka 5.2 is not the goal. A parameter nobody can identify is worse than
-one that doesn't exist, because it gets guessed and then trusted.
+one that does not exist, because it gets guessed and then trusted.
 
 Tyres are referenced as a `(compound, surface)` pair rather than embedded in the
 car file. The same car on carpet and on polished concrete is two different
@@ -304,21 +117,14 @@ Fixed step, seeded per agent, lockstep barrier, headless. Every run writes a
 manifest hashing the schema versions, parameter files, seeds, integrator, git
 SHA, compiler ID and flags.
 
-Same manifest and same input sequence gives a bit-identical replay on the same
-platform. That needs `-ffp-contract=off`, no `-ffast-math`, no `-march=native`,
-a fixed reduction order, and no multithreading inside the integrator.
+**On one build, the same manifest and inputs replay bit-identically.** That
+needs `-ffp-contract=off`, no `-ffast-math`, no `-march=native`, a fixed
+reduction order and no multithreading inside the integrator.
 
-Across platforms, bit-identity is not promised. A conformance suite asserts
-agreement within a stated tolerance on x86-64 and aarch64, and the tolerance is
-published rather than glossed over.
-
-That distinction shapes how the check is built. A single pinned hash in a test
-would pass on the machine it was recorded on and fail everywhere else, and the
-only way to make it pass everywhere would be to weaken it to a tolerance, which
-is where nondeterminism hides. So `conformance/reference_hashes.tsv` is keyed by
-architecture, compiler and build type. A run is compared against the row
-matching its own build; a mismatch there is a bug, and a build with no row is a
-build about which nothing was claimed.
+**Across builds, bit-identity is not promised.** `conformance/reference_hashes.tsv`
+is keyed by architecture, compiler and build type. A run is compared against the
+row matching its own build: a mismatch there is a bug, and a build with no row
+is a build about which nothing was claimed.
 
 ```
 $ python3 tools/check_conformance.py
@@ -328,144 +134,132 @@ $ python3 tools/check_conformance.py
   L1/semi_implicit_euler       9a2532ced2e1e06d  matches reference
 ```
 
-One observation worth recording, and worth not over-reading: on x86-64, GCC 11
-and Clang 18 produce identical hashes for all four cases. That is what the
-`-ffp-contract=off` discipline is for. It is an observation about two compilers
-on one architecture, it is in the reference file as two sets of rows rather than
-one, and it is not a promise.
+So `slipx-conformance` printing a different hash on your machine is the expected
+outcome, not a failure. Published wheels deliberately carry no hash claim: they
+call `sin`, `cos` and `atan2`, resolve them against the host C library at run
+time, and those are not correctly rounded. The same wheel on glibc 2.28 and on
+glibc 2.39 agrees to every digit of the printed state and still hashes
+differently. The compiler, by contrast, is visibly not the variable: every
+x86-64 row in that file is identical across GCC 11, GCC 13 and Clang 18.
 
-## Roadmap
-
-Each phase ends on something external. Internal milestones are how a project
-convinces itself it's progressing while nobody adopts it.
-
-**P0, weeks 0-6. Foundation. Built.** `slipx_core` with L0 and L1,
-`slipx_schema` v0.1.0, Python bindings, determinism job in CI.
-*Done when:* someone else pip-installs it, integrates a step steer, and gets the
-same trajectory hash as CI. The machinery is in place, the package is on PyPI,
-and the gate is not closed: it closes when somebody who is not us runs
-`slipx-conformance` on a build with a published reference row and reports a
-match. On a build without one, what they can report is that it installed, ran
-and produced a finite number, which is worth having and is not the gate.
-
-**P1, weeks 6-14. A car worth believing.** L2 double-track with load transfer
-and combined-slip MF-lite; ESC with current limit, regen and battery sag;
-steering servo rate limit and lag; spool / open / LSD; 2D LiDAR with per-ray
-timestamps, motion distortion, latency, dropouts; IMU and encoders; one track;
-`slipx_ros`; a wall-follower and pure pursuit to check it with.
-*Done when:* a team points their existing stack at it with a remap file and a
-tuning change made in sim survives contact with their real car.
-
-**P2, weeks 14-22. Identification.** Manoeuvre library (skidpad, step steer,
-ramp steer, straight-line accel, coastdown, circle-to-slip), the fitter that
-turns a rosbag2 into `dynamics.yaml` with residuals and confidence intervals,
-replay validation reports, and the registry.
-*Done when:* three parameter sets in the registry come from people who aren't
-us, each with a validation report attached.
-
-**P3, weeks 22-32. Racing.** N-agent lockstep with a timeout policy, planar
-impulse contact, rollover as a DNF event, the published RoboRacer procedures,
-structured event stream, CI leaderboard harness.
-*Done when:* a course or a competition runs an evaluation on it.
-
-**P4, weeks 32-42. 3D sensing.** Embree-backed CPU raycaster, pluggable scan
-patterns (rotating multi-ring, non-repetitive rosette, solid-state), 3D track
-geometry, intensity with reflectivity and incidence falloff.
-*Done when:* a team with a real Mid-360 or Unitree L1 runs their point cloud
-pipeline against it unmodified.
-
-**P5, from week 30. Ecosystem.** `f1tenth_gym` backend adapter, FMI 3.0 export,
-C ABI shim, Formula Student scale as schema extension fields.
-*Done when:* `slipx_core` is a declared dependency somewhere we don't have
-commit access.
-
-P2 sits before P3 on purpose, and it's the one sequencing choice worth arguing
-about. Racing features are more fun and more visible. But identification is what
-makes the physics claim true, and a registry compounds: every month it exists it
-gathers parameter sets we could never have produced on our own. Racing features
-don't compound.
-
-## What it isn't
-
-Worth stating early so nobody arrives expecting the wrong thing.
-
-There is no photorealistic rendering. SlipX is LiDAR-first and runs on CPU. No
-HDRP, no path tracing, no camera in v1. A GPU path can be added behind the
-existing sensor interface if a competition ever makes cameras load-bearing.
-
-No full-scale road vehicles, traffic, pedestrians or urban scenarios. No
-autonomy stack; the reference controllers exist to validate the sim, not to win
-with. No hardware, no reference chassis BOM. No aerodynamics at 1/10 scale,
-where it's negligible below roughly 15 m/s.
-
-Collision physics will be plausible and deterministic, not fitted to data, and
-the docs will keep saying so.
-
-## What can honestly be claimed
-
-Verification runs in four layers, because unit tests and a demo video establish
-nothing about a physics library.
-
-*Analytical.* Closed-form cases with known answers: understeer gradient against
-the textbook formula, load transfer against the static equation, terminal
-velocity against a drag and rolling resistance balance. These catch sign errors
-and unit errors, which are the bugs vehicle dynamics code actually has.
-
-*Invariant.* Energy conservation with dissipation off, momentum conservation
-through contact, a left turn mirroring a right turn exactly, and monotonicity
-(raise the CoG, lower the rollover threshold). Property-based over randomly
-sampled valid parameter vectors.
-
-*Cross-tier.* L0, L1 and L2 have to agree in the low lateral acceleration limit.
-Where they diverge is the point of having tiers, so the crossover gets plotted
-and tracked as a released artefact. For the reference car it currently sits at
-0.23 g: below that, L0 and L1 agree on the path radius to within 5%, and above
-it the gap is the understeer gradient, which L0 has no way to represent. The
-test suite prints the table on every run.
-
-The first three layers are in place: 148 C++ tests and 85 Python tests, covering
-the understeer gradient against the textbook formula, ISO 8855 signs, left/right
-mirror symmetry asserted bit for bit, energy dissipation, snapshot and restore,
-an allocation counter proving `step` never touches the allocator, and the
-integrator convergence orders.
-
-*Empirical.* Deferred to P2 and delegated to the registry. Until an outside
-contributor supplies a fitted set with a validation report, the honest phrasing
-is physically structured and identifiable, not validated. Every shipped
-parameter set carries a `measured`, `identified` or `provisional` label, and the
-tooling prints it, not just the documentation.
-
-## Repository layout
+## Building from source
 
 ```
-src/
-  core/slipx_core            vehicle dynamics; the standard library only
-  core/slipx_schema          JSON Schemas + reference parser (Python)
-  bindings/slipx             pybind11 + Gymnasium adapter
-  bindings/slipx_c           C ABI shim                              (P5)
-  world/slipx_scene          track, BVH, contact, race control       (P1/P3)
-  world/slipx_sense          raycasting, scan patterns, noise        (P1)
-  orchestration/slipx_sim    N agents, fixed step, lockstep, replay
-  integration/slipx_ros      topics, TF, /clock, race_sync barrier   (P1)
-  tooling/slipx_id           manoeuvres, rosbag fitting, reports     (P2)
-  tooling/slipx_registry     community parameter sets                (P2)
-examples/
-  cars/reference_1_10        a car directory to copy. Provisional.
-conformance/
-  reference_hashes.tsv       published determinism references, per build
-tools/
-  dep_lint.py                NFR-06: the dependency direction, enforced
-  licence_scan.py            NFR-01: Apache-2.0, no copyleft anywhere
-  check_conformance.py       NFR-02/03: hashes against the reference
-docs/
-  architecture/slipx.md      component diagram
-  assets/make_banner.py      generator for the banner above
+cmake -S . -B build -DSLIPX_BUILD_PYTHON=ON
+cmake --build build -j
+ctest --test-dir build
+python3 -m pytest
+```
+
+Needs CMake 3.20 and a C++17 compiler. GoogleTest is fetched if absent; the
+Python parts want PyYAML, jsonschema and pybind11. None of that reaches
+`slipx_core`, which builds alone:
+
+```
+cmake -S . -B build-core -DSLIPX_CORE_ONLY=ON
+cmake --build build-core -j && ctest --test-dir build-core
+```
+
+Embedding it in a C++ simulator is two lines and pulls in no transitive
+dependency:
+
+```cmake
+add_subdirectory(slipx)
+target_link_libraries(your_simulator PRIVATE slipx::core)
+```
+
+`step` is `const` and stateless: no hidden state, no clock, no ambient RNG, no
+allocation. N instances parallelise trivially and snapshot/restore is a `memcpy`.
+
+## The stack
+
+Dependencies point downward only, and `tools/dep_lint.py` fails the build if
+that stops being true.
+
+```
+slipx_registry   community parameter sets (data only, no code)          P2
+slipx_id         system identification: manoeuvres, fitting, reports    P2
+slipx_ros        ROS 2 wrapper: topics, TF, /clock, rosbag, launch      P1
+slipx            Python package: pybind11 bindings + Gymnasium adapter  built
+slipx_sim        orchestrator: N agents, fixed step, lockstep, replay   built
+slipx_scene      track loading, BVH, contact, race control, events      P1/P3
+slipx_sense      sensor simulation: raycasting, noise, latency          P1
+slipx_schema     JSON Schema definitions + reference parser             built
+slipx_core       vehicle dynamics. The C++ standard library, nothing
+                 else.                                                  built
 ```
 
 A car is a versioned directory: `car.yaml` as manifest, a URDF/xacro owning
 geometry, inertias and sensor mounts (the same TF tree that runs on the real
 car), then `dynamics.yaml`, `sensors.yaml`, `limits.yaml` and `provenance.yaml`.
-The last is required for anything submitted to the registry.
+Copy `examples/cars/reference_1_10` to start one.
+
+## Roadmap
+
+Each phase ends on something external, because internal milestones are how a
+project convinces itself it is progressing while nobody adopts it.
+
+| Phase | What lands | Done when |
+|---|---|---|
+| **P0** built | L0 and L1, schema v0.1.0, Python bindings, determinism in CI | somebody who is not us runs `slipx-conformance` on a build with a published row and reports a match |
+| **P1** | L2 double-track and MF-lite, ESC and servo models, 2D LiDAR, IMU, encoders, one track, `slipx_ros` | a team points their stack at it and a tuning change made in sim survives their real car |
+| **P2** | Manoeuvre library, the rosbag2 fitter with residuals and confidence intervals, the registry | three registry parameter sets come from people who are not us, each with a validation report |
+| **P3** | N-agent lockstep, planar impulse contact, rollover, event stream, leaderboard harness | a course or a competition runs an evaluation on it |
+| **P4** | Embree CPU raycaster, pluggable scan patterns, 3D geometry, intensity | a team with a real Mid-360 or Unitree L1 runs their pipeline against it unmodified |
+| **P5** | `f1tenth_gym` adapter, FMI 3.0 export, C ABI shim | `slipx_core` is a declared dependency somewhere we lack commit access |
+
+P2 sits before P3 deliberately. Racing features are more fun and more visible,
+but identification is what makes the physics claim true, and a registry
+compounds where racing features do not.
+
+## Not in scope
+
+No photorealistic rendering: SlipX is LiDAR-first and runs on CPU, with no
+camera in v1. No full-scale road vehicles, traffic or urban scenarios. No
+autonomy stack; the reference controllers exist to validate the sim, not to win
+with. No aerodynamics at 1/10 scale, where it is negligible below roughly
+15 m/s. Collision physics will be plausible and deterministic, not fitted to
+data, and the docs will keep saying so.
+
+## What can honestly be claimed
+
+Verification runs in four layers, because unit tests and a demo video establish
+nothing about a physics library. **Analytical**: closed-form cases with known
+answers, which is what catches the sign and unit errors this kind of code
+actually has. **Invariant**: energy and momentum conservation, left/right mirror
+symmetry asserted bit for bit, monotonicity under property-based sampling.
+**Cross-tier**: L0 and L1 must agree in the low lateral acceleration limit, and
+for the reference car they agree on path radius to within 5% below 0.23 g, with
+the crossover printed on every test run.
+
+Those three are in place: 148 C++ tests and 87 Python tests, including an
+allocation counter proving `step` never touches the allocator.
+
+**Empirical** is deferred to P2 and delegated to the registry. Until an outside
+contributor supplies a fitted set with a validation report, the honest phrasing
+is *physically structured and identifiable*, not *validated*. Every shipped
+parameter set carries a `measured`, `identified` or `provisional` label, and the
+tooling prints it rather than leaving it in the documentation.
+
+## Where the reasoning lives
+
+[`docs/adr`](https://github.com/ibrahimsel/slipx/tree/main/docs/adr) has one
+numbered record per architectural decision, each stating what was considered and
+what the decision costs: why there is no Eigen, why L2 raises instead of falling
+back, why diagnostics are NaN, why reference hashes are keyed by build. Read it
+before proposing to change any of them, since most of the tempting
+simplifications have a record explaining what they break.
+
+The component diagram is in
+[`docs/architecture/slipx.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/architecture/slipx.md),
+and the release history is in
+[`CHANGELOG.md`](https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md).
+
+The banner at the top is a real rollout, not an animation: a single-track car
+with a reduced Magic Formula tyre, closed loop on a skidpad, settled into a
+sustained drift at about 42 degrees of body slip on opposite lock, integrated at
+1 kHz and sampled over one lap. Regenerate it with
+`python3 docs/assets/make_banner.py`.
 
 ## Licence
 
