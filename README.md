@@ -20,10 +20,12 @@ parameter is one you can identify from a manoeuvre driven in a car park with the
 sensors already bolted to a competition car: wheel encoders, an IMU, LiDAR pose.
 No dyno, no tyre rig, nothing to guess.
 
-**Status: P0.** Tiers L0 and L1 are built and tested. L2, the tier at which two
-different cars start behaving differently, is next, and asking for it today
-raises rather than quietly handing back L1. No parameter set here has been
-fitted to a real vehicle, and the tooling says so every time it loads one.
+**Early days, and the limits are worth reading before you start.** Two of the
+four fidelity tiers are built: a kinematic bicycle and a dynamic bicycle with
+linear tyres. The double-track tier, where two different cars start behaving
+differently, is not implemented, and asking for it raises rather than quietly
+handing back the simpler model. No parameter set here has been fitted to a real
+vehicle, and the tooling says so every time it loads one.
 
 ## Quickstart
 
@@ -61,9 +63,9 @@ the hot path stays cheap; ask for it and you get slip angles, slip ratios,
 per-tyre forces, load transfer terms and actuator saturation flags, which
 between them let a student plot exactly why the car spun.
 
-Anything a tier cannot represent comes back as **NaN, never zero**. L0 has no
-tyres, so its slip angles are NaN and a plot of them is empty. Zero is a number
-somebody would plot and believe.
+Anything a tier cannot represent comes back as **NaN, never zero**. The
+kinematic tier has no tyres, so its slip angles are NaN and a plot of them is
+empty. Zero is a number somebody would plot and believe.
 
 ## Tiers
 
@@ -74,26 +76,27 @@ interface, so moving between them is one argument rather than a rewrite.
 |---|---|---|---|
 | `L0_Kinematic` | Kinematic bicycle | 4 | built |
 | `L1_Bicycle` | Dynamic bicycle, linear tyres | 6 | built |
-| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres | ~15 | P1, raises today |
-| `L3_Extended` | Adds thermal and suspension | | later, raises today |
+| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres | ~15 | not implemented, raises |
+| `L3_Extended` | Adds thermal and suspension | | not implemented, raises |
 
-Below L2 nothing represents CoG height, weight distribution, differential or
-tyre compound, so those parameters correctly have no effect. That is the
-teaching artefact rather than a bug: the tier where your change stops mattering
-tells you what the model is actually made of.
+Below `L2_DoubleTrack` nothing represents CoG height, weight distribution,
+differential or tyre compound, so those parameters correctly have no effect.
+That is the teaching artefact rather than a bug: the tier where your change
+stops mattering tells you what the model is actually made of.
 
 ## The tyre model
 
-L1 ships a linear tyre, `Fy = -C_alpha * alpha`, clipped at `mu * Fz`. A clip is
-not a Magic Formula: there is no peak, no falling branch beyond it, and
-therefore no mechanism by which the car spins. `StepDiagnostics` raises
-`tyre_saturated` the instant the clip engages, so the point where L1 stops being
-believable is a number you can plot rather than a feeling you develop.
+What ships today is a linear tyre, `Fy = -C_alpha * alpha`, clipped at
+`mu * Fz`. A clip is not a Magic Formula: there is no peak, no falling branch
+beyond it, and therefore no mechanism by which the car spins.
+`StepDiagnostics` raises `tyre_saturated` the instant the clip engages, so the
+point where the model stops being believable is a number you can plot rather
+than a feeling you develop.
 
-MF-lite, a reduced Magic Formula with load sensitivity and combined slip,
-arrives with L2. The schema already accepts and validates its full parameter
-set, so a tyre file identified today will still be correct when L2 lands. Every
-parameter earns its place by being identifiable:
+MF-lite, a reduced Magic Formula with load sensitivity and combined slip, comes
+with the double-track tier. The schema already accepts and validates its full
+parameter set, so a tyre file identified today will still be correct when that
+tier lands. Every parameter earns its place by being identifiable:
 
 | Symbol | Meaning | Identifiable from |
 |---|---|---|
@@ -177,45 +180,30 @@ Dependencies point downward only, and `tools/dep_lint.py` fails the build if
 that stops being true.
 
 ```
-slipx_registry   community parameter sets (data only, no code)          P2
-slipx_id         system identification: manoeuvres, fitting, reports    P2
-slipx_ros        ROS 2 wrapper: topics, TF, /clock, rosbag, launch      P1
+slipx_registry   community parameter sets (data only, no code)          planned
+slipx_id         system identification: manoeuvres, fitting, reports    planned
+slipx_ros        ROS 2 wrapper: topics, TF, /clock, rosbag, launch      planned
 slipx            Python package: pybind11 bindings + Gymnasium adapter  built
 slipx_sim        orchestrator: N agents, fixed step, lockstep, replay   built
-slipx_scene      track loading, BVH, contact, race control, events      P1/P3
-slipx_sense      sensor simulation: raycasting, noise, latency          P1
+slipx_scene      track loading, BVH, contact, race control, events      planned
+slipx_sense      sensor simulation: raycasting, noise, latency          planned
 slipx_schema     JSON Schema definitions + reference parser             built
 slipx_core       vehicle dynamics. The C++ standard library, nothing
                  else.                                                  built
 ```
+
+The directories for the planned pieces exist and are empty. Nothing there
+half-works.
 
 A car is a versioned directory: `car.yaml` as manifest, a URDF/xacro owning
 geometry, inertias and sensor mounts (the same TF tree that runs on the real
 car), then `dynamics.yaml`, `sensors.yaml`, `limits.yaml` and `provenance.yaml`.
 Copy `examples/cars/reference_1_10` to start one.
 
-## Roadmap
-
-Each phase ends on something external, because internal milestones are how a
-project convinces itself it is progressing while nobody adopts it.
-
-| Phase | What lands | Done when |
-|---|---|---|
-| **P0** built | L0 and L1, schema v0.1.0, Python bindings, determinism in CI | somebody who is not us runs `slipx-conformance` on a build with a published row and reports a match |
-| **P1** | L2 double-track and MF-lite, ESC and servo models, 2D LiDAR, IMU, encoders, one track, `slipx_ros` | a team points their stack at it and a tuning change made in sim survives their real car |
-| **P2** | Manoeuvre library, the rosbag2 fitter with residuals and confidence intervals, the registry | three registry parameter sets come from people who are not us, each with a validation report |
-| **P3** | N-agent lockstep, planar impulse contact, rollover, event stream, leaderboard harness | a course or a competition runs an evaluation on it |
-| **P4** | Embree CPU raycaster, pluggable scan patterns, 3D geometry, intensity | a team with a real Mid-360 or Unitree L1 runs their pipeline against it unmodified |
-| **P5** | `f1tenth_gym` adapter, FMI 3.0 export, C ABI shim | `slipx_core` is a declared dependency somewhere we lack commit access |
-
-P2 sits before P3 deliberately. Racing features are more fun and more visible,
-but identification is what makes the physics claim true, and a registry
-compounds where racing features do not.
-
 ## Not in scope
 
-No photorealistic rendering: SlipX is LiDAR-first and runs on CPU, with no
-camera in v1. No full-scale road vehicles, traffic or urban scenarios. No
+No photorealistic rendering: SlipX is LiDAR-first and runs on CPU, and there is
+no camera model. No full-scale road vehicles, traffic or urban scenarios. No
 autonomy stack; the reference controllers exist to validate the sim, not to win
 with. No aerodynamics at 1/10 scale, where it is negligible below roughly
 15 m/s. Collision physics will be plausible and deterministic, not fitted to
@@ -228,15 +216,15 @@ nothing about a physics library. **Analytical**: closed-form cases with known
 answers, which is what catches the sign and unit errors this kind of code
 actually has. **Invariant**: energy and momentum conservation, left/right mirror
 symmetry asserted bit for bit, monotonicity under property-based sampling.
-**Cross-tier**: L0 and L1 must agree in the low lateral acceleration limit, and
-for the reference car they agree on path radius to within 5% below 0.23 g, with
-the crossover printed on every test run.
+**Cross-tier**: the tiers must agree in the low lateral acceleration limit, and
+for the reference car the two built ones agree on path radius to within 5% below
+0.23 g, with the crossover printed on every test run.
 
 Those three are in place: 148 C++ tests and 87 Python tests, including an
 allocation counter proving `step` never touches the allocator.
 
-**Empirical** is deferred to P2 and delegated to the registry. Until an outside
-contributor supplies a fitted set with a validation report, the honest phrasing
+**Empirical** is the one that is missing. Until an outside contributor supplies
+a fitted parameter set with a validation report, the honest phrasing
 is *physically structured and identifiable*, not *validated*. Every shipped
 parameter set carries a `measured`, `identified` or `provisional` label, and the
 tooling prints it rather than leaving it in the documentation.
@@ -245,8 +233,9 @@ tooling prints it rather than leaving it in the documentation.
 
 [`docs/adr`](https://github.com/ibrahimsel/slipx/tree/main/docs/adr) has one
 numbered record per architectural decision, each stating what was considered and
-what the decision costs: why there is no Eigen, why L2 raises instead of falling
-back, why diagnostics are NaN, why reference hashes are keyed by build. Read it
+what the decision costs: why there is no Eigen, why a missing tier raises rather
+than falling back, why diagnostics are NaN, why reference hashes are keyed by
+build. Read it
 before proposing to change any of them, since most of the tempting
 simplifications have a record explaining what they break.
 
