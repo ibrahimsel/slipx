@@ -12,6 +12,7 @@
 
 #include <cmath>
 
+#include "slipx/load_transfer.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
 
@@ -339,6 +340,258 @@ TEST(Analytical, LateralAccelerationCannotExceedTheFrictionLimit) {
       });
 
   EXPECT_LE(std::fabs(d.ay), p.mu_clip * slipx::kGravity + 1e-6);
+}
+
+// ----------------------------------------------------------- load transfer
+//
+// CORE-05, the first piece of L2. Every case below compares
+// slipx/load_transfer.hpp against the static equation written out here from
+// the moment balance rather than copied from the implementation, which is the
+// point of doing this before any tyre nonlinearity exists to hide a sign in.
+
+using slipx::kFrontLeft;
+using slipx::kFrontRight;
+using slipx::kGravity;
+using slipx::kRearLeft;
+using slipx::kRearRight;
+using slipx::WheelLoads;
+
+// A car with distinct numbers in every position, so a transposed index or a
+// front/rear swap cannot pass by symmetry.
+VehicleParams asymmetric_params() {
+  auto p = reference_params();
+  p.mass = 4.1;
+  p.lf = 0.13;
+  p.lr = 0.19;          // rear-biased CoG: the front axle carries the more
+  p.track_front = 0.22;
+  p.track_rear = 0.25;
+  p.h_cog = 0.07;
+  return p;
+}
+
+double total(const WheelLoads& w) {
+  return w.fz[kFrontLeft] + w.fz[kFrontRight] + w.fz[kRearLeft] +
+         w.fz[kRearRight];
+}
+
+TEST(LoadTransfer, StaticAxleLoadsFollowTheMomentBalance) {
+  const auto p = asymmetric_params();
+  const WheelLoads w = slipx::static_loads(p);
+
+  // Fz_front = m g l_r / L. The front carries l_r, not l_f.
+  EXPECT_NEAR(w.fz_front, p.mass * kGravity * p.lr / p.wheelbase(), 1e-12);
+  EXPECT_NEAR(w.fz_rear, p.mass * kGravity * p.lf / p.wheelbase(), 1e-12);
+  EXPECT_NEAR(total(w), p.mass * kGravity, 1e-12);
+
+  // The CoG is behind the mid-wheelbase point here, so the REAR axle carries
+  // less. Stated as an inequality because that is the direction a reader can
+  // check against the picture rather than against the algebra.
+  EXPECT_GT(w.fz_front, w.fz_rear);
+
+  // Nothing is transferred, and the corners of an axle share it equally.
+  EXPECT_EQ(w.transfer_long, 0.0);
+  EXPECT_EQ(w.transfer_lat, 0.0);
+  EXPECT_EQ(w.fz[kFrontLeft], w.fz[kFrontRight]);
+  EXPECT_EQ(w.fz[kRearLeft], w.fz[kRearRight]);
+  EXPECT_FALSE(w.wheel_lifted);
+}
+
+// The static case must be the zero-acceleration case exactly, not merely to a
+// tolerance. Two code paths that agree to eleven digits and not to sixteen are
+// two models, and the cross-tier comparison in the low-acceleration limit
+// would then be measuring the discrepancy between them.
+TEST(LoadTransfer, ZeroAccelerationReproducesTheStaticCaseBitForBit) {
+  const auto p = asymmetric_params();
+  const WheelLoads s = slipx::static_loads(p);
+  const WheelLoads q = slipx::quasi_static_loads(p, 0.0, 0.0);
+
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_EQ(s.fz[i], q.fz[i]) << "wheel " << i;
+  }
+  EXPECT_EQ(s.fz_front, q.fz_front);
+  EXPECT_EQ(s.fz_rear, q.fz_rear);
+  EXPECT_EQ(q.transfer_long, 0.0);
+  EXPECT_EQ(q.transfer_lat, 0.0);
+}
+
+// dFz_long = m ax h / L, and the sign: accelerating loads the rear.
+TEST(LoadTransfer, LongitudinalTransferMatchesThePitchMomentBalance) {
+  const auto p = asymmetric_params();
+  const WheelLoads s = slipx::static_loads(p);
+
+  for (const double ax : {-6.0, -2.0, 1.0, 5.0}) {
+    const WheelLoads w = slipx::quasi_static_loads(p, ax, 0.0);
+    const double expected = p.mass * ax * p.h_cog / p.wheelbase();
+
+    EXPECT_NEAR(w.transfer_long, expected, 1e-12) << "at ax " << ax;
+    EXPECT_NEAR(w.fz_front, s.fz_front - expected, 1e-12) << "at ax " << ax;
+    EXPECT_NEAR(w.fz_rear, s.fz_rear + expected, 1e-12) << "at ax " << ax;
+    EXPECT_NEAR(total(w), p.mass * kGravity, 1e-12) << "at ax " << ax;
+
+    // No lateral acceleration, so no left/right difference at all.
+    EXPECT_EQ(w.fz[kFrontLeft], w.fz[kFrontRight]);
+    EXPECT_EQ(w.fz[kRearLeft], w.fz[kRearRight]);
+    EXPECT_EQ(w.transfer_lat, 0.0);
+  }
+
+  EXPECT_GT(slipx::quasi_static_loads(p, 4.0, 0.0).fz_rear, s.fz_rear)
+      << "accelerating must load the rear axle";
+  EXPECT_GT(slipx::quasi_static_loads(p, -4.0, 0.0).fz_front, s.fz_front)
+      << "braking must load the front axle";
+}
+
+// dFz_lat at an axle is m_axle ay h / t_axle, with the axle's share of the
+// lateral force taken from the yaw moment balance: Fy_f = m ay l_r / L.
+TEST(LoadTransfer, LateralTransferMatchesTheRollMomentBalancePerAxle) {
+  const auto p = asymmetric_params();
+  const WheelLoads s = slipx::static_loads(p);
+
+  for (const double ay : {-4.0, -1.0, 2.0, 5.0}) {
+    const WheelLoads w = slipx::quasi_static_loads(p, 0.0, ay);
+
+    const double mass_front = p.mass * p.lr / p.wheelbase();
+    const double mass_rear = p.mass * p.lf / p.wheelbase();
+    const double d_front = mass_front * ay * p.h_cog / p.track_front;
+    const double d_rear = mass_rear * ay * p.h_cog / p.track_rear;
+
+    // Positive ay is a left turn, and it loads the RIGHT wheels.
+    EXPECT_NEAR(w.fz[kFrontRight], 0.5 * s.fz_front + d_front, 1e-12);
+    EXPECT_NEAR(w.fz[kFrontLeft], 0.5 * s.fz_front - d_front, 1e-12);
+    EXPECT_NEAR(w.fz[kRearRight], 0.5 * s.fz_rear + d_rear, 1e-12);
+    EXPECT_NEAR(w.fz[kRearLeft], 0.5 * s.fz_rear - d_rear, 1e-12);
+
+    EXPECT_NEAR(w.transfer_lat, d_front + d_rear, 1e-12) << "at ay " << ay;
+    EXPECT_NEAR(total(w), p.mass * kGravity, 1e-12) << "at ay " << ay;
+
+    // Pure cornering moves nothing between the axles.
+    EXPECT_NEAR(w.fz_front, s.fz_front, 1e-12);
+    EXPECT_NEAR(w.fz_rear, s.fz_rear, 1e-12);
+  }
+}
+
+// With equal tracks the two axle terms collapse to the textbook single
+// expression, m ay h / t, independently of where the CoG sits along the
+// wheelbase. That the weight distribution drops out is a real check on the
+// axle split rather than a restatement of it.
+TEST(LoadTransfer, EqualTracksGiveTheTextbookTotalLateralTransfer) {
+  auto p = asymmetric_params();
+  p.track_front = 0.24;
+  p.track_rear = 0.24;
+
+  for (const double lf : {0.10, 0.16, 0.22}) {
+    p.lf = lf;
+    p.lr = 0.32 - lf;
+    const double ay = 3.5;
+    const WheelLoads w = slipx::quasi_static_loads(p, 0.0, ay);
+    EXPECT_NEAR(w.transfer_lat, p.mass * ay * p.h_cog / p.track_front, 1e-12)
+        << "at lf " << lf;
+  }
+}
+
+// The two transfers superpose, because both are linear in their acceleration
+// and neither feeds the other. Worth asserting rather than assuming: the
+// obvious implementation mistake is to apply the lateral split about the
+// static axle load instead of the load that axle actually has after the
+// longitudinal transfer, and that shows up here.
+TEST(LoadTransfer, LongitudinalAndLateralTransfersSuperpose) {
+  const auto p = asymmetric_params();
+  const double ax = 3.0;
+  const double ay = -2.5;
+
+  const WheelLoads both = slipx::quasi_static_loads(p, ax, ay);
+  const WheelLoads only_x = slipx::quasi_static_loads(p, ax, 0.0);
+  const WheelLoads only_y = slipx::quasi_static_loads(p, 0.0, ay);
+  const WheelLoads none = slipx::quasi_static_loads(p, 0.0, 0.0);
+
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_NEAR(both.fz[i], only_x.fz[i] + only_y.fz[i] - none.fz[i], 1e-12)
+        << "wheel " << i;
+  }
+  EXPECT_NEAR(total(both), p.mass * kGravity, 1e-12);
+}
+
+// Linear in each acceleration, so doubling the acceleration doubles the
+// transfer. This is what makes the model identifiable: a skidpad at two
+// lateral accelerations gives a straight line whose slope is m h / t, and h
+// is the only unknown in it.
+TEST(LoadTransfer, TransferIsLinearInAcceleration) {
+  const auto p = asymmetric_params();
+  const double a = slipx::quasi_static_loads(p, 0.0, 1.5).transfer_lat;
+  const double b = slipx::quasi_static_loads(p, 0.0, 3.0).transfer_lat;
+  EXPECT_NEAR(b, 2.0 * a, 1e-12);
+
+  const double c = slipx::quasi_static_loads(p, 1.5, 0.0).transfer_long;
+  const double d = slipx::quasi_static_loads(p, 3.0, 0.0).transfer_long;
+  EXPECT_NEAR(d, 2.0 * c, 1e-12);
+}
+
+// The static rollover threshold, ay = g t / (2 h), checked by driving the
+// model to exactly that acceleration and finding the inner wheels at zero.
+// Independent of mass and of weight distribution, which is the whole reason
+// the number is quotable for a chassis rather than for a chassis at a given
+// ballast.
+TEST(LoadTransfer, InnerWheelsLiftAtTheStaticRolloverThreshold) {
+  auto p = asymmetric_params();
+  p.track_front = 0.24;
+  p.track_rear = 0.24;  // one threshold rather than two
+
+  const double expected = kGravity * p.track_front / (2.0 * p.h_cog);
+  EXPECT_NEAR(slipx::static_rollover_threshold(p), expected, 1e-12);
+
+  const WheelLoads at = slipx::quasi_static_loads(p, 0.0, expected);
+  EXPECT_NEAR(at.fz[kFrontLeft], 0.0, 1e-9);
+  EXPECT_NEAR(at.fz[kRearLeft], 0.0, 1e-9);
+  EXPECT_NEAR(at.fz[kFrontRight], at.fz_front, 1e-9);
+  EXPECT_NEAR(at.fz[kRearRight], at.fz_rear, 1e-9);
+
+  // Just below it every wheel is still loaded; just above it, one is not.
+  EXPECT_FALSE(slipx::quasi_static_loads(p, 0.0, 0.99 * expected).wheel_lifted);
+  EXPECT_TRUE(slipx::quasi_static_loads(p, 0.0, 1.01 * expected).wheel_lifted);
+
+  // Mass and weight distribution cannot move it.
+  auto heavy = p;
+  heavy.mass = 3.0 * p.mass;
+  heavy.lf = 0.10;
+  heavy.lr = 0.22;
+  EXPECT_NEAR(slipx::static_rollover_threshold(heavy), expected, 1e-12);
+  EXPECT_TRUE(slipx::quasi_static_loads(heavy, 0.0, 1.01 * expected)
+                  .wheel_lifted);
+}
+
+// Past the threshold, load is redistributed rather than deleted. A clamp that
+// only floored the negative wheel at zero would lose weight from the car, and
+// every tyre force computed from those loads would be wrong by that amount
+// without anything looking obviously broken.
+TEST(LoadTransfer, WeightIsConservedThroughWheelLift) {
+  const auto p = asymmetric_params();
+  for (const double ax : {-25.0, -8.0, 0.0, 8.0, 25.0}) {
+    for (const double ay : {-30.0, -12.0, 0.0, 12.0, 30.0}) {
+      const WheelLoads w = slipx::quasi_static_loads(p, ax, ay);
+      EXPECT_NEAR(total(w), p.mass * kGravity, 1e-9)
+          << "at ax " << ax << " ay " << ay;
+      EXPECT_NEAR(w.fz_front + w.fz_rear, p.mass * kGravity, 1e-9)
+          << "at ax " << ax << " ay " << ay;
+      for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+        EXPECT_GE(w.fz[i], 0.0) << "wheel " << i << " at ax " << ax
+                                << " ay " << ay;
+      }
+    }
+  }
+}
+
+// A CoG on the ground has no lever to transfer load through, whatever the car
+// is doing. This is the degenerate case the whole model reduces to, and it is
+// the one that makes "CoG height is inert below L2" a statement about the
+// tier rather than about the formula.
+TEST(LoadTransfer, ZeroCoGHeightTransfersNothing) {
+  auto p = asymmetric_params();
+  p.h_cog = 1e-12;  // validate() forbids exactly zero; this is as close as it
+                    // gets and the transfer is already below a micronewton
+  const WheelLoads w = slipx::quasi_static_loads(p, 8.0, 8.0);
+  const WheelLoads s = slipx::static_loads(p);
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_NEAR(w.fz[i], s.fz[i], 1e-9) << "wheel " << i;
+  }
 }
 
 }  // namespace

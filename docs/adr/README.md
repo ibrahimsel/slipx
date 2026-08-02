@@ -33,6 +33,7 @@ Use [`template.md`](template.md) for a new record.
 | [0004](0004-step-is-const-and-stateless.md) | `step` is `const` and stateless | Accepted |
 | [0005](0005-tiers-throw-rather-than-fall-back.md) | An unimplemented tier throws rather than falling back | Accepted |
 | [0006](0006-diagnostics-report-nan-not-zero.md) | Diagnostics report NaN, not zero, for what a tier cannot represent | Accepted |
+| [0022](0022-load-transfer-is-quasi-static.md) | L2 load transfer is quasi-static and introduces no suspension parameter | Accepted |
 
 ## Determinism
 

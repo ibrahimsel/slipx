@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "slipx/load_transfer.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
 
@@ -387,6 +388,157 @@ TEST(InvariantsL1, BothIntegratorsAgreeToTheirTruncationError) {
   EXPECT_NEAR(a.pos.x, b.pos.x, 0.01 * travelled);
   EXPECT_NEAR(a.pos.y, b.pos.y, 0.01 * travelled);
   EXPECT_NEAR(a.yaw, b.yaw, 0.02);
+}
+
+// -------------------------------------------------- load transfer (CORE-05)
+//
+// The closed-form checks are in test_analytical.cpp. What is here is the half
+// that a single operating point cannot establish: exact symmetry, and
+// monotonicity in the parameters over the sampled space rather than at one
+// convenient car.
+
+using slipx::kFrontLeft;
+using slipx::kFrontRight;
+using slipx::kRearLeft;
+using slipx::kRearRight;
+using slipx::WheelLoads;
+
+// Cars, accelerations and CoG heights spanning the plausible 1/10 range plus
+// enough beyond it to reach wheel lift. Deterministic and closed form, as
+// with the parameter sweep above (CORE-04).
+std::vector<VehicleParams> chassis_sweep() {
+  std::vector<VehicleParams> out;
+  for (const double mass : {2.8, 4.4}) {
+    for (const double lf : {0.11, 0.16, 0.21}) {
+      for (const double h : {0.03, 0.06, 0.11}) {
+        for (const double track : {0.20, 0.24}) {
+          VehicleParams p = reference_params();
+          p.mass = mass;
+          p.lf = lf;
+          p.lr = 0.32 - lf;
+          p.h_cog = h;
+          p.track_front = track;
+          p.track_rear = track + 0.02;
+          out.push_back(p);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// A left turn must mirror a right turn exactly, in the loads as much as in
+// the trajectory. Asserted bit for bit rather than within a tolerance: every
+// operation in the lateral path is odd in ay, so any inexactness here is an
+// asymmetry that has been introduced rather than a rounding difference that
+// had to be tolerated. This is the invariant that catches a one-sided clamp,
+// which is exactly the shape of the wheel-lift code.
+TEST(InvariantsLoadTransfer, MirroringLateralAccelerationSwapsLeftAndRight) {
+  for (const VehicleParams& p : chassis_sweep()) {
+    for (const double ax : {-4.0, 0.0, 4.0}) {
+      for (const double ay : {0.5, 4.0, 20.0}) {  // 20 is past wheel lift
+        const WheelLoads left = slipx::quasi_static_loads(p, ax, ay);
+        const WheelLoads right = slipx::quasi_static_loads(p, ax, -ay);
+
+        EXPECT_EQ(left.fz[kFrontLeft], right.fz[kFrontRight]);
+        EXPECT_EQ(left.fz[kFrontRight], right.fz[kFrontLeft]);
+        EXPECT_EQ(left.fz[kRearLeft], right.fz[kRearRight]);
+        EXPECT_EQ(left.fz[kRearRight], right.fz[kRearLeft]);
+        EXPECT_EQ(left.fz_front, right.fz_front);
+        EXPECT_EQ(left.fz_rear, right.fz_rear);
+        EXPECT_EQ(left.transfer_long, right.transfer_long);
+        EXPECT_EQ(left.transfer_lat, -right.transfer_lat);
+        EXPECT_EQ(left.wheel_lifted, right.wheel_lifted);
+      }
+    }
+  }
+}
+
+// Raising the CoG must lower the rollover threshold, at every car in the
+// sweep. This is the monotonicity SRS 7 names, and it is the statement a
+// student is meant to leave with: the battery position is a handling
+// parameter, and below L2 the model had no way to say so.
+TEST(InvariantsLoadTransfer, RaisingTheCoGLowersTheRolloverThreshold) {
+  for (const VehicleParams& p : chassis_sweep()) {
+    VehicleParams higher = p;
+    higher.h_cog = p.h_cog * 1.5;
+
+    EXPECT_LT(slipx::static_rollover_threshold(higher),
+              slipx::static_rollover_threshold(p))
+        << "h_cog " << p.h_cog << " track " << p.track_front;
+
+    // And the same fact stated through the loads rather than the formula: at
+    // a lateral acceleration the lower car survives, the higher one lifts a
+    // wheel.
+    const double ay = 0.5 * (slipx::static_rollover_threshold(higher) +
+                             slipx::static_rollover_threshold(p));
+    EXPECT_FALSE(slipx::quasi_static_loads(p, 0.0, ay).wheel_lifted);
+    EXPECT_TRUE(slipx::quasi_static_loads(higher, 0.0, ay).wheel_lifted);
+  }
+}
+
+// The other two levers, in the directions a chassis builder would predict:
+// a wider track raises the threshold, and neither mass nor ballast position
+// moves it at all.
+TEST(InvariantsLoadTransfer, WiderTrackRaisesTheThresholdAndMassDoesNothing) {
+  for (const VehicleParams& p : chassis_sweep()) {
+    VehicleParams wider = p;
+    wider.track_front = p.track_front * 1.25;
+    wider.track_rear = p.track_rear * 1.25;
+    EXPECT_GT(slipx::static_rollover_threshold(wider),
+              slipx::static_rollover_threshold(p));
+
+    VehicleParams heavy = p;
+    heavy.mass = p.mass * 2.0;
+    EXPECT_EQ(slipx::static_rollover_threshold(heavy),
+              slipx::static_rollover_threshold(p));
+  }
+}
+
+// Monotone in the accelerations too: more lateral acceleration always moves
+// more load, up to the point where there is no more to move.
+TEST(InvariantsLoadTransfer, MoreAccelerationAlwaysMovesMoreLoad) {
+  for (const VehicleParams& p : chassis_sweep()) {
+    double previous_lat = -1.0;
+    for (const double ay : {0.0, 1.0, 2.0, 3.0, 4.0}) {
+      const double moved = slipx::quasi_static_loads(p, 0.0, ay).transfer_lat;
+      ASSERT_GT(moved, previous_lat) << "at ay " << ay;
+      previous_lat = moved;
+    }
+
+    double previous_long = -1e9;
+    for (const double ax : {-4.0, -2.0, 0.0, 2.0, 4.0}) {
+      const double moved = slipx::quasi_static_loads(p, ax, 0.0).transfer_long;
+      ASSERT_GT(moved, previous_long) << "at ax " << ax;
+      previous_long = moved;
+    }
+  }
+}
+
+// No parameter set and no acceleration in the sweep may produce a NaN, a
+// negative load, or a set of loads that does not add up to the weight of the
+// car. The last one is the invariant everything downstream rests on: a tyre
+// model is only as good as the vertical load it is handed.
+TEST(InvariantsLoadTransfer, LoadsStayFiniteNonNegativeAndSumToTheWeight) {
+  for (const VehicleParams& p : chassis_sweep()) {
+    const double weight = p.mass * slipx::kGravity;
+    for (const double ax : {-40.0, -9.0, 0.0, 9.0, 40.0}) {
+      for (const double ay : {-40.0, -9.0, 0.0, 9.0, 40.0}) {
+        const WheelLoads w = slipx::quasi_static_loads(p, ax, ay);
+        double sum = 0.0;
+        for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+          ASSERT_TRUE(std::isfinite(w.fz[i]))
+              << "wheel " << i << " at ax " << ax << " ay " << ay;
+          ASSERT_GE(w.fz[i], 0.0)
+              << "wheel " << i << " at ax " << ax << " ay " << ay;
+          sum += w.fz[i];
+        }
+        ASSERT_NEAR(sum, weight, 1e-9) << "at ax " << ax << " ay " << ay;
+        ASSERT_TRUE(std::isfinite(w.transfer_long));
+        ASSERT_TRUE(std::isfinite(w.transfer_lat));
+      }
+    }
+  }
 }
 
 }  // namespace

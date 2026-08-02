@@ -14,6 +14,18 @@ in `conformance/reference_hashes.tsv`, it is recorded here with the reason,
 because every result anybody has previously compared against that row becomes
 incomparable.
 
+## Unreleased
+
+P1 in progress: L2, the double-track tier. `VehicleModel::create` still throws
+for L2 until the tier is complete; the pieces below are usable on their own but
+no tier consumes them yet.
+
+- New public header `slipx/load_transfer.hpp`: quasi-static longitudinal and
+  lateral load transfer from mass, CoG height, wheelbase and track (CORE-05),
+  plus the static rollover threshold `g t / (2 h)`. Header-only and pure.
+  Reasoning in [ADR-0022](docs/adr/0022-load-transfer-is-quasi-static.md).
+- No reference hash moves: nothing L0 or L1 integrates has changed.
+
 ## 0.1.0a1
 
 First publication. Pre-release: the version number is the one part of a release
