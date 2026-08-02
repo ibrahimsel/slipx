@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img" aria-label="Slip angle: the wheel points one way and travels another">
+<title>Slip angle: the wheel points one way and travels another</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+  </marker>
+</defs>
+<style>
+  :root {
+    --paper:#ffffff; --fg:#14181d; --muted:#5b6672; --grid:#e3e7ec;
+    --accent:#c2410c; --accent2:#1d4ed8; --ok:#15803d; --warn:#a16207;
+    --body:#cfd6de; --road:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#11161c; --fg:#e8ecf1; --muted:#93a0ad; --grid:#2a323b;
+      --accent:#fb923c; --accent2:#7aa7ff; --ok:#4ade80; --warn:#eab308;
+      --body:#2b333c; --road:#1a2027;
+    }
+  }
+  .card { fill: var(--paper); }
+  .grid { stroke: var(--grid); stroke-width: 1; fill: none; }
+  .axis { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  .mut  { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .fg   { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+  .body { fill: var(--body); stroke: var(--muted); stroke-width: 1.1; }
+  .road { fill: var(--road); stroke: var(--grid); stroke-width: 1.1; }
+  .a1   { stroke: var(--accent);  stroke-width: 2.2; fill: none; }
+  .a2   { stroke: var(--accent2); stroke-width: 2.2; fill: none; }
+  .ok   { stroke: var(--ok);      stroke-width: 2.2; fill: none; }
+  .a1f  { fill: var(--accent);  stroke: none; }
+  .a2f  { fill: var(--accent2); stroke: none; }
+  .okf  { fill: var(--ok);      stroke: none; }
+  .dash { stroke-dasharray: 7 5; }
+  .dot  { stroke-dasharray: 2 4; }
+  .thin { stroke-width: 1.2; }
+  text  { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .t    { font-size: 13px; }
+  .ts   { font-size: 11.5px; fill: var(--muted); }
+  .tb   { font-size: 15px; font-weight: 600; }
+  .tm   { font-size: 12px; fill: var(--muted); }
+  .k1   { font-size: 12px; fill: var(--accent); }
+  .k2   { font-size: 12px; fill: var(--accent2); }
+  .k3   { font-size: 12px; fill: var(--ok); }
+  .sb   { font-size: 0.72em; }
+</style>
+<rect class="card" x="0" y="0" width="640" height="300" rx="10"/>
+<text class="tb" x="22.00" y="28.00">Slip angle</text>
+<text class="tm" x="22.00" y="47.00">Top view of one wheel. ISO 8855, so y is to the left and a positive &#945; makes a negative F<tspan class="sb" dy="3">y</tspan>.</text>
+<line class="fg thin dash" x1="121.46" y1="244.98" x2="440.95" y2="128.70"/>
+<text class="ts" x="112.06" y="242.40" text-anchor="middle">wheel plane: where it points</text>
+<rect class="body" x="256.00" y="166.50" width="88" height="27" rx="3" transform="rotate(-20 300.00 180.00)"/>
+<line class="a2" x1="300.00" y1="180.00" x2="489.74" y2="170.06" marker-end="url(#ah)"/>
+<text class="k2" x="499.73" y="186.06" text-anchor="middle">v: where it goes</text>
+<path class="a1" d="M 397.73 144.43 A 104.00 104.00 0 0 1 403.86 174.56"/>
+<text class="k1" x="421.43" y="159.48">&#945;</text>
+<line class="ok" x1="300.00" y1="180.00" x2="261.69" y2="74.75" marker-end="url(#ah)"/>
+<text class="k3" x="247.59" y="63.48">F<tspan class="sb" dy="3">y</tspan></text>
+<text class="t" x="44.00" y="268.00">&#945; = atan2(v<tspan class="sb" dy="3">lat</tspan><tspan dy="-3">, v</tspan><tspan class="sb" dy="3">lon</tspan><tspan dy="-3">)</tspan> &#8722; &#948;</text>
+<text class="ts" x="160.00" y="268.00">no slip angle, no lateral force</text>
+</svg>

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320" role="img" aria-label="Longitudinal load transfer under braking">
+<title>Longitudinal load transfer under braking</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+  </marker>
+</defs>
+<style>
+  :root {
+    --paper:#ffffff; --fg:#14181d; --muted:#5b6672; --grid:#e3e7ec;
+    --accent:#c2410c; --accent2:#1d4ed8; --ok:#15803d; --warn:#a16207;
+    --body:#cfd6de; --road:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#11161c; --fg:#e8ecf1; --muted:#93a0ad; --grid:#2a323b;
+      --accent:#fb923c; --accent2:#7aa7ff; --ok:#4ade80; --warn:#eab308;
+      --body:#2b333c; --road:#1a2027;
+    }
+  }
+  .card { fill: var(--paper); }
+  .grid { stroke: var(--grid); stroke-width: 1; fill: none; }
+  .axis { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  .mut  { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .fg   { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+  .body { fill: var(--body); stroke: var(--muted); stroke-width: 1.1; }
+  .road { fill: var(--road); stroke: var(--grid); stroke-width: 1.1; }
+  .a1   { stroke: var(--accent);  stroke-width: 2.2; fill: none; }
+  .a2   { stroke: var(--accent2); stroke-width: 2.2; fill: none; }
+  .ok   { stroke: var(--ok);      stroke-width: 2.2; fill: none; }
+  .a1f  { fill: var(--accent);  stroke: none; }
+  .a2f  { fill: var(--accent2); stroke: none; }
+  .okf  { fill: var(--ok);      stroke: none; }
+  .dash { stroke-dasharray: 7 5; }
+  .dot  { stroke-dasharray: 2 4; }
+  .thin { stroke-width: 1.2; }
+  text  { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .t    { font-size: 13px; }
+  .ts   { font-size: 11.5px; fill: var(--muted); }
+  .tb   { font-size: 15px; font-weight: 600; }
+  .tm   { font-size: 12px; fill: var(--muted); }
+  .k1   { font-size: 12px; fill: var(--accent); }
+  .k2   { font-size: 12px; fill: var(--accent2); }
+  .k3   { font-size: 12px; fill: var(--ok); }
+  .sb   { font-size: 0.72em; }
+</style>
+<rect class="card" x="0" y="0" width="640" height="320" rx="10"/>
+<text class="tb" x="22.00" y="28.00">Longitudinal load transfer</text>
+<text class="tm" x="22.00" y="47.00">Side view, braking. The lever is the CoG height; the base is the wheelbase.</text>
+<line class="axis" x1="76.00" y1="232.00" x2="566.00" y2="232.00"/>
+<rect class="body" x="172.00" y="140.00" width="268.00" height="46.00" rx="8"/>
+<circle class="body" cx="176.00" cy="211.00" r="21.00"/>
+<circle class="body" cx="436.00" cy="211.00" r="21.00"/>
+<circle class="a1f" cx="310.00" cy="170.00" r="6.50"/>
+<text class="ts" x="298.00" y="175.00" text-anchor="end">CoG</text>
+<line class="fg" x1="310.00" y1="170.00" x2="310.00" y2="216.00" marker-end="url(#ah)"/>
+<text class="ts" x="318.00" y="212.00">m g</text>
+<line class="a1" x1="310.00" y1="170.00" x2="402.00" y2="170.00" marker-end="url(#ah)"/>
+<text class="k1" x="356.00" y="160.00" text-anchor="middle">inertia</text>
+<line class="ok" x1="436.00" y1="232.00" x2="436.00" y2="110.00" marker-end="url(#ah)"/>
+<text class="k3" x="448.00" y="114.00">front gains</text>
+<line class="a2" x1="176.00" y1="232.00" x2="176.00" y2="148.00" marker-end="url(#ah)"/>
+<text class="k2" x="164.00" y="152.00" text-anchor="end">rear loses</text>
+<line class="grid" x1="498.00" y1="232.00" x2="498.00" y2="170.00"/>
+<line class="grid" x1="492.00" y1="232.00" x2="504.00" y2="232.00"/>
+<line class="grid" x1="492.00" y1="170.00" x2="504.00" y2="170.00"/>
+<text class="ts" x="510.00" y="205.00">h</text>
+<line class="grid" x1="176.00" y1="258.00" x2="436.00" y2="258.00"/>
+<line class="grid" x1="176.00" y1="252.00" x2="176.00" y2="264.00"/>
+<line class="grid" x1="436.00" y1="252.00" x2="436.00" y2="264.00"/>
+<text class="ts" x="306.00" y="276.00" text-anchor="middle">L</text>
+<text class="t" x="76.00" y="300.00">&#916;F<tspan class="sb" dy="3">z</tspan> = m a<tspan class="sb" dy="3">x</tspan> h / L</text>
+</svg>

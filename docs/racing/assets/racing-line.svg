@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="470" viewBox="0 0 660 470" role="img" aria-label="The geometric line and the late apex">
+<title>The geometric line and the late apex</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+  </marker>
+</defs>
+<style>
+  :root {
+    --paper:#ffffff; --fg:#14181d; --muted:#5b6672; --grid:#e3e7ec;
+    --accent:#c2410c; --accent2:#1d4ed8; --ok:#15803d; --warn:#a16207;
+    --body:#cfd6de; --road:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#11161c; --fg:#e8ecf1; --muted:#93a0ad; --grid:#2a323b;
+      --accent:#fb923c; --accent2:#7aa7ff; --ok:#4ade80; --warn:#eab308;
+      --body:#2b333c; --road:#1a2027;
+    }
+  }
+  .card { fill: var(--paper); }
+  .grid { stroke: var(--grid); stroke-width: 1; fill: none; }
+  .axis { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  .mut  { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .fg   { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+  .body { fill: var(--body); stroke: var(--muted); stroke-width: 1.1; }
+  .road { fill: var(--road); stroke: var(--grid); stroke-width: 1.1; }
+  .a1   { stroke: var(--accent);  stroke-width: 2.2; fill: none; }
+  .a2   { stroke: var(--accent2); stroke-width: 2.2; fill: none; }
+  .ok   { stroke: var(--ok);      stroke-width: 2.2; fill: none; }
+  .a1f  { fill: var(--accent);  stroke: none; }
+  .a2f  { fill: var(--accent2); stroke: none; }
+  .okf  { fill: var(--ok);      stroke: none; }
+  .dash { stroke-dasharray: 7 5; }
+  .dot  { stroke-dasharray: 2 4; }
+  .thin { stroke-width: 1.2; }
+  text  { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .t    { font-size: 13px; }
+  .ts   { font-size: 11.5px; fill: var(--muted); }
+  .tb   { font-size: 15px; font-weight: 600; }
+  .tm   { font-size: 12px; fill: var(--muted); }
+  .k1   { font-size: 12px; fill: var(--accent); }
+  .k2   { font-size: 12px; fill: var(--accent2); }
+  .k3   { font-size: 12px; fill: var(--ok); }
+  .sb   { font-size: 0.72em; }
+</style>
+<rect class="card" x="0" y="0" width="660" height="470" rx="10"/>
+<text class="tb" x="22.00" y="28.00">Two lines through one corner</text>
+<text class="tm" x="22.00" y="47.00">Track width is radius, and radius is speed.</text>
+<path class="fg thin" d="M 498.00 452.00 L 498.00 320.00 L 497.92 316.16 L 497.67 312.33 L 497.25 308.51 L 496.66 304.72 L 495.91 300.95 L 495.00 297.22 L 493.93 293.54 L 492.69 289.90 L 491.30 286.32 L 489.76 282.81 L 488.06 279.37 L 486.21 276.00 L 484.22 272.72 L 482.09 269.53 L 479.82 266.43 L 477.41 263.43 L 474.88 260.55 L 472.23 257.77 L 469.45 255.12 L 466.57 252.59 L 463.57 250.18 L 460.47 247.91 L 457.28 245.78 L 454.00 243.79 L 450.63 241.94 L 447.19 240.24 L 443.68 238.70 L 440.10 237.31 L 436.46 236.07 L 432.78 235.00 L 429.05 234.09 L 425.28 233.34 L 421.49 232.75 L 417.67 232.33 L 413.84 232.08 L 410.00 232.00 L 60.00 232.00"/>
+<path class="fg thin" d="M 580.00 452.00 L 580.00 320.00 L 579.84 312.58 L 579.35 305.18 L 578.55 297.81 L 577.42 290.48 L 575.97 283.21 L 574.21 276.00 L 572.13 268.88 L 569.75 261.86 L 567.06 254.94 L 564.07 248.15 L 560.79 241.50 L 557.22 235.00 L 553.38 228.66 L 549.26 222.49 L 544.87 216.51 L 540.23 210.73 L 535.34 205.15 L 530.21 199.79 L 524.85 194.66 L 519.27 189.77 L 513.49 185.13 L 507.51 180.74 L 501.34 176.62 L 495.00 172.78 L 488.50 169.21 L 481.85 165.93 L 475.06 162.94 L 468.14 160.25 L 461.12 157.87 L 454.00 155.79 L 446.79 154.03 L 439.52 152.58 L 432.19 151.45 L 424.82 150.65 L 417.42 150.16 L 410.00 150.00 L 60.00 150.00"/>
+<text class="ts" x="78.00" y="136.00">exit straight</text>
+<text class="ts" x="594.00" y="418.00">entry</text>
+<line class="mut thin" x1="606.00" y1="436.00" x2="606.00" y2="390.00" marker-end="url(#ah)"/>
+<path class="a2 dash" d="M 574.04 452.00 L 571.98 441.54 L 569.61 431.15 L 566.95 420.83 L 563.98 410.59 L 560.73 400.44 L 557.18 390.39 L 553.34 380.44 L 549.21 370.62 L 544.80 360.91 L 540.11 351.34 L 535.15 341.90 L 529.91 332.62 L 524.41 323.49 L 518.64 314.52 L 512.62 305.73 L 506.35 297.11 L 499.83 288.68 L 493.07 280.44 L 486.07 272.40 L 478.84 264.56 L 471.39 256.94 L 463.72 249.54 L 455.84 242.36 L 447.75 235.41 L 439.47 228.70 L 430.99 222.24 L 422.34 216.02 L 413.50 210.05 L 404.50 204.35 L 395.33 198.90 L 386.02 193.73 L 376.55 188.83 L 366.95 184.20 L 357.22 179.85 L 347.36 175.79 L 337.39 172.01 L 327.32 168.53 L 317.15 165.33 L 306.89 162.44 L 296.55 159.84 L 286.14 157.54 L 275.67 155.54 L 265.15 153.85 L 254.58 152.47 L 243.97 151.39 L 233.34 150.62 L 222.69 150.15 L 212.03 150.00 L 60.00 150.00"/>
+<path class="a1" d="M 580.00 452.00 L 580.00 441.57 L 579.93 436.15 L 579.73 430.74 L 579.40 425.33 L 578.93 419.93 L 578.33 414.55 L 577.59 409.18 L 576.73 403.83 L 575.73 398.51 L 574.60 393.21 L 573.34 387.94 L 571.95 382.71 L 570.43 377.51 L 568.78 372.35 L 567.00 367.23 L 565.10 362.15 L 563.08 357.13 L 560.93 352.16 L 558.65 347.24 L 556.26 342.38 L 553.75 337.58 L 551.12 332.84 L 548.37 328.17 L 545.51 323.57 L 542.54 319.04 L 539.45 314.59 L 536.26 310.21 L 532.96 305.92 L 529.55 301.70 L 526.04 297.58 L 522.43 293.54 L 518.72 289.59 L 514.92 285.73 L 511.02 281.97 L 507.03 278.31 L 502.95 274.74 L 498.78 271.28 L 494.53 267.93 L 490.19 264.68 L 485.78 261.53 L 481.29 258.50 L 476.73 255.58 L 472.09 252.77 L 467.39 250.08 L 462.62 247.51 L 457.80 245.05 L 452.91 242.71 L 447.96 240.50 L 442.97 238.41 L 442.97 238.41 L 439.85 237.16 L 436.72 235.94 L 433.58 234.74 L 430.43 233.57 L 427.27 232.43 L 424.10 231.31 L 420.92 230.21 L 417.74 229.14 L 414.55 228.10 L 411.34 227.08 L 408.13 226.09 L 404.92 225.12 L 401.69 224.18 L 398.46 223.26 L 395.22 222.37 L 391.97 221.51 L 388.72 220.67 L 385.46 219.86 L 382.19 219.08 L 378.92 218.32 L 375.64 217.58 L 372.36 216.88 L 369.07 216.20 L 365.77 215.54 L 362.47 214.91 L 359.16 214.31 L 355.85 213.74 L 352.54 213.19 L 349.22 212.67 L 345.90 212.17 L 342.57 211.70 L 339.24 211.26 L 335.91 210.84 L 332.57 210.46 L 329.23 210.09 L 325.89 209.76 L 322.54 209.45 L 319.19 209.17 L 315.84 208.91 L 312.49 208.68 L 309.14 208.48 L 305.78 208.31 L 302.42 208.16 L 299.07 208.04 L 295.71 207.95 L 292.35 207.88 L 288.99 207.84 L 285.63 207.83 L 60.00 207.83"/>
+<circle class="a2f" cx="472.23" cy="257.77" r="5.00"/>
+<text class="k2" x="486.23" y="263.77">geometric apex</text>
+<circle class="a1f" cx="442.97" cy="238.41" r="5.00"/>
+<text class="k1" x="426.97" y="224.41" text-anchor="end">late apex</text>
+<text class="k2" x="52.00" y="316.00">geometric</text>
+<text class="ts" x="52.00" y="334.00">the largest radius that fits between</text>
+<text class="ts" x="52.00" y="349.00">the boundaries, so the highest</text>
+<text class="ts" x="52.00" y="364.00">constant speed through the corner</text>
+<text class="k1" x="52.00" y="396.00">late apex</text>
+<text class="ts" x="52.00" y="414.00">slower in, but the exit straightens</text>
+<text class="ts" x="52.00" y="429.00">sooner, so the following straight</text>
+<text class="ts" x="52.00" y="444.00">is driven faster all the way down</text>
+</svg>

@@ -32,7 +32,11 @@ SOURCE_SUFFIXES = {".cpp", ".cc", ".hpp", ".h", ".py"}
 
 # Generated, vendored or trivially non-substantial files.
 EXEMPT_PATTERNS = [
-    re.compile(r"(^|/)build/"),
+    # build/ and any build-* variant. The CORE-01 check documented alongside
+    # this one configures into build-core/, and CMake drops its own compiler
+    # probe sources there, so scanning it fails the licence check for a file
+    # CMake wrote. .gitignore already covers the same set.
+    re.compile(r"(^|/)build(-[^/]*)?/"),
     re.compile(r"(^|/)\.venv/"),
     re.compile(r"(^|/)__pycache__/"),
     re.compile(r"(^|/)_skbuild/"),

@@ -229,6 +229,19 @@ is *physically structured and identifiable*, not *validated*. Every shipped
 parameter set carries a `measured`, `identified` or `provisional` label, and the
 tooling prints it rather than leaving it in the documentation.
 
+## Learning the subject
+
+If the vocabulary in this README is new, there is a tutorial series on the
+concepts themselves, written for somebody arriving from robotics or computer
+science rather than from vehicle dynamics:
+[**Autonomous racing, from the ground up**](https://github.com/ibrahimsel/slipx/tree/main/docs/racing).
+
+It covers slip angles and the shape of the tyre curve, load transfer and why it
+costs you grip, which vehicle model is allowed to answer which question,
+understeer and oversteer, the racing line, and the g-g diagram. It is a guide to
+the subject rather than a manual for this library, so it is worth reading even
+if you never install anything.
+
 ## Where the reasoning lives
 
 [`docs/adr`](https://github.com/ibrahimsel/slipx/tree/main/docs/adr) has one
