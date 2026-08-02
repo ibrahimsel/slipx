@@ -62,6 +62,12 @@ cornering spend the same budget. See [tyres and grip](01-tyres-and-grip.md).
 longitudinal and lateral acceleration the car can reach. See
 [speed and the g-g diagram](06-speed-and-the-gg-diagram.md).
 
+**Identifiability**. Whether a parameter can be determined from the
+measurements you are able to take. A parameter that is not identifiable does
+not stay absent: it gets guessed, and a guess in a configuration file is
+indistinguishable from a measurement. See
+[fitting a tyre model](07-fitting-a-tyre-model.md).
+
 **Kinematic bicycle model**. The four-state model that merges each axle into
 one wheel and assumes no tyre slip at all. Cheap, has no friction limit, and is
 the standard internal model for MPC.
@@ -78,6 +84,10 @@ reaction acts at the road. Not caused by the springs.
 **Magic Formula**. Pacejka's empirical tyre model, `Fy = D sin(C atan(B a - E
 (B a - atan(B a))))`. Called magic because it is a fit with no derivation. See
 [tyres and grip](01-tyres-and-grip.md).
+
+**MF-lite**. A reduced Magic Formula keeping load sensitivity and combined slip
+and dropping everything that needs a tyre rig to identify. The name is SlipX's;
+the idea, of fitting only what you can measure, is not.
 
 **MPC** (model predictive control). Control by repeatedly solving a short-horizon
 optimisation over a vehicle model. Popular in racing because constraints such as
@@ -98,6 +108,10 @@ technical report, 1992.
 **Relaxation length** (`sigma`). The rolling distance a tyre needs for lateral
 force to reach about 63 per cent of its steady value. A few centimetres, giving
 a lag of `sigma/v`.
+
+**Nominal load** (`Fz_nom`). The vertical load a set of tyre coefficients was
+identified at. Load sensitivity is an exponent *about* this load, so
+coefficients quoted without it are unusable.
 
 **Rollover threshold**. The lateral acceleration at which the inside wheels
 reach zero load, `g t / (2h)` for a rigid car. Depends only on track and CoG
@@ -123,6 +137,10 @@ See Thrun et al., "Stanley: The robot that won the DARPA Grand Challenge",
 
 **Static stability factor**. `t / 2h`, the rollover threshold in units of g.
 Quoted for road cars in safety ratings.
+
+**Skidpad**. A constant-radius circle driven at slowly increasing speed, the
+standard manoeuvre for measuring cornering stiffness and peak lateral friction.
+See [fitting a tyre model](07-fitting-a-tyre-model.md).
 
 **Trail braking**. Carrying braking into the corner and releasing it as
 steering is added, so the combined demand stays on the g-g boundary rather than

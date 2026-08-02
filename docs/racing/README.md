@@ -45,16 +45,23 @@ order. The rest stand alone.
 | 5 | [The racing line](05-the-racing-line.md) | Why is the shortest path not the fastest? |
 | 6 | [Speed and the g-g diagram](06-speed-and-the-gg-diagram.md) | How fast can I go, and where do I brake? |
 
+**Part three: getting the numbers**
+
+| | Article | What it answers |
+|---|---|---|
+| 7 | [Fitting a tyre model](07-fitting-a-tyre-model.md) | Where do the coefficients in a tyre model come from? |
+
 **Reference**
 
 - [Glossary](glossary.md), for when a word turns up before its article does.
 
 **Planned, not yet written.** Listed so the shape of the series is visible and
-so nobody writes the same article twice: the autonomy pipeline; localisation
-and mapping; global and local planning; path tracking, from pure pursuit to
-MPC; state estimation and sensor models; the sim-to-real gap; system
-identification; and reproducibility and benchmarking. Contributions welcome,
-and the four articles above are the register to match.
+so nobody writes the same article twice: combined slip and the limits of a
+friction ellipse; differentials; motor, ESC and battery behaviour; actuator lag;
+the autonomy pipeline; localisation and mapping; global and local planning; path
+tracking, from pure pursuit to MPC; state estimation and sensor models; the
+sim-to-real gap; and reproducibility and benchmarking. Contributions welcome,
+and the articles above are the register to match.
 
 ## Conventions
 

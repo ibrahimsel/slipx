@@ -185,5 +185,6 @@ algorithm into one that trail brakes.
 
 ---
 
+Next: [7. Fitting a tyre model](07-fitting-a-tyre-model.md) ·
 Previous: [5. The racing line](05-the-racing-line.md) ·
 [Series index](README.md)

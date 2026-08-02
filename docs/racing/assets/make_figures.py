@@ -18,9 +18,10 @@ SCHEMATICS (slip-angle, load-transfer-*, vehicle-models, understeer-oversteer,
 racing-line) are geometry. They show how quantities are defined and how a
 picture is labelled, and there is no model behind them to be right or wrong.
 
-PLOTS (tyre-curve, load-sensitivity, friction-ellipse, gg-diagram,
-speed-profile) are computed from the formulae written out below, at parameter
-values chosen to be plausible for a 1/10-scale car. They are ILLUSTRATIVE. They
+PLOTS (tyre-curve, load-sensitivity, peak-location, friction-ellipse,
+gg-diagram, speed-profile) are computed from the formulae written out below, at
+parameter values chosen to be plausible for a 1/10-scale car. They are
+ILLUSTRATIVE. They
 are not output from `slipx_core`, and no parameter set in this file has been
 measured against a vehicle (NFR-08). This is the same caveat that
 `docs/assets/make_banner.py` carries and for the same reason: at the time of
@@ -421,7 +422,81 @@ def fig_load_sensitivity():
     f.save("load-sensitivity.svg")
 
 
-# ======================================================= 4. friction ellipse
+# ======================================================= 4. where a peak lands
+
+def fig_peak_location():
+    """Three tyres with the same slope and the same peak, peaking elsewhere.
+
+    The point of the figure is a fact that is invisible until you try to fit
+    the Magic Formula: once the cornering stiffness and the peak friction are
+    fixed by measurement, B is no longer free, and C and E between them decide
+    one remaining thing, which is how far out the peak sits.
+
+    Each curve here is built by DERIVING B from the shared cornering stiffness,
+    exactly as an identification would, so all three leave the origin along the
+    same tangent and all three reach the same height. Nothing else about them
+    is the same.
+    """
+    f = Fig(640, 400, "Where the peak lands, for the same slope and peak")
+    f.head("C and E decide where the peak lands",
+           "Same cornering stiffness, same peak force. Only C and E differ.")
+
+    ca = c_alpha()                       # shared, as a skidpad would give it
+    peak_force = MU_Y0 * FZ_NOM          # shared, as a limit run would give it
+    alpha_lin = peak_force / ca          # the linear tyre's crossing point
+
+    ax = Axes(f, 66, 92, 500, 250, (0, 30), (0, 11.4))
+    ax.frame([0, 5, 10, 15, 20, 25, 30], [0, 2, 4, 6, 8, 10])
+    f.text(316, 380, "slip angle " + ALPHA + "   [degrees]", "ts", "middle")
+    f.text(20, 217, "|" + FY + "|   [N]", "ts", "middle", rot=-90)
+
+    degs = frange(0.0, 30.0, 400)
+
+    # (C, E, css, label). The last pair is legal under the SlipX tyre schema
+    # and is not a tyre: its peak is out where no car goes.
+    # The third pair is legal under the SlipX tyre schema, which bounds C and E
+    # independently, and is not a tyre: its peak is out where no car goes.
+    cases = [(1.90, 0.00, "ok", "okf", "k3"),
+             (1.50, -0.20, "a1", "a1f", "k1"),
+             (1.43, 0.87, "a2", "a2f", "k2")]
+
+    # The legend sits in the empty lower right of the plot. Its rows are placed
+    # in data coordinates so that moving the axis limits moves them with it.
+    row_y = [3.5, 2.4, 1.3]
+
+    for (shape_c, curve_e, cls, dot, txt), ly in zip(cases, row_y):
+        b = ca / (shape_c * peak_force)
+        ys = []
+        for d in degs:
+            ba = b * math.radians(d)
+            inner = ba - curve_e * (ba - math.atan(ba))
+            ys.append(peak_force * math.sin(shape_c * math.atan(inner)))
+        ax.curve(degs, ys, cls)
+
+        i = max(range(len(ys)), key=lambda j: ys[j])
+        ratio = math.radians(degs[i]) / alpha_lin
+        f.circle(*ax.pt(degs[i], ys[i]), 4.5, dot)
+
+        f.line(*ax.pt(11.5, ly), *ax.pt(13.5, ly), cls)
+        f.text(*ax.pt(14.3, ly - 0.28), f"C = {shape_c:g}, E = {curve_e:g}",
+               txt)
+        f.text(*ax.pt(22.4, ly - 0.28),
+               f"peak at {degs[i]:.0f}&#176; = {ratio:.1f}&#215; "
+               + ALPHA + sub("lin"), "ts")
+
+    # The shared tangent, and the slip angle where it would have reached the
+    # peak. That angle is the natural yardstick: every peak above is a multiple
+    # of it.
+    ax.clipped(degs, [ca * math.radians(d) for d in degs], "mut dash thin")
+    f.line(*ax.pt(math.degrees(alpha_lin), 0),
+           *ax.pt(math.degrees(alpha_lin), peak_force), "grid dot")
+    f.text(*ax.pt(math.degrees(alpha_lin) + 0.5, 1.2), ALPHA + sub("lin")
+           + f" = {math.degrees(alpha_lin):.1f}&#176;", "ts")
+    f.text(*ax.pt(0.6, 10.6), "shared tangent, slope C" + sub("&#945;"), "ts")
+    f.save("peak-location.svg")
+
+
+# ======================================================= 5. friction ellipse
 
 def fig_friction_ellipse():
     f = Fig(560, 400, "The friction ellipse: one budget, two demands")
@@ -838,6 +913,7 @@ def fig_speed_profile():
 def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
+               fig_peak_location,
                fig_friction_ellipse, fig_load_transfer_long,
                fig_load_transfer_lat, fig_vehicle_models,
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,

@@ -147,6 +147,10 @@ initial slope through `C_alpha = B C D`, and `E` adjusts the curvature near the
 peak. The full version has dozens of coefficients covering camber, conicity,
 turn slip and more.
 
+Where those coefficients come from for a particular tyre, and which of them you
+can actually measure with the sensors on a small car, is
+[article 7](07-fitting-a-tyre-model.md).
+
 > **In SlipX.** The library uses a reduced version, "MF-lite", chosen so that
 > every coefficient can be identified from a manoeuvre you can drive in a car
 > park with the sensors already on a competition car. The reasoning is in
