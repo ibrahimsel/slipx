@@ -1,6 +1,9 @@
 # SlipX
 
-![SlipX: vehicle dynamics for 1/10-scale racecars](docs/assets/slipx-banner.gif)
+<!-- Absolute URLs throughout this file, not repository-relative ones. This
+     README is also the PyPI long description, and PyPI serves it from another
+     origin where a relative path resolves to nothing. -->
+![SlipX: vehicle dynamics for 1/10-scale racecars](https://raw.githubusercontent.com/ibrahimsel/slipx/main/docs/assets/slipx-banner.gif)
 
 SlipX is a vehicle dynamics library for 1/10-scale autonomous racecars, plus the
 simulation, ROS 2 and race control layers needed to make it usable. Apache-2.0,
@@ -99,7 +102,7 @@ The rule will be broken by accident rather than on purpose, which is why it is
 a script and not a paragraph.
 
 The full component diagram, including the adoption surface it is aimed at, is in
-[`docs/architecture/slipx.md`](docs/architecture/slipx.md).
+[`docs/architecture/slipx.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/architecture/slipx.md).
 
 ### Core interface
 
@@ -139,11 +142,30 @@ would plot and believe.
 ### Installing it
 
 ```
+pip install slipx
+slipx-conformance
+```
+
+The published releases are pre-releases (`0.1.0a1` and onwards), so plain
+`pip install slipx` resolves to one only while no final release exists. To pin
+one deliberately, `pip install slipx==0.1.0a1`. The pre-release marker is not
+false modesty about the code, which is tested and has a determinism job behind
+it; it is about the version number being the one part of a release that can
+never be withdrawn, so the first artefacts published under a name are spent
+proving the packaging rather than being pinned by anybody.
+
+Wheels are built for Linux, macOS and Windows on CPython 3.9 to 3.13, so the
+normal case needs no compiler. Anything outside that list falls back to the
+source distribution and needs CMake 3.20 and a C++17 compiler.
+
+Installing from a checkout instead:
+
+```
 pip install .
 slipx-conformance
 ```
 
-That builds the extension through scikit-build-core, installs `slipx` and
+Either builds the extension through scikit-build-core, installs `slipx` and
 `slipx_schema`, and ships the reference car inside the package, so there is
 something to load without cloning anything. The last line prints the canonical
 step steer's trajectory hash. On a build with a published row in
@@ -151,8 +173,27 @@ step steer's trajectory hash. On a build with a published row in
 number about which nothing has been claimed, which is NFR-03 rather than a
 fault. `python3 tools/exit_gate.py --expect <hash>` runs the whole check.
 
-There is no PyPI release yet, so `pip install slipx` does not work and the
-package name is not reserved.
+**A released wheel makes no claim about its own trajectory hash, and this is
+not an oversight.** The published rows in `conformance/reference_hashes.tsv`
+are keyed by architecture, compiler and build type, and none of them describes
+a manylinux, macOS or Windows wheel-building image. Shipping a wheel that
+asserted a hash would mean either publishing rows for toolchains whose compiler
+version moves whenever the image is rebuilt, or weakening the check to a
+tolerance. Both are worse than the honest answer, which NFR-03 already gives:
+outside a build with a published row, the number is a number and nothing has
+been claimed about it.
+
+What the release process does instead is verify, on every platform it builds
+for, the three clauses of the exit gate that hold everywhere: the wheel
+installs, the reference car loads out of it, and a step steer integrates to a
+finite trajectory. It prints the hash and does not grade it. The one build that
+is compared against a published row is the `wheel` job in CI, which runs on a
+pinned image with a pinned compiler for exactly the reason the determinism job
+does.
+
+So `slipx-conformance` on your own machine printing something other than
+`d44a9a68616ec899` is the expected outcome unless you are on x86-64 with one of
+the compilers in that file. That is the promise working, not failing.
 
 ### Building it
 
@@ -285,9 +326,11 @@ convinces itself it's progressing while nobody adopts it.
 **P0, weeks 0-6. Foundation. Built.** `slipx_core` with L0 and L1,
 `slipx_schema` v0.1.0, Python bindings, determinism job in CI.
 *Done when:* someone else pip-installs it, integrates a step steer, and gets the
-same trajectory hash as CI. The machinery is in place and the gate is not
-closed: it closes when somebody who is not us runs `slipx-conformance` and
-reports a match.
+same trajectory hash as CI. The machinery is in place, the package is on PyPI,
+and the gate is not closed: it closes when somebody who is not us runs
+`slipx-conformance` on a build with a published reference row and reports a
+match. On a build without one, what they can report is that it installed, ran
+and produced a finite number, which is worth having and is not the gate.
 
 **P1, weeks 6-14. A car worth believing.** L2 double-track with load transfer
 and combined-slip MF-lite; ESC with current limit, regen and battery sag;
