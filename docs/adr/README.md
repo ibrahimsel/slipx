@@ -66,3 +66,9 @@ Use [`template.md`](template.md) for a new record.
 | [0019](0019-trusted-publishing.md) | Publish with Trusted Publishing, not an API token | Accepted |
 | [0020](0020-wheels-assert-nothing-about-their-hash.md) | A released wheel asserts nothing about its own trajectory hash | Accepted |
 | [0021](0021-readme-is-the-pypi-description.md) | The README is the PyPI long description | Accepted |
+
+## Looking at a run
+
+| # | Decision | Status |
+|---|---|---|
+| [0024](0024-a-run-viewer-is-in-scope.md) | A run viewer is in scope, and it lives in the Python package | Accepted |

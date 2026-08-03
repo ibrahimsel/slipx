@@ -203,7 +203,11 @@ Copy `examples/cars/reference_1_10` to start one.
 ## Not in scope
 
 No photorealistic rendering: SlipX is LiDAR-first and runs on CPU, and there is
-no camera model. No full-scale road vehicles, traffic or urban scenarios. No
+no camera model. That rules out a sensor, not a picture: rendering a finished
+run to a self-contained SVG, with the provenance label and the trajectory hash
+drawn into the image, is in scope and lands with the double-track tier. It
+writes a file and never opens a window, so it needs no display server and no
+GPU. No full-scale road vehicles, traffic or urban scenarios. No
 autonomy stack; the reference controllers exist to validate the sim, not to win
 with. No aerodynamics at 1/10 scale, where it is negligible below roughly
 15 m/s. Collision physics will be plausible and deterministic, not fitted to
