@@ -13,6 +13,7 @@
 
 #include <cmath>
 
+#include "slipx/relaxation.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
@@ -252,6 +253,45 @@ TEST(Conventions, WheelIndexOrdering) {
   EXPECT_EQ(slipx::kRearLeft, 2u);
   EXPECT_EQ(slipx::kRearRight, 3u);
   EXPECT_EQ(slipx::kWheelCount, 4u);
+}
+
+// The transient does not change the sign convention. A positive slip angle
+// produces a negative lateral force at steady state (asserted above), and it
+// must do so at every instant while the tyre is still building up to it: the
+// lagged angle stays on the same side of zero as the angle it is chasing, so
+// the force never passes through the wrong sign on its way up.
+//
+// Worth asserting separately because a lag implemented with the sign of the
+// error reversed still converges in magnitude and would pass a steady-state
+// check while producing a force that pushed the wrong way for the first few
+// milliseconds of every corner.
+TEST(ConventionsTyre, TheRelaxationTransientNeverFlipsTheForceSign) {
+  const slipx::TyreCoefficients coefficients;
+  const slipx::MfLite tyre = slipx::make_mf_lite(coefficients, 61.0, 8.4);
+  const double sigma = 0.08;
+  const double vx = 8.0;
+
+  for (const double alpha : {0.05, -0.05}) {
+    double lagged = 0.0;
+    for (int i = 0; i < 400; ++i) {
+      lagged += 1e-4 * slipx::relaxation_rate(alpha, lagged, vx, sigma);
+
+      // The lagged angle is on the same side of zero as the target.
+      if (alpha > 0.0) {
+        EXPECT_GE(lagged, 0.0);
+      } else {
+        EXPECT_LE(lagged, 0.0);
+      }
+
+      // And ISO 8855 holds throughout: positive slip, negative force.
+      const double fy = slipx::mf_lite_fy(tyre, lagged, 8.4);
+      if (lagged > 0.0) {
+        EXPECT_LT(fy, 0.0);
+      } else if (lagged < 0.0) {
+        EXPECT_GT(fy, 0.0);
+      }
+    }
+  }
 }
 
 }  // namespace

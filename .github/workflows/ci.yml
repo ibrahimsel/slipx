@@ -198,7 +198,7 @@ jobs:
       # independently built artefact agrees with the published number, and
       # reading the number from the repository the artefact was built from
       # would make the check circular.
-      EXPECTED_HASH: d44a9a68616ec899
+      EXPECTED_HASH: f4da160a691289eb
 
   # ------------------------------------------------------------ determinism
   #

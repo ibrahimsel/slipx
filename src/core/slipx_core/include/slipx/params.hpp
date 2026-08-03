@@ -70,6 +70,18 @@ struct VehicleParams {
   // clipping keeps that visible rather than pretending otherwise.
   double mu_clip = 1.1;      // peak friction coefficient              [-]
 
+  // Relaxation length: the distance the tyre must roll before its lateral
+  // force reaches the steady-state value for the slip it is being given
+  // (CORE-07). The lag is in distance, so the time constant is
+  // relax_length / speed and falls as the car speeds up; relaxation.hpp
+  // carries the derivation. No effect below L2, which has no tyre transient.
+  //
+  // Identifiable in a car park from the rise time of yaw rate in a step steer
+  // at two speeds, which is why it is a parameter at all (ADR-0009). The value
+  // is provisional: it is roughly 1.5 wheel radii, which is where a full-size
+  // tyre sits, and it has been measured on nothing.
+  double relax_length = 0.08;  //                                       [m]
+
   // ----------------------------------------------------------- drivetrain
   // At L0 and L1 the drivetrain is a commanded longitudinal acceleration with
   // limits. ESC torque-speed curve, current limit, regen and battery sag are

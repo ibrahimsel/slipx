@@ -13,6 +13,7 @@
 #include <cmath>
 
 #include "slipx/load_transfer.hpp"
+#include "slipx/relaxation.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
@@ -974,6 +975,201 @@ TEST(CombinedSlip, AZeroBudgetDeliversNothingAndSaysSo) {
   EXPECT_EQ(idle.fx, 0.0);
   EXPECT_EQ(idle.fy, 0.0);
   EXPECT_FALSE(idle.saturated);
+}
+
+// ------------------------------------------------------------- relaxation
+//
+// CORE-07, the third piece of L2 and the first one with memory. The lag has an
+// exact solution, so unlike MF-lite this section can check the integrated
+// answer against a closed form rather than against properties of a curve.
+//
+// The single fact every test here is built around: the lag is in DISTANCE
+// rolled, not in time. A fixed time constant is the plausible wrong
+// implementation, it fits at one speed, and the two are indistinguishable in
+// any test conducted at one speed. Three of the cases below therefore run at
+// two speeds on purpose.
+
+constexpr double kSigma = 0.08;  // relaxation length                     [m]
+
+// Forward Euler on relaxation_rate. Deliberately the crudest integrator: the
+// closed form it is compared against is exact, so any error is the
+// integrator's, and using RK4 here would hide a rate that was wrong by a
+// factor the truncation error could absorb.
+double euler_lag(double alpha, double alpha_lag, double vx, double sigma,
+                 double dt, int steps) {
+  for (int i = 0; i < steps; ++i) {
+    alpha_lag += dt * slipx::relaxation_rate(alpha, alpha_lag, vx, sigma);
+  }
+  return alpha_lag;
+}
+
+// The closed form, derived on paper from sigma d(alpha')/ds + alpha' = alpha
+// and written here without reference to relaxation.hpp so that agreement is
+// evidence rather than a restatement.
+double lag_reference(double alpha, double alpha_lag0, double vx, double sigma,
+                     double t) {
+  const double tau = sigma / std::fabs(vx);
+  return alpha + (alpha_lag0 - alpha) * std::exp(-t / tau);
+}
+
+// The integrated rate reproduces the exponential it was derived from. This is
+// the case that fails if the rate is missing its speed, its sigma or its sign.
+TEST(Relaxation, TheIntegratedRateMatchesTheClosedFormExponential) {
+  const double alpha = 0.05;   // the step the geometry asks for      [rad]
+  const double vx = 6.0;       //                                     [m/s]
+  const double dt = 1e-6;      // far inside the stability bound        [s]
+
+  for (const double t : {0.002, 0.010, 0.040}) {
+    const int steps = static_cast<int>(t / dt + 0.5);
+    const double integrated = euler_lag(alpha, 0.0, vx, kSigma, dt, steps);
+    const double exact = lag_reference(alpha, 0.0, vx, kSigma, t);
+    // Forward Euler is first order, so at dt = 1 us over 40 ms the error is
+    // of order dt/tau per step accumulated, which is well under 1e-4
+    // relative.
+    EXPECT_NEAR(integrated / exact, 1.0, 1e-4) << "at t " << t;
+  }
+
+  // And relaxation_exact is that same closed form, to the last bit the
+  // library's exp can produce.
+  EXPECT_NEAR(slipx::relaxation_exact(alpha, 0.0, vx, kSigma, 0.010),
+              lag_reference(alpha, 0.0, vx, kSigma, 0.010), 1e-15);
+}
+
+// The lag is a distance, so the same distance rolled gives the same fraction
+// of the step regardless of how fast it was rolled. Doubling the speed halves
+// the time to any given fraction, exactly.
+//
+// This is the test a fixed time constant fails, and it is the reason
+// relaxation_rate multiplies by speed rather than treating sigma as seconds.
+TEST(Relaxation, TheLagIsInDistanceRolledAndNotInTime) {
+  const double alpha = 0.04;
+  const double distance = 0.05;  // one distance, two speeds             [m]
+
+  double fraction_at_speed[2] = {0.0, 0.0};
+  double integrated_at_speed[2] = {0.0, 0.0};
+  int i = 0;
+  for (const double vx : {3.0, 12.0}) {
+    const double t = distance / vx;  // the time to roll it at this speed
+    const double lagged = slipx::relaxation_exact(alpha, 0.0, vx, kSigma, t);
+    fraction_at_speed[i] = lagged / alpha;
+
+    // The same claim about relaxation_rate, which is what the tiers actually
+    // integrate. Checked separately because relaxation_exact could carry the
+    // speed correctly while the rate did not, and a rate that treated sigma as
+    // a time constant would agree with itself at every speed.
+    const double dt = t / 20000.0;
+    integrated_at_speed[i] =
+        euler_lag(alpha, 0.0, vx, kSigma, dt, 20000) / alpha;
+    ++i;
+  }
+
+  // Same distance, same fraction, to the accuracy of exp itself.
+  EXPECT_NEAR(fraction_at_speed[0], fraction_at_speed[1], 1e-15);
+  EXPECT_NEAR(integrated_at_speed[0], integrated_at_speed[1], 1e-9);
+  EXPECT_NEAR(integrated_at_speed[0], fraction_at_speed[0], 1e-4);
+
+  // And that fraction is the one the exponential predicts for the distance,
+  // computed here without a speed appearing at all.
+  EXPECT_NEAR(fraction_at_speed[0], 1.0 - std::exp(-distance / kSigma), 1e-15);
+}
+
+// One time constant is one relaxation length rolled, and it delivers the
+// textbook 63.2% of a step.
+TEST(Relaxation, OneTimeConstantIsOneRelaxationLengthAndReaches63Percent) {
+  for (const double vx : {2.0, 9.0, 18.0}) {
+    const double tau = slipx::relaxation_time_constant(vx, kSigma);
+    EXPECT_NEAR(tau, kSigma / vx, 1e-15) << "at vx " << vx;
+
+    // The distance rolled in one time constant is exactly sigma.
+    EXPECT_NEAR(vx * tau, kSigma, 1e-15) << "at vx " << vx;
+
+    const double lagged = slipx::relaxation_exact(1.0, 0.0, vx, kSigma, tau);
+    EXPECT_NEAR(lagged, 1.0 - std::exp(-1.0), 1e-15) << "at vx " << vx;
+    EXPECT_NEAR(lagged, 0.6321205588285577, 1e-12) << "at vx " << vx;
+  }
+
+  // Halving the speed doubles the time constant. Stated separately because it
+  // is the relationship an identification run measures by doing the same step
+  // steer twice.
+  EXPECT_NEAR(slipx::relaxation_time_constant(3.0, kSigma),
+              2.0 * slipx::relaxation_time_constant(6.0, kSigma), 1e-15);
+}
+
+// A tyre relaxes over distance rolled, and a car reversing is rolling. The
+// magnitude of vx is what appears in the rate, so a reversing car lags exactly
+// as a forward one does.
+//
+// Without the magnitude the sign flips and the lag becomes a runaway: the
+// error term grows exponentially instead of decaying, which is the failure
+// this case exists to catch.
+TEST(Relaxation, ReversingRelaxesRatherThanDiverging) {
+  const double alpha = 0.03;
+  const double vx = 5.0;
+
+  EXPECT_NEAR(slipx::relaxation_rate(alpha, 0.0, -vx, kSigma),
+              slipx::relaxation_rate(alpha, 0.0, vx, kSigma), 1e-15);
+
+  // 0.02 s at 5 m/s is 0.1 m rolled, which is 1.25 relaxation lengths, so the
+  // closed form puts the lag at 1 - exp(-1.25) of the step. Compared against
+  // that rather than against a round fraction, because the point of the case
+  // is that reversing follows the same exponential and not merely something
+  // bounded.
+  const double reversing = euler_lag(alpha, 0.0, -vx, kSigma, 1e-6, 20000);
+  const double forward = euler_lag(alpha, 0.0, vx, kSigma, 1e-6, 20000);
+  EXPECT_NEAR(reversing, forward, 1e-15);
+  EXPECT_NEAR(reversing / alpha, 1.0 - std::exp(-1.25), 1e-4);
+
+  // And given long enough it settles on the target rather than running away
+  // from it, which is what the sign of the rate decides.
+  const double settled = euler_lag(alpha, 0.0, -vx, kSigma, 1e-6, 120000);
+  EXPECT_LT(settled, alpha);
+  EXPECT_GT(settled, 0.99 * alpha);
+}
+
+// A stationary tyre cannot build carcass deflection by rolling, so its lagged
+// slip angle holds whatever it had. Exactly zero rate, not a small one.
+TEST(Relaxation, AStationaryTyreHoldsItsSlipAngle) {
+  EXPECT_EQ(slipx::relaxation_rate(0.30, 0.05, 0.0, kSigma), 0.0);
+
+  const double held = euler_lag(0.30, 0.05, 0.0, kSigma, 1e-3, 5000);
+  EXPECT_EQ(held, 0.05);
+
+  // The time constant is the other half of the same statement.
+  EXPECT_TRUE(std::isinf(slipx::relaxation_time_constant(0.0, kSigma)));
+  EXPECT_TRUE(std::isinf(slipx::relaxation_max_step(0.0, kSigma)));
+}
+
+// The documented stability bound, checked by integrating either side of it.
+// Below 2 tau forward Euler converges; above it the error alternates in sign
+// and grows, which is what an oscillating slip angle looks like before it
+// becomes a NaN.
+TEST(Relaxation, TheStabilityBoundIsTwoTimeConstants) {
+  const double vx = 10.0;
+  const double bound = slipx::relaxation_max_step(vx, kSigma);
+  EXPECT_NEAR(bound, 2.0 * kSigma / vx, 1e-15);
+
+  const double alpha = 0.02;
+
+  const double stable = euler_lag(alpha, 0.0, vx, kSigma, 0.9 * bound, 60);
+  EXPECT_NEAR(stable, alpha, 1e-6);
+
+  const double unstable = euler_lag(alpha, 0.0, vx, kSigma, 1.1 * bound, 60);
+  EXPECT_GT(std::fabs(unstable - alpha), 1e3 * alpha);
+}
+
+// The margin claimed in relaxation.hpp for the provisional parameter set, as
+// an assertion rather than a comment. If a future default makes the reference
+// car unstable at the default step, this fails and says so.
+TEST(Relaxation, TheReferenceCarHasStepMarginAtItsTopSpeed) {
+  const VehicleParams p = reference_params();
+  const double bound = slipx::relaxation_max_step(p.v_max, p.relax_length);
+
+  // 2 * 0.08 / 20 is 0.008 s, which is exactly eight default steps. Eight and
+  // not more: the margin is comfortable rather than generous, and if a future
+  // default erodes it this is where that shows up.
+  EXPECT_GE(bound, 8.0 * kDt);
+  EXPECT_NEAR(bound, 8.0 * kDt, 1e-15);
+  EXPECT_NEAR(bound, 2.0 * p.relax_length / p.v_max, 1e-15);
 }
 
 }  // namespace

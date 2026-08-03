@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "slipx/load_transfer.hpp"
+#include "slipx/relaxation.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "test_support.hpp"
@@ -728,6 +729,133 @@ TEST(InvariantsCombinedSlip, MirroringADemandMirrorsTheResult) {
       ASSERT_EQ(bx.saturated, a.saturated);
       ASSERT_EQ(by.saturated, a.saturated);
     }
+  }
+}
+
+// ------------------------------------------------- relaxation invariants
+//
+// Sampled over speed, relaxation length and both slip angles, because the
+// properties below have to hold everywhere rather than at the operating point
+// the analytical cases pick.
+
+constexpr double kRelaxSigma = 0.08;  // relaxation length                [m]
+
+// The lag approaches its target and never passes it. Overshoot would mean the
+// tyre briefly producing more slip than the geometry asked for, which no
+// first-order lag does and which is what an integrator run past its stability
+// bound looks like.
+TEST(InvariantsRelaxation, TheLagApproachesTheTargetAndNeverOvershoots) {
+  for (const double sigma : {0.02, 0.08, 0.30}) {
+    for (const double vx : {0.5, 4.0, 20.0}) {
+      for (const double alpha : {-0.20, -0.01, 0.03, 0.15}) {
+        double lagged = 0.0;
+        const double dt = 1e-4;
+        double previous_gap = std::fabs(alpha - lagged);
+
+        for (int i = 0; i < 4000; ++i) {
+          lagged += dt * slipx::relaxation_rate(alpha, lagged, vx, sigma);
+
+          // Never past the target, in either direction.
+          if (alpha >= 0.0) {
+            EXPECT_GE(lagged, -1e-15);
+            EXPECT_LE(lagged, alpha + 1e-15);
+          } else {
+            EXPECT_LE(lagged, 1e-15);
+            EXPECT_GE(lagged, alpha - 1e-15);
+          }
+
+          // And the gap closes monotonically.
+          const double gap = std::fabs(alpha - lagged);
+          EXPECT_LE(gap, previous_gap + 1e-15);
+          previous_gap = gap;
+        }
+      }
+    }
+  }
+}
+
+// The rate is exactly zero at steady state, for every speed and every angle.
+// Not nearly zero: a settled tyre that keeps nudging its own slip angle would
+// put a drift into a state the trajectory hash covers.
+TEST(InvariantsRelaxation, SteadyStateIsExactlyStationary) {
+  for (const double sigma : {0.02, 0.08, 0.30}) {
+    for (const double vx : {0.0, 1.0, 7.5, 25.0}) {
+      for (const double alpha : {-0.3, 0.0, 0.11}) {
+        EXPECT_EQ(slipx::relaxation_rate(alpha, alpha, vx, sigma), 0.0);
+        EXPECT_EQ(slipx::relaxation_exact(alpha, alpha, vx, sigma, 0.01),
+                  alpha);
+      }
+    }
+  }
+}
+
+// A left turn mirrors a right turn, bit for bit, through the transient as well
+// as at steady state. The same claim the load transfer and combined slip
+// suites make, extended to the one part of L2 that has memory.
+TEST(InvariantsRelaxation, MirroringTheSlipAngleMirrorsTheLag) {
+  for (const double vx : {1.0, 6.0, 17.0}) {
+    for (const double alpha : {0.02, 0.09, 0.25}) {
+      for (const double lagged : {0.0, 0.01, 0.30}) {
+        EXPECT_EQ(slipx::relaxation_rate(-alpha, -lagged, vx, kRelaxSigma),
+                  -slipx::relaxation_rate(alpha, lagged, vx, kRelaxSigma));
+        EXPECT_EQ(slipx::relaxation_exact(-alpha, -lagged, vx, kRelaxSigma, 0.01),
+                  -slipx::relaxation_exact(alpha, lagged, vx, kRelaxSigma, 0.01));
+      }
+    }
+  }
+}
+
+// A shorter relaxation length is a quicker tyre, at every speed and every
+// elapsed time. Monotonicity in the parameter, which is the property that
+// makes sigma identifiable from a step steer rise time at all: if two sigmas
+// gave the same rise time the fit would have no unique answer.
+TEST(InvariantsRelaxation, AShorterRelaxationLengthRespondsSooner) {
+  const double alpha = 0.05;
+  for (const double vx : {2.0, 8.0, 19.0}) {
+    for (const double t : {0.001, 0.005, 0.020}) {
+      double previous = 2.0;  // above any achievable lagged angle
+      for (const double sigma : {0.30, 0.15, 0.08, 0.04, 0.01}) {
+        const double lagged =
+            slipx::relaxation_exact(alpha, 0.0, vx, sigma, t);
+        EXPECT_GT(lagged, previous == 2.0 ? -1.0 : previous)
+            << "sigma " << sigma << " vx " << vx << " t " << t;
+        previous = lagged;
+      }
+    }
+  }
+}
+
+// The lagged angle fed through MF-lite is always a force the tyre could
+// actually produce at its CURRENT load. This is the property that chose a
+// lagged slip angle over a lagged force (ADR-0026), so it is asserted rather
+// than argued: the load is collapsed to zero mid-transient, and the force
+// follows it down in the same step instead of trailing behind.
+TEST(InvariantsRelaxation, ForceStaysInsideTheBudgetWhenTheWheelUnloads) {
+  const MfLite tyre =
+      slipx::make_mf_lite(TyreCoefficients{}, kSweepCAlpha, kSweepFzNom);
+  const double vx = 10.0;
+  const double sigma = 0.08;
+  const double alpha = 0.06;
+
+  // Build the transient up under load.
+  double lagged = 0.0;
+  for (int i = 0; i < 200; ++i) {
+    lagged += 1e-4 * slipx::relaxation_rate(alpha, lagged, vx, sigma);
+  }
+  EXPECT_GT(lagged, 0.0);
+  EXPECT_GT(std::fabs(slipx::mf_lite_fy(tyre, lagged, kSweepFzNom)), 1.0);
+
+  // Now lift the wheel. The slip angle keeps its history, which is correct:
+  // the carcass is still deflected. The force does not, because it is
+  // evaluated from the load that exists now.
+  EXPECT_EQ(slipx::mf_lite_fy(tyre, lagged, 0.0), 0.0);
+
+  // And at every load on the way down, the lagged-angle force is inside the
+  // budget for that load. A lagged FORCE would exceed it here.
+  for (const double fz : {kSweepFzNom, 4.0, 1.0, 0.25, 0.0}) {
+    const double fy = std::fabs(slipx::mf_lite_fy(tyre, lagged, fz));
+    EXPECT_LE(fy, slipx::peak_lateral_force(tyre, fz) + 1e-12)
+        << "at load " << fz;
   }
 }
 

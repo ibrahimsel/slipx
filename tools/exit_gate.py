@@ -16,7 +16,7 @@ passed in on the command line. Run it from a directory that is not a SlipX
 checkout, or it proves less than it appears to, because Python puts the working
 directory on sys.path and the checkout would satisfy the imports on its own.
 
-    python3 tools/exit_gate.py --expect d44a9a68616ec899
+    python3 tools/exit_gate.py --expect f4da160a691289eb
 
 The hash is an argument rather than something read from
 conformance/reference_hashes.tsv, because the point is to check an

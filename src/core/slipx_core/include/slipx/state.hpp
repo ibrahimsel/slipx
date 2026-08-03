@@ -57,6 +57,18 @@ struct VehicleState {
                              // diagnostic. L2 onward; below that
                              // there is no load transfer to report.    [N]
 
+  // Lagged slip angle per wheel: the slip the tyre carcass has actually built
+  // up, which trails the slip the geometry asks for by the relaxation length
+  // (CORE-07, ADR-0026). L2 onward; L0 and L1 have no tyre transient and leave
+  // these at zero.
+  //
+  // Zero rather than NaN, unlike the diagnostics. ADR-0006's rule is about
+  // reported quantities, where a plausible zero would be believed. This is
+  // hashed state, and hash.hpp treats a NaN in a trajectory as evidence the run
+  // is already broken, so a tier that parks NaN here would poison every hash it
+  // produced.
+  std::array<double, kWheelCount> alpha_lag{};  //                    [rad]
+
   // Convenience accessors. Named rather than commented so that a reader of
   // calling code does not have to remember that rates.z is the yaw rate.
   double yaw_rate() const { return rates.z; }

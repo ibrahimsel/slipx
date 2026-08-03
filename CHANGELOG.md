@@ -24,7 +24,49 @@ no tier consumes them yet.
   lateral load transfer from mass, CoG height, wheelbase and track (CORE-05),
   plus the static rollover threshold `g t / (2 h)`. Header-only and pure.
   Reasoning in [ADR-0022](docs/adr/0022-load-transfer-is-quasi-static.md).
-- No reference hash moves: nothing L0 or L1 integrates has changed.
+- New public header `slipx/tyre.hpp`: MF-lite, a reduced Magic Formula with
+  load sensitivity and a combined-slip friction ellipse (CORE-06). The
+  stiffness factor `B` is derived from the cornering stiffness rather than read
+  from a parameter set, so MF-lite reproduces L1's linear tyre exactly at small
+  slip and contributors are never asked for a number they cannot measure.
+  Reasoning in
+  [ADR-0023](docs/adr/0023-mf-lite-derives-b-from-cornering-stiffness.md).
+  The pure-slip longitudinal law is absent: it needs a slip stiffness that
+  `tyre.schema.json` 0.1.0 does not carry. `friction_ellipse` is independent of
+  that and is here. See
+  [ADR-0025](docs/adr/0025-c-kappa-enters-the-core-ahead-of-the-schema.md).
+- New public header `slipx/relaxation.hpp`: tyre relaxation length, a
+  first-order lag in distance rolled rather than in time, so the time constant
+  is `sigma / speed` (CORE-07). It lags the slip angle rather than the lateral
+  force, because a lagged force is not bounded by the friction budget it was
+  produced under and would report grip on a lifted wheel. Reasoning in
+  [ADR-0026](docs/adr/0026-relaxation-lags-the-slip-angle-not-the-force.md).
+- `VehicleParams` gains `relax_length` [m]. `VehicleState` gains a per-wheel
+  `alpha_lag` [rad].
+
+### Every reference hash moves
+
+**All twelve rows of `conformance/reference_hashes.tsv` are rerecorded.**
+`alpha_lag` is part of `VehicleState`, the trajectory hash covers the state
+layout in a fixed field order, and four new fields per step change the hash for
+every tier including L0 and L1, neither of which has a tyre transient at all.
+
+A result compared against the numbers published in `0.1.0a1` is **not
+comparable** with one produced from this tree. The old and new values, for
+x86-64 `RelWithDebInfo`, identical across GCC 11, GCC 13 and Clang 18 as
+before and measured separately under each:
+
+| Case | `0.1.0a1` | Now |
+|---|---|---|
+| L0 / rk4 | `d74f90169a5951c2` | `cf6aba9e280a24b9` |
+| L0 / semi_implicit_euler | `44b1d28010f293c4` | `4cb3269ec5ba7ac3` |
+| L1 / rk4 | `d44a9a68616ec899` | `f4da160a691289eb` |
+| L1 / semi_implicit_euler | `9a2532ced2e1e06d` | `2e2fb5a549ad190c` |
+
+This is a change to the state layout the hash covers, which
+[ADR-0008](docs/adr/0008-reference-hashes-are-keyed-by-build.md) lists as a
+legitimate reason for a hash to move. It was taken once, deliberately, rather
+than accumulated across the rest of the tier.
 
 ## 0.1.0a1
 

@@ -44,6 +44,10 @@ const char* validate(const VehicleParams& p) {
   if (!(p.c_alpha_r > 0.0)) return "c_alpha_r must be positive [N/rad]";
   if (!(p.mu_clip > 0.0)) return "mu_clip must be positive [-]";
 
+  // Zero relaxation length is a division by zero in relaxation_rate, not an
+  // instantaneous tyre. A caller who wants no transient wants a tier below L2.
+  if (!(p.relax_length > 0.0)) return "relax_length must be positive [m]";
+
   if (!(p.accel_max > 0.0)) return "accel_max must be positive [m/s^2]";
   if (!(p.decel_max > 0.0))
     return "decel_max must be positive; it is a magnitude [m/s^2]";

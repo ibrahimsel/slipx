@@ -92,6 +92,20 @@ TEST(Validate, RejectsZeroSlipAngleFloor) {
   EXPECT_NE(slipx::validate(p), nullptr);
 }
 
+// Zero relaxation length is a division by zero inside relaxation_rate rather
+// than a tyre that responds instantly, so it is rejected at the boundary
+// instead of being guarded for in the numerical path (CORE-07).
+TEST(Validate, RejectsANonPositiveRelaxationLength) {
+  auto p = reference_params();
+  p.relax_length = 0.0;
+  const char* why = slipx::validate(p);
+  ASSERT_NE(why, nullptr);
+  EXPECT_NE(std::strstr(why, "relax_length"), nullptr) << why;
+
+  p.relax_length = -0.08;
+  EXPECT_NE(slipx::validate(p), nullptr);
+}
+
 TEST(Validate, SaysNothingAboutCompetitionLegality) {
   // A car twice the legal RoboRacer length. The core builds it without
   // complaint: dimensional legality is SCH-03's job, and somebody embedding

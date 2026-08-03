@@ -34,6 +34,7 @@ Use [`template.md`](template.md) for a new record.
 | [0005](0005-tiers-throw-rather-than-fall-back.md) | An unimplemented tier throws rather than falling back | Accepted |
 | [0006](0006-diagnostics-report-nan-not-zero.md) | Diagnostics report NaN, not zero, for what a tier cannot represent | Accepted |
 | [0022](0022-load-transfer-is-quasi-static.md) | L2 load transfer is quasi-static and introduces no suspension parameter | Accepted |
+| [0026](0026-relaxation-lags-the-slip-angle-not-the-force.md) | Tyre relaxation lags the slip angle, not the lateral force | Accepted |
 
 ## Determinism
 

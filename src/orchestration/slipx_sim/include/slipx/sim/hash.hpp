@@ -91,6 +91,7 @@ class TrajectoryHash {
     update(s.soc);
     update(s.pack_v);
     for (unsigned i = 0; i < kWheelCount; ++i) update(s.Fz[i]);
+    for (unsigned i = 0; i < kWheelCount; ++i) update(s.alpha_lag[i]);
   }
 
   std::uint64_t value() const { return state_; }

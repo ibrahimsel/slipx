@@ -29,17 +29,26 @@
 # file stops being able to express a compiler that disagrees, and NFR-03 exists
 # precisely because one eventually will.
 #
+# History. Every row below was rerecorded on 2026-08-03 when CORE-07 added the
+# per-wheel lagged slip angle to VehicleState. The hash covers the state layout,
+# so four extra fields per step moved every row including L0's and L1's, neither
+# of which has a tyre transient at all. That is a change to the state layout the
+# hash covers, which ADR-0008 lists as a legitimate reason for a hash to move.
+# Results compared against the numbers published in 0.1.0a1 are not comparable
+# with these. The three compiler rows were measured separately rather than
+# copied from one another.
+#
 # Columns:
 #   system_processor  compiler_id  compiler_major  build_type  tier  integrator  hash
-x86_64	GNU	11	RelWithDebInfo	L0	rk4	d74f90169a5951c2
-x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
-x86_64	GNU	11	RelWithDebInfo	L1	rk4	d44a9a68616ec899
-x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d
-x86_64	Clang	18	RelWithDebInfo	L0	rk4	d74f90169a5951c2
-x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
-x86_64	Clang	18	RelWithDebInfo	L1	rk4	d44a9a68616ec899
-x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d
-x86_64	GNU	13	RelWithDebInfo	L0	rk4	d74f90169a5951c2
-x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	44b1d28010f293c4
-x86_64	GNU	13	RelWithDebInfo	L1	rk4	d44a9a68616ec899
-x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	9a2532ced2e1e06d
+x86_64	GNU	11	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	GNU	11	RelWithDebInfo	L1	rk4	f4da160a691289eb
+x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
+x86_64	Clang	18	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	Clang	18	RelWithDebInfo	L1	rk4	f4da160a691289eb
+x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
+x86_64	GNU	13	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	GNU	13	RelWithDebInfo	L1	rk4	f4da160a691289eb
+x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c

@@ -148,6 +148,8 @@ PYBIND11_MODULE(_slipx, m) {
                      "rear AXLE cornering stiffness, positive [N/rad]")
       .def_readwrite("mu_clip", &VehicleParams::mu_clip,
                      "peak friction used to clip L1's linear tyre [-]")
+      .def_readwrite("relax_length", &VehicleParams::relax_length,
+                     "tyre relaxation length [m]. No effect below L2.")
       .def_readwrite("accel_max", &VehicleParams::accel_max, "[m/s^2]")
       .def_readwrite("decel_max", &VehicleParams::decel_max,
                      "positive magnitude [m/s^2]")
@@ -198,6 +200,8 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readwrite("pack_v", &VehicleState::pack_v, "[V]")
       .def_readwrite("omega_w", &VehicleState::omega_w, "wheel speeds, L2 on")
       .def_readwrite("Fz", &VehicleState::Fz, "vertical tyre loads, L2 on [N]")
+      .def_readwrite("alpha_lag", &VehicleState::alpha_lag,
+                     "lagged slip angle per wheel, L2 on [rad]")
       .def_property_readonly(
           "yaw_rate", [](const VehicleState& s) { return s.rates.z; },
           "[rad/s]")

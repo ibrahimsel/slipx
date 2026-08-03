@@ -131,10 +131,10 @@ is a build about which nothing was claimed.
 
 ```
 $ python3 tools/check_conformance.py
-  L0/rk4                       d74f90169a5951c2  matches reference
-  L0/semi_implicit_euler       44b1d28010f293c4  matches reference
-  L1/rk4                       d44a9a68616ec899  matches reference
-  L1/semi_implicit_euler       9a2532ced2e1e06d  matches reference
+  L0/rk4                       cf6aba9e280a24b9  matches reference
+  L0/semi_implicit_euler       4cb3269ec5ba7ac3  matches reference
+  L1/rk4                       f4da160a691289eb  matches reference
+  L1/semi_implicit_euler       2e2fb5a549ad190c  matches reference
 ```
 
 So `slipx-conformance` printing a different hash on your machine is the expected
@@ -224,7 +224,7 @@ symmetry asserted bit for bit, monotonicity under property-based sampling.
 for the reference car the two built ones agree on path radius to within 5% below
 0.23 g, with the crossover printed on every test run.
 
-Those three are in place: 148 C++ tests and 87 Python tests, including an
+Those three are in place: 195 C++ tests and 87 Python tests, including an
 allocation counter proving `step` never touches the allocator.
 
 **Empirical** is the one that is missing. Until an outside contributor supplies
