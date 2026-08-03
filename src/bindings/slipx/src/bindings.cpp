@@ -123,6 +123,23 @@ PYBIND11_MODULE(_slipx, m) {
       .value("Measured", Provenance::kMeasured, "Directly measured.");
 
   // ----------------------------------------------------------------- params
+  // MF-lite coefficients (CORE-06). Exposed so a caller can build an L2 car in
+  // Python without a tyre file, the same way VehicleParams itself is.
+  py::class_<slipx::TyreCoefficients>(m, "TyreCoefficients")
+      .def(py::init<>())
+      .def_readwrite("mu_y0", &slipx::TyreCoefficients::mu_y0,
+                     "peak lateral friction at the nominal load [-]")
+      .def_readwrite("mu_x0", &slipx::TyreCoefficients::mu_x0,
+                     "peak longitudinal friction at the nominal load [-]")
+      .def_readwrite("k_mu", &slipx::TyreCoefficients::k_mu,
+                     "load sensitivity exponent, positive [-]")
+      .def_readwrite("relax_length", &slipx::TyreCoefficients::relax_length,
+                     "relaxation length [m]")
+      .def_readwrite("shape_c", &slipx::TyreCoefficients::shape_c,
+                     "Magic Formula shape factor C, above 1 [-]")
+      .def_readwrite("curvature_e", &slipx::TyreCoefficients::curvature_e,
+                     "Magic Formula curvature factor E, at most 1 [-]");
+
   py::class_<VehicleParams>(
       m, "VehicleParams",
       "The plain struct through which every parameter enters the core.\n\n"
@@ -148,8 +165,13 @@ PYBIND11_MODULE(_slipx, m) {
                      "rear AXLE cornering stiffness, positive [N/rad]")
       .def_readwrite("mu_clip", &VehicleParams::mu_clip,
                      "peak friction used to clip L1's linear tyre [-]")
-      .def_readwrite("relax_length", &VehicleParams::relax_length,
-                     "tyre relaxation length [m]. No effect below L2.")
+      .def_readwrite("tyre_front", &VehicleParams::tyre_front,
+                     "front MF-lite coefficients. No effect below L2.")
+      .def_readwrite("tyre_rear", &VehicleParams::tyre_rear,
+                     "rear MF-lite coefficients. No effect below L2.")
+      .def_readwrite("c_kappa", &VehicleParams::c_kappa,
+                     "longitudinal slip stiffness per tyre, positive "
+                     "[N per unit slip]. No effect below L2.")
       .def_readwrite("accel_max", &VehicleParams::accel_max, "[m/s^2]")
       .def_readwrite("decel_max", &VehicleParams::decel_max,
                      "positive magnitude [m/s^2]")

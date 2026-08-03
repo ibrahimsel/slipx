@@ -859,4 +859,206 @@ TEST(InvariantsRelaxation, ForceStaysInsideTheBudgetWhenTheWheelUnloads) {
   }
 }
 
+// --------------------------------------------------------- L2 invariants
+//
+// The properties the assembled tier must have whatever it is driven through,
+// as opposed to the operating points test_analytical.cpp pins down.
+
+// A right turn is a left turn mirrored, bit for bit, through ten states and
+// four contact patches. Not within a tolerance: every operation in the tier is
+// either odd or even in the lateral direction, so any asymmetry here has been
+// introduced rather than tolerated.
+//
+// This is the single strongest test of the whole tier. A sign error anywhere
+// in the wheel offsets, the load transfer split, the yaw moment or the slip
+// angles breaks it, and almost nothing else does.
+TEST(InvariantsL2, MirroringTheSteeringMirrorsTheEntireCar) {
+  const VehicleParams p = reference_params();
+  auto left = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  auto right = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState sl = travelling(6.0);
+  VehicleState sr = travelling(6.0);
+  StepDiagnostics dl;
+  StepDiagnostics dr;
+
+  for (int i = 0; i < 3000; ++i) {
+    const double steer = 0.12 * std::sin(0.004 * i);
+    const double accel = 2.0;
+    left->step(sl, DriveInput{steer, accel}, kDt, &dl);
+    right->step(sr, DriveInput{-steer, accel}, kDt, &dr);
+
+    ASSERT_EQ(sl.vel_body.x, sr.vel_body.x) << "step " << i;
+    ASSERT_EQ(sl.vel_body.y, -sr.vel_body.y) << "step " << i;
+    ASSERT_EQ(sl.yaw_rate(), -sr.yaw_rate()) << "step " << i;
+    ASSERT_EQ(sl.pos.x, sr.pos.x) << "step " << i;
+    ASSERT_EQ(sl.pos.y, -sr.pos.y) << "step " << i;
+    ASSERT_EQ(sl.yaw, -sr.yaw) << "step " << i;
+
+    // Left and right swap across the mirror, front and rear do not.
+    ASSERT_EQ(sl.alpha_lag[kFrontLeft], -sr.alpha_lag[kFrontRight])
+        << "step " << i;
+    ASSERT_EQ(sl.alpha_lag[kRearLeft], -sr.alpha_lag[kRearRight])
+        << "step " << i;
+    ASSERT_EQ(dl.fz[kFrontLeft], dr.fz[kFrontRight]) << "step " << i;
+    ASSERT_EQ(dl.fz[kRearLeft], dr.fz[kRearRight]) << "step " << i;
+    ASSERT_EQ(dl.fy[kFrontLeft], -dr.fy[kFrontRight]) << "step " << i;
+    ASSERT_EQ(dl.fx[kFrontLeft], dr.fx[kFrontRight]) << "step " << i;
+    ASSERT_EQ(dl.ay, -dr.ay) << "step " << i;
+    ASSERT_EQ(dl.ax, dr.ax) << "step " << i;
+  }
+}
+
+// The four wheel loads sum to the vehicle weight at every step of a violent
+// manoeuvre, including through wheel lift. Load is moved between corners,
+// never created or destroyed, and the assembled tier must not lose that
+// property that load_transfer.hpp has on its own.
+TEST(InvariantsL2, WeightIsConservedThroughAnythingTheCarIsDriventhrough) {
+  VehicleParams p = reference_params();
+  p.h_cog = 0.12;
+  p.steer_max = 0.6;
+
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  VehicleState s = travelling(8.0);
+  StepDiagnostics d;
+
+  const double weight = p.mass * slipx::kGravity;
+  for (int i = 0; i < 6000; ++i) {
+    const double steer = 0.55 * std::sin(0.01 * i);
+    const double accel = 8.0 * std::cos(0.003 * i);
+    model->step(s, DriveInput{steer, accel}, kDt, &d);
+
+    const double total = d.fz[0] + d.fz[1] + d.fz[2] + d.fz[3];
+    ASSERT_NEAR(total, weight, 1e-9) << "step " << i;
+    for (unsigned w = 0; w < slipx::kWheelCount; ++w) {
+      ASSERT_GE(d.fz[w], 0.0) << "step " << i << " wheel " << w;
+    }
+  }
+}
+
+// No tyre may exceed its own friction budget at any point of any manoeuvre.
+// The bound the whole tier rests on: the friction ellipse is only meaningful
+// if it actually bounds what comes out of the assembled model.
+TEST(InvariantsL2, NoTyreEverExceedsItsFrictionBudget) {
+  VehicleParams p = reference_params();
+  p.h_cog = 0.10;
+  p.steer_max = 0.5;
+
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  VehicleState s = travelling(9.0);
+  StepDiagnostics d;
+
+  const slipx::WheelLoads statics = slipx::static_loads(p);
+  const MfLite front = slipx::make_mf_lite(p.tyre_front, 0.5 * p.c_alpha_f,
+                                           statics.fz[kFrontLeft]);
+  const MfLite rear = slipx::make_mf_lite(p.tyre_rear, 0.5 * p.c_alpha_r,
+                                          statics.fz[kRearLeft]);
+
+  for (int i = 0; i < 5000; ++i) {
+    model->step(s, DriveInput{0.45 * std::sin(0.012 * i),
+                              10.0 * std::sin(0.005 * i)}, kDt, &d);
+    for (unsigned w = 0; w < slipx::kWheelCount; ++w) {
+      const bool is_front = (w == kFrontLeft || w == kFrontRight);
+      const MfLite& t = is_front ? front : rear;
+      const double fx_max = slipx::peak_longitudinal_force(t, d.fz[w]);
+      const double fy_max = slipx::peak_lateral_force(t, d.fz[w]);
+      if (fx_max <= 0.0 || fy_max <= 0.0) {
+        ASSERT_EQ(d.fx[w], 0.0) << "step " << i << " wheel " << w;
+        ASSERT_EQ(d.fy[w], 0.0) << "step " << i << " wheel " << w;
+        continue;
+      }
+      const double demand = std::hypot(d.fx[w] / fx_max, d.fy[w] / fy_max);
+      ASSERT_LE(demand, 1.0 + 1e-9) << "step " << i << " wheel " << w;
+    }
+  }
+}
+
+// Raising the CoG must make the car lift a wheel sooner, at the assembled tier
+// and not only in load_transfer.hpp. Monotonic in the parameter, which is what
+// makes CoG height something a user can reason about rather than tune.
+// Note the lower bound on the sweep. A car only lifts a wheel if its static
+// rollover threshold, g t / (2 h), is BELOW what its tyres can deliver, so
+// with a 0.24 m track and mu near 1.1 nothing lifts below about 0.11 m of CoG
+// height: it slides first, which is the behaviour a 1/10-scale car should
+// have. Sweeping from 0.05 finds no lift at all and says nothing about
+// monotonicity, which is how this case was first written.
+TEST(InvariantsL2, ARaisedCoGLiftsAWheelAtALowerSpeed) {
+  double previous_speed = 1e9;
+  for (const double h : {0.12, 0.14, 0.17, 0.21}) {
+    VehicleParams p = reference_params();
+    p.h_cog = h;
+    p.steer_max = 0.6;
+
+    // A tall car at half a radian of steer lifts at around 2 m/s, so the
+    // sweep starts below that and steps finely: starting at 3 m/s puts every
+    // height at the first sample and the monotonicity means nothing.
+    double lift_speed = 0.0;
+    for (int step = 0; step < 250 && lift_speed == 0.0; ++step) {
+      const double v = 1.0 + 0.01 * step;
+      auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+      VehicleState s = travelling(v);
+      StepDiagnostics d;
+      for (int i = 0; i < 400; ++i) {
+        model->step(s, DriveInput{0.5, hold_speed(s, v)}, kDt, &d);
+      }
+      for (unsigned w = 0; w < slipx::kWheelCount; ++w) {
+        if (d.fz[w] == 0.0) lift_speed = v;
+      }
+    }
+    ASSERT_GT(lift_speed, 0.0) << "no lift found at h_cog " << h;
+    EXPECT_LT(lift_speed, previous_speed) << "h_cog " << h;
+    previous_speed = lift_speed;
+  }
+
+  // The other side of the same statement: a low car slides rather than
+  // lifting, at any speed it can reach.
+  VehicleParams low = reference_params();
+  low.h_cog = 0.05;
+  low.steer_max = 0.6;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, low);
+  VehicleState s = travelling(low.v_max);
+  StepDiagnostics d;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.5, hold_speed(s, low.v_max)}, kDt, &d);
+    for (unsigned w = 0; w < slipx::kWheelCount; ++w) {
+      ASSERT_GT(d.fz[w], 0.0) << "a 0.05 m CoG should slide, not lift";
+    }
+  }
+}
+
+// CoG height, track width and tyre compound do nothing below L2 and something
+// at L2. That is the teaching artefact the whole tier system exists for, and
+// it is asserted rather than described.
+TEST(InvariantsL2, ParametersInertBelowL2AreLiveAtL2) {
+  auto radius = [](Tier tier, const VehicleParams& p) {
+    auto model = VehicleModel::create(tier, p);
+    VehicleState s = travelling(7.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 4000; ++i) {
+      model->step(s, DriveInput{0.10, hold_speed(s, 7.0)}, kDt, &d);
+    }
+    return s.speed() / std::fabs(s.yaw_rate());
+  };
+
+  VehicleParams low = reference_params();
+  VehicleParams high = reference_params();
+  high.h_cog = 3.0 * low.h_cog;
+
+  // L1 cannot see it at all: same trajectory, bit for bit.
+  EXPECT_EQ(radius(Tier::L1_Bicycle, low), radius(Tier::L1_Bicycle, high));
+
+  // L2 can.
+  EXPECT_NE(radius(Tier::L2_DoubleTrack, low),
+            radius(Tier::L2_DoubleTrack, high));
+
+  // Same for track width, which L1 does not carry either.
+  VehicleParams narrow = reference_params();
+  VehicleParams wide = reference_params();
+  wide.track_front = 2.0 * narrow.track_front;
+  wide.track_rear = 2.0 * narrow.track_rear;
+  EXPECT_EQ(radius(Tier::L1_Bicycle, narrow), radius(Tier::L1_Bicycle, wide));
+  EXPECT_NE(radius(Tier::L2_DoubleTrack, narrow),
+            radius(Tier::L2_DoubleTrack, wide));
+}
+
 }  // namespace

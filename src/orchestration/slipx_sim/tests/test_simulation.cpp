@@ -188,9 +188,9 @@ TEST(Simulation, OutOfRangeAgentAccessThrows) {
 TEST(Simulation, RefusesUnimplementedTiersAndBadParameters) {
   Simulation sim;
 
-  AgentSpec l2;
-  l2.tier = Tier::L2_DoubleTrack;
-  EXPECT_THROW(sim.add_agent(l2), std::invalid_argument);
+  AgentSpec l3;
+  l3.tier = Tier::L3_Extended;
+  EXPECT_THROW(sim.add_agent(l3), std::invalid_argument);
 
   AgentSpec impossible;
   impossible.tier = Tier::L1_Bicycle;

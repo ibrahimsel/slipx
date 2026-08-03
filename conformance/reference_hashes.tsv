@@ -29,7 +29,11 @@
 # file stops being able to express a compiler that disagrees, and NFR-03 exists
 # precisely because one eventually will.
 #
-# History. Every row below was rerecorded on 2026-08-03 when CORE-07 added the
+# History. The L2 rows were added on 2026-08-03 when the double-track tier
+# landed; they are new claims rather than changed ones, so nothing previously
+# published became incomparable by their arrival.
+#
+# Every row below was rerecorded on 2026-08-03 when CORE-07 added the
 # per-wheel lagged slip angle to VehicleState. The hash covers the state layout,
 # so four extra fields per step moved every row including L0's and L1's, neither
 # of which has a tyre transient at all. That is a change to the state layout the
@@ -44,11 +48,17 @@ x86_64	GNU	11	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
 x86_64	GNU	11	RelWithDebInfo	L1	rk4	f4da160a691289eb
 x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
+x86_64	GNU	11	RelWithDebInfo	L2	rk4	5735026d574b9b59
+x86_64	GNU	11	RelWithDebInfo	L2	semi_implicit_euler	81a36eefe4447697
 x86_64	Clang	18	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
 x86_64	Clang	18	RelWithDebInfo	L1	rk4	f4da160a691289eb
 x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
+x86_64	Clang	18	RelWithDebInfo	L2	rk4	5735026d574b9b59
+x86_64	Clang	18	RelWithDebInfo	L2	semi_implicit_euler	81a36eefe4447697
 x86_64	GNU	13	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
 x86_64	GNU	13	RelWithDebInfo	L1	rk4	f4da160a691289eb
 x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
+x86_64	GNU	13	RelWithDebInfo	L2	rk4	5735026d574b9b59
+x86_64	GNU	13	RelWithDebInfo	L2	semi_implicit_euler	81a36eefe4447697

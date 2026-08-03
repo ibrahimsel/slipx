@@ -170,6 +170,18 @@ struct TyreCoefficients {
   // convention: the sign of the force lives in the force law. They are not
   // independent of each other in any way that matters: see the note above on
   // where the peak lands.
+  // Relaxation length: the distance this tyre must roll before its lateral
+  // force reaches the steady-state value for the slip it is being given
+  // (CORE-07, ADR-0026). A property of the tyre rather than of the car wearing
+  // it, which is why it lives here beside the other coefficients and matches
+  // tyre.schema.json's relaxation.sigma. relaxation.hpp carries the
+  // derivation. No effect below L2, which has no tyre transient.
+  //
+  // Identifiable from the rise time of yaw rate in a step steer at two speeds.
+  // Provisional: roughly 1.5 wheel radii, which is where a full-size tyre
+  // sits, measured on nothing.
+  double relax_length = 0.08;                                  //         [m]
+
   double shape_c = 1.68;      // C. Above 1 or the curve has no peak     [-]
   double curvature_e = 0.42;  // E. Above 1 the curve folds back on
                               // itself and stops being a tyre           [-]

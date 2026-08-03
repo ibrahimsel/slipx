@@ -17,8 +17,9 @@ namespace internal {
 
 std::unique_ptr<VehicleModel> make_l0(const VehicleParams& p, Integrator i);
 std::unique_ptr<VehicleModel> make_l1(const VehicleParams& p, Integrator i);
+std::unique_ptr<VehicleModel> make_l2(const VehicleParams& p, Integrator i);
 
-// Shared by both tiers: fills every field of a diagnostics block with NaN, so
+// Shared by every tier: fills every field of a diagnostics block with NaN, so
 // that a tier only has to write the quantities it actually represents and
 // anything it does not is loud rather than plausibly zero.
 void reset_diagnostics(StepDiagnostics& d, Tier tier);

@@ -97,12 +97,12 @@ TEST(Validate, RejectsZeroSlipAngleFloor) {
 // instead of being guarded for in the numerical path (CORE-07).
 TEST(Validate, RejectsANonPositiveRelaxationLength) {
   auto p = reference_params();
-  p.relax_length = 0.0;
+  p.tyre_front.relax_length = 0.0;
   const char* why = slipx::validate(p);
   ASSERT_NE(why, nullptr);
   EXPECT_NE(std::strstr(why, "relax_length"), nullptr) << why;
 
-  p.relax_length = -0.08;
+  p.tyre_front.relax_length = -0.08;
   EXPECT_NE(slipx::validate(p), nullptr);
 }
 
@@ -139,19 +139,31 @@ TEST(Factory, CreateThrowsOnBadParameters) {
 }
 
 // An unimplemented tier is an error, never a silent substitution: a trajectory
-// labelled L2 that is actually L1 is worse than no trajectory at all.
+// labelled L3 that is actually L2 is worse than no trajectory at all
+// (ADR-0005). L2 landed in P1 and is checked below to be a real tier rather
+// than the refusal this case used to assert.
 TEST(Factory, UnimplementedTiersAreRefusedNotSubstituted) {
   const char* reason = nullptr;
-  EXPECT_EQ(VehicleModel::try_create(Tier::L2_DoubleTrack, reference_params(),
+  EXPECT_EQ(VehicleModel::try_create(Tier::L3_Extended, reference_params(),
                                      slipx::Integrator::kRK4, &reason),
             nullptr);
   ASSERT_NE(reason, nullptr);
-  EXPECT_NE(std::strstr(reason, "L2"), nullptr) << reason;
+  EXPECT_NE(std::strstr(reason, "L3"), nullptr) << reason;
 
-  EXPECT_EQ(VehicleModel::try_create(Tier::L3_Extended, reference_params()),
-            nullptr);
-  EXPECT_THROW(VehicleModel::create(Tier::L2_DoubleTrack, reference_params()),
+  EXPECT_THROW(VehicleModel::create(Tier::L3_Extended, reference_params()),
                std::invalid_argument);
+}
+
+// And L2 is genuinely L2, not L1 wearing the label. The tier it reports and
+// the size of its state vector are both checked, because the second is the one
+// that could not be faked by a substitution.
+TEST(Factory, L2IsBuiltAndIsNotL1) {
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
+  ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->tier(), Tier::L2_DoubleTrack);
+
+  auto l1 = VehicleModel::create(Tier::L1_Bicycle, reference_params());
+  EXPECT_GT(model->state_dimension(), l1->state_dimension());
 }
 
 TEST(Factory, ModelRemembersHowItWasBuilt) {

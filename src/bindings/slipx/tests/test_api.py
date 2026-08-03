@@ -58,12 +58,44 @@ def test_impossible_params_are_refused_with_the_field_named() -> None:
 
 
 def test_unimplemented_tiers_raise_rather_than_substituting() -> None:
-    # CORE-02. A trajectory labelled L2 that is actually L1 is worse than no
+    # CORE-02. A trajectory labelled L3 that is actually L2 is worse than no
     # trajectory, so this must never quietly succeed.
     params = slipx.VehicleParams()
-    for tier in (slipx.Tier.L2_DoubleTrack, slipx.Tier.L3_Extended):
-        with pytest.raises(ValueError, match="not implemented"):
-            slipx.VehicleModel.create(tier, params)
+    with pytest.raises(ValueError, match="not implemented"):
+        slipx.VehicleModel.create(slipx.Tier.L3_Extended, params)
+
+
+def test_l2_is_built_and_carries_per_wheel_diagnostics() -> None:
+    # The double-track tier landed in P1. Checked through the binding because
+    # the per-wheel arrays are the part a Python caller actually consumes.
+    model = slipx.VehicleModel.create(slipx.Tier.L2_DoubleTrack,
+                                      slipx.VehicleParams())
+    state = slipx.VehicleState()
+    state.vel_body.x = 6.0
+    diagnostics = slipx.StepDiagnostics()
+    for _ in range(2000):
+        model.step(state, slipx.DriveInput(steer_cmd=0.08, accel_cmd=0.5),
+                   1e-3, diagnostics)
+
+    assert diagnostics.tier == slipx.Tier.L2_DoubleTrack
+    assert len(diagnostics.fz) == 4
+    assert sum(diagnostics.fz) == pytest.approx(3.5 * 9.80665, abs=1e-9)
+    # A left turn loads the right-hand wheels (ISO 8855).
+    assert diagnostics.fz[1] > diagnostics.fz[0]
+    assert diagnostics.fz[3] > diagnostics.fz[2]
+    # Per-wheel slip is a number at L2 and NaN below it.
+    assert not any(math.isnan(a) for a in diagnostics.alpha)
+    assert all(v != 0.0 for v in state.alpha_lag)
+
+
+def test_l2_tyre_coefficients_are_reachable_from_python() -> None:
+    params = slipx.VehicleParams()
+    params.tyre_front.mu_y0 = 1.4
+    params.tyre_rear.relax_length = 0.05
+    params.c_kappa = 150.0
+    assert params.validate() is None
+    assert params.tyre_front.mu_y0 == 1.4
+    assert params.tyre_rear.relax_length == 0.05
 
 
 @pytest.mark.parametrize("tier", [slipx.Tier.L0_Kinematic, slipx.Tier.L1_Bicycle])

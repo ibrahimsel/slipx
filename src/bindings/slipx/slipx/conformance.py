@@ -28,7 +28,8 @@ import sys
 from . import Integrator, Tier, make_conformance_run
 from ._slipx import ConformanceSpec
 
-_TIERS = {"L0": Tier.L0_Kinematic, "L1": Tier.L1_Bicycle}
+_TIERS = {"L0": Tier.L0_Kinematic, "L1": Tier.L1_Bicycle,
+          "L2": Tier.L2_DoubleTrack}
 _INTEGRATORS = {
     "rk4": Integrator.RK4,
     "semi_implicit_euler": Integrator.SemiImplicitEuler,

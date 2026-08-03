@@ -130,3 +130,43 @@ def test_the_two_reference_car_locations_are_the_same_car() -> None:
     assert resolved.params.mass == explicit.params.mass
     assert resolved.params.izz == explicit.params.izz
     assert resolved.params.c_alpha_f == explicit.params.c_alpha_f
+
+
+def test_l2_parameters_are_refused_rather_than_defaulted() -> None:
+    # ADR-0025. tyre.schema.json 0.1.0 has no longitudinal slip stiffness, and
+    # the loader must say so rather than quietly handing over the core's
+    # default. A refusal produces nothing; a default would produce a
+    # trajectory labelled L2 resting on a number nobody measured.
+    car = slipx.load_reference_car()
+
+    with pytest.raises(ValueError, match="c_kappa"):
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+    # The message has to name the schema version that fixes it, or the reader
+    # goes looking for a field that does not exist.
+    try:
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    except ValueError as exc:
+        assert "0.2.0" in str(exc)
+        assert "ADR-0025" in str(exc)
+
+    # And this is not the ADR-0005 failure: no lower tier is handed back.
+    # L0 and L1 keep working through the same call.
+    for tier in (slipx.Tier.L0_Kinematic, slipx.Tier.L1_Bicycle):
+        params = car.params_for_tier(tier)
+        assert params.validate() is None
+        assert params.mass == car.params.mass
+
+
+def test_the_reference_car_supplies_everything_except_c_kappa() -> None:
+    # The other half of the same statement: the refusal above is about ONE
+    # missing field, not about the tyre file being empty. If a future schema
+    # drops something else this test says which.
+    car = slipx.load_reference_car()
+    try:
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    except ValueError as exc:
+        message = str(exc)
+    assert "mf_lite" not in message
+    assert "k_mu" not in message
+    assert "sigma" not in message

@@ -159,7 +159,8 @@ TEST_P(NoAlloc, SaturatedAndDegenerateStepsAllocateNothing) {
 
 INSTANTIATE_TEST_SUITE_P(
     TiersAndIntegrators, NoAlloc,
-    ::testing::Combine(::testing::Values(Tier::L0_Kinematic, Tier::L1_Bicycle),
+    ::testing::Combine(::testing::Values(Tier::L0_Kinematic, Tier::L1_Bicycle,
+                                        Tier::L2_DoubleTrack),
                        ::testing::Values(Integrator::kRK4,
                                          Integrator::kSemiImplicitEuler)));
 

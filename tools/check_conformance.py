@@ -52,7 +52,8 @@ COLUMNS = [
 # still a determinism bug, and the cheap integrator is the one a large RL
 # rollout will actually use.
 CASES = [("L0", "rk4"), ("L0", "semi_implicit_euler"),
-         ("L1", "rk4"), ("L1", "semi_implicit_euler")]
+         ("L1", "rk4"), ("L1", "semi_implicit_euler"),
+         ("L2", "rk4"), ("L2", "semi_implicit_euler")]
 
 
 def read_reference() -> list[dict[str, str]]:

@@ -51,12 +51,8 @@ const char* tier_availability(Tier tier) {
   switch (tier) {
     case Tier::L0_Kinematic:
     case Tier::L1_Bicycle:
-      return nullptr;
     case Tier::L2_DoubleTrack:
-      return "Tier L2_DoubleTrack is not implemented yet. CORE-02 places it "
-             "in P1; until it lands, asking for it returns an error rather "
-             "than silently substituting L1, because a trajectory labelled "
-             "L2 that is actually L1 is worse than no trajectory.";
+      return nullptr;
     case Tier::L3_Extended:
       return "Tier L3_Extended is not implemented yet (CORE-16, P4).";
   }
@@ -85,6 +81,8 @@ std::unique_ptr<VehicleModel> VehicleModel::try_create(
       return internal::make_l0(params, integrator);
     case Tier::L1_Bicycle:
       return internal::make_l1(params, integrator);
+    case Tier::L2_DoubleTrack:
+      return internal::make_l2(params, integrator);
     default:
       return nullptr;  // unreachable: tier_availability rejected it above
   }

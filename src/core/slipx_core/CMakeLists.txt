@@ -8,6 +8,7 @@
 add_library(slipx_core
   src/l0_kinematic.cpp
   src/l1_bicycle.cpp
+  src/l2_double_track.cpp
   src/params.cpp
   src/vehicle_model.cpp
 )

@@ -20,12 +20,16 @@ parameter is one you can identify from a manoeuvre driven in a car park with the
 sensors already bolted to a competition car: wheel encoders, an IMU, LiDAR pose.
 No dyno, no tyre rig, nothing to guess.
 
-**Early days, and the limits are worth reading before you start.** Two of the
-four fidelity tiers are built: a kinematic bicycle and a dynamic bicycle with
-linear tyres. The double-track tier, where two different cars start behaving
-differently, is not implemented, and asking for it raises rather than quietly
-handing back the simpler model. No parameter set here has been fitted to a real
-vehicle, and the tooling says so every time it loads one.
+**Early days, and the limits are worth reading before you start.** Three of the
+four fidelity tiers are built: a kinematic bicycle, a dynamic bicycle with
+linear tyres, and a double-track model with load transfer, MF-lite tyres and a
+tyre transient. The double-track tier is the minimal one: it has no
+differential, no ESC and no steering servo yet, and it cannot be built from a
+tyre file at schema 0.1.0 because that schema has no field for longitudinal
+slip stiffness. The extended tier is not implemented, and asking for it raises
+rather than quietly handing back a simpler model. No parameter set here has
+been fitted to a real vehicle, and the tooling says so every time it loads
+one.
 
 ## Quickstart
 
@@ -76,8 +80,16 @@ interface, so moving between them is one argument rather than a rewrite.
 |---|---|---|---|
 | `L0_Kinematic` | Kinematic bicycle | 4 | built |
 | `L1_Bicycle` | Dynamic bicycle, linear tyres | 6 | built |
-| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres | ~15 | not implemented, raises |
+| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres, relaxation | 10 | built, see below |
 | `L3_Extended` | Adds thermal and suspension | | not implemented, raises |
+
+`L2_DoubleTrack` is deliberately the minimal double-track. It has four contact
+patches, per-corner vertical loads, MF-lite with a real peak and falling
+branch, a combined-slip friction ellipse and a tyre relaxation transient. It
+does **not** have a differential, an ESC, a battery or a steering servo
+(CORE-08 to CORE-11), it uses parallel steer rather than Ackermann, and it has
+no wheel rotational state, so it cannot represent a locked or spinning wheel.
+Each of those is named in the source rather than left to be discovered.
 
 Below `L2_DoubleTrack` nothing represents CoG height, weight distribution,
 differential or tyre compound, so those parameters correctly have no effect.
@@ -135,6 +147,8 @@ $ python3 tools/check_conformance.py
   L0/semi_implicit_euler       4cb3269ec5ba7ac3  matches reference
   L1/rk4                       f4da160a691289eb  matches reference
   L1/semi_implicit_euler       2e2fb5a549ad190c  matches reference
+  L2/rk4                       5735026d574b9b59  matches reference
+  L2/semi_implicit_euler       81a36eefe4447697  matches reference
 ```
 
 So `slipx-conformance` printing a different hash on your machine is the expected
@@ -221,10 +235,11 @@ answers, which is what catches the sign and unit errors this kind of code
 actually has. **Invariant**: energy and momentum conservation, left/right mirror
 symmetry asserted bit for bit, monotonicity under property-based sampling.
 **Cross-tier**: the tiers must agree in the low lateral acceleration limit, and
-for the reference car the two built ones agree on path radius to within 5% below
-0.23 g, with the crossover printed on every test run.
+for the reference car L1 and L2 agree on path radius to within 1% below 0.23 g,
+and to five decimal places when no longitudinal force is present at all, with
+the crossover printed on every test run.
 
-Those three are in place: 195 C++ tests and 87 Python tests, including an
+Those three are in place: 221 C++ tests and 91 Python tests, including an
 allocation counter proving `step` never touches the allocator.
 
 **Empirical** is the one that is missing. Until an outside contributor supplies

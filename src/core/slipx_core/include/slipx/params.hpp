@@ -21,6 +21,7 @@
 
 #include "slipx/conventions.hpp"
 #include "slipx/math.hpp"
+#include "slipx/tyre.hpp"
 
 namespace slipx {
 
@@ -70,17 +71,45 @@ struct VehicleParams {
   // clipping keeps that visible rather than pretending otherwise.
   double mu_clip = 1.1;      // peak friction coefficient              [-]
 
-  // Relaxation length: the distance the tyre must roll before its lateral
-  // force reaches the steady-state value for the slip it is being given
-  // (CORE-07). The lag is in distance, so the time constant is
-  // relax_length / speed and falls as the car speeds up; relaxation.hpp
-  // carries the derivation. No effect below L2, which has no tyre transient.
+  // The MF-lite coefficients, used from L2 (CORE-06). Below L2 the tyre is
+  // linear and clipped, so none of these has any effect.
   //
-  // Identifiable in a car park from the rise time of yaw rate in a step steer
-  // at two speeds, which is why it is a parameter at all (ADR-0009). The value
-  // is provisional: it is roughly 1.5 wheel radii, which is where a full-size
-  // tyre sits, and it has been measured on nothing.
-  double relax_length = 0.08;  //                                       [m]
+  // Per axle, matching c_alpha_f and c_alpha_r above and matching the schema,
+  // where a car names a front and a rear tyre as separate (compound, surface)
+  // references (ADR-0010). They are usually the same tyre and are allowed not
+  // to be.
+  //
+  // The stiffness factor B is NOT here: it is derived at construction from the
+  // cornering stiffness above and the static load, because B on its own is not
+  // measurable (ADR-0023). The nominal load is likewise not here: the static
+  // per-tyre load of this car is the reference point.
+  TyreCoefficients tyre_front{};
+  TyreCoefficients tyre_rear{};
+
+  // Longitudinal slip stiffness per TYRE at that tyre's static load, positive:
+  // the initial slope of longitudinal force against slip ratio. Used from L2
+  // to report the slip ratio consistent with the delivered force, and
+  // therefore to set the wheel speeds (ADR-0027).
+  //
+  // One value for all four tyres rather than a front and a rear, unlike
+  // cornering stiffness. That is not an oversight: the manoeuvre that
+  // identifies it is a straight-line acceleration run, which measures the
+  // whole car's longitudinal response and cannot separate the axles. A
+  // parameter split finer than the measurement that produces it is the error
+  // ADR-0009 exists to prevent.
+  //
+  // Identifiable in a car park from encoder slip ratio against IMU
+  // longitudinal acceleration, so it meets ADR-0009's bar. It is NOT in
+  // tyre.schema.json at schema 0.1.0, which is why the loader refuses to build
+  // L2 from a 0.1.0 tyre file rather than defaulting it; schema 0.2.0 adds the
+  // field. See ADR-0025.
+  //
+  // Provisional, and soft, consistent with the rest of this struct: it is
+  // twice the per-tyre cornering stiffness above, which is the usual ratio,
+  // and the cornering stiffness itself already describes a softer tyre than a
+  // full-size one.
+  double c_kappa = 120.0;    //                            [N per unit slip]
+
 
   // ----------------------------------------------------------- drivetrain
   // At L0 and L1 the drivetrain is a commanded longitudinal acceleration with

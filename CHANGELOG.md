@@ -44,6 +44,38 @@ no tier consumes them yet.
 - `VehicleParams` gains `relax_length` [m]. `VehicleState` gains a per-wheel
   `alpha_lag` [rad].
 
+- **Tier L2, the double-track model, is implemented** (CORE-02, CORE-12).
+  `VehicleModel::create` no longer throws for it. Ten states: the six of L1
+  plus a lagged slip angle per wheel. Four contact patches with per-corner
+  vertical loads, MF-lite with a real peak and falling branch, a combined-slip
+  friction ellipse, and the tyre transient. `StepDiagnostics` per-wheel slip
+  angles, slip ratios, forces, loads and saturation flags are numbers at L2
+  where they are NaN below it.
+
+  It is the MINIMAL double-track and the gaps are deliberate: no differential
+  or drive layout (CORE-11), no ESC (CORE-08), no battery (CORE-09), no
+  steering servo (CORE-10), parallel steer rather than Ackermann, and no wheel
+  rotational state, so a locked or spinning wheel is not representable.
+  `l2_double_track.cpp`'s header lists every one of them and
+  [ADR-0027](docs/adr/0027-l2-closes-its-algebraic-loops-without-iterating.md)
+  gives the reasoning for the last.
+
+- `VehicleParams` gains `tyre_front` and `tyre_rear` (MF-lite coefficients per
+  axle, including the relaxation length, which is a property of the tyre) and
+  `c_kappa`. The `relax_length` field added earlier in this cycle moved into
+  `TyreCoefficients`; nothing released ever carried it at the top level.
+
+- **L2 cannot be built from a tyre file at schema 0.1.0.**
+  `Car.params_for_tier` raises, naming the missing longitudinal slip stiffness
+  and the schema version that adds it, rather than defaulting it. That is a
+  refusal and not the tier substitution ADR-0005 forbids: nothing is returned
+  at all. Building L2 from a `VehicleParams` constructed in C++ or Python works
+  today. See
+  [ADR-0025](docs/adr/0025-c-kappa-enters-the-core-ahead-of-the-schema.md).
+
+- New reference rows for L2 under both integrators. They are additions, so no
+  previously published number became incomparable by their arrival.
+
 ### Every reference hash moves
 
 **All twelve rows of `conformance/reference_hashes.tsv` are rerecorded.**

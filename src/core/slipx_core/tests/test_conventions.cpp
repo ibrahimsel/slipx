@@ -294,4 +294,67 @@ TEST(ConventionsTyre, TheRelaxationTransientNeverFlipsTheForceSign) {
   }
 }
 
+// L2 represents everything L1 leaves NaN, so the same discipline runs the
+// other way: a quantity this tier DOES compute must not come back NaN, or the
+// contract that NaN means "unrepresentable" is worthless.
+TEST(ConventionsL2, EverythingTheTierRepresentsIsANumber) {
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
+  VehicleState s = travelling(6.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 500; ++i) {
+    model->step(s, DriveInput{0.08, 2.0}, kDefaultDt, &d);
+  }
+
+  EXPECT_EQ(d.tier, static_cast<int>(Tier::L2_DoubleTrack));
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_FALSE(std::isnan(d.alpha[i])) << "wheel " << i;
+    EXPECT_FALSE(std::isnan(d.kappa[i])) << "wheel " << i;
+    EXPECT_FALSE(std::isnan(d.fx[i])) << "wheel " << i;
+    EXPECT_FALSE(std::isnan(d.fy[i])) << "wheel " << i;
+    EXPECT_FALSE(std::isnan(d.fz[i])) << "wheel " << i;
+  }
+  EXPECT_FALSE(std::isnan(d.load_transfer_long));
+  EXPECT_FALSE(std::isnan(d.load_transfer_lat));
+  EXPECT_FALSE(std::isnan(d.ax));
+  EXPECT_FALSE(std::isnan(d.ay));
+}
+
+// And the things it still cannot represent stay NaN or zero as documented,
+// rather than acquiring a plausible-looking value because the tier grew.
+// steer_rate, soc and pack_v belong to CORE-08 to CORE-10 and have not landed;
+// this case is what will fail, correctly, when they do.
+TEST(ConventionsL2, TheActuatorAndBatteryStatesAreStillUntouched) {
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
+  VehicleState s = travelling(6.0);
+  const VehicleState before = s;
+  StepDiagnostics d;
+  for (int i = 0; i < 200; ++i) {
+    model->step(s, DriveInput{0.3, 4.0}, kDefaultDt, &d);
+  }
+
+  EXPECT_EQ(s.steer_rate, 0.0) << "no servo model at this tier (CORE-10)";
+  EXPECT_EQ(s.steer, 0.3) << "the road wheel follows the command exactly";
+  EXPECT_EQ(s.soc, before.soc) << "no battery model at this tier (CORE-09)";
+  EXPECT_EQ(s.pack_v, before.pack_v);
+  EXPECT_EQ(s.roll, 0.0) << "no suspension at this tier";
+  EXPECT_EQ(s.pitch, 0.0);
+}
+
+// The lateral load transfer sign, through the assembled tier. Positive ay is a
+// left turn and moves load to the RIGHT, which is the sign that catches
+// people and the one load_transfer.hpp's own tests assert in isolation.
+TEST(ConventionsL2, PositiveLateralAccelerationLoadsTheRightHandWheels) {
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
+  VehicleState s = travelling(6.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 2000; ++i) {
+    model->step(s, DriveInput{0.07, hold_speed(s, 6.0)}, kDefaultDt, &d);
+  }
+
+  ASSERT_GT(d.ay, 0.0);
+  EXPECT_GT(d.load_transfer_lat, 0.0);
+  EXPECT_GT(d.fz[slipx::kFrontRight], d.fz[slipx::kFrontLeft]);
+  EXPECT_GT(d.fz[slipx::kRearRight], d.fz[slipx::kRearLeft]);
+}
+
 }  // namespace

@@ -1162,14 +1162,411 @@ TEST(Relaxation, TheStabilityBoundIsTwoTimeConstants) {
 // car unstable at the default step, this fails and says so.
 TEST(Relaxation, TheReferenceCarHasStepMarginAtItsTopSpeed) {
   const VehicleParams p = reference_params();
-  const double bound = slipx::relaxation_max_step(p.v_max, p.relax_length);
+  const double bound = slipx::relaxation_max_step(p.v_max, p.tyre_front.relax_length);
 
   // 2 * 0.08 / 20 is 0.008 s, which is exactly eight default steps. Eight and
   // not more: the margin is comfortable rather than generous, and if a future
   // default erodes it this is where that shows up.
   EXPECT_GE(bound, 8.0 * kDt);
   EXPECT_NEAR(bound, 8.0 * kDt, 1e-15);
-  EXPECT_NEAR(bound, 2.0 * p.relax_length / p.v_max, 1e-15);
+  EXPECT_NEAR(bound, 2.0 * p.tyre_front.relax_length / p.v_max, 1e-15);
+}
+
+// ------------------------------------------------------ L2, the assembled tier
+//
+// The pieces were each checked on their own above. What is checked here is
+// that the assembly puts them together the right way round: that the loads the
+// tyres see are the loads the load transfer computed, that the forces land in
+// the body frame with the right signs, and that the reported wheel speeds
+// describe the same car as the forces.
+
+// Driving straight, the four loads are the static ones and they sum to the
+// weight. The first thing to check about a double-track model, and the one
+// that catches a track width or a wheelbase used the wrong way round.
+TEST(L2, StraightRunningReproducesTheStaticLoads) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(4.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 500; ++i) {
+    model->step(s, DriveInput{0.0, hold_speed(s, 4.0)}, kDt, &d);
+  }
+
+  const slipx::WheelLoads statics = slipx::static_loads(p);
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    // A small longitudinal transfer survives, because holding a speed against
+    // drag needs a non-zero ax. It is bounded by that ax, not by nothing.
+    EXPECT_NEAR(d.fz[i], statics.fz[i], 0.05) << "wheel " << i;
+  }
+  EXPECT_NEAR(d.fz[kFrontLeft], d.fz[kFrontRight], 1e-12) << "no lateral "
+      << "transfer in a straight line";
+  EXPECT_NEAR(d.fz[0] + d.fz[1] + d.fz[2] + d.fz[3], p.mass * slipx::kGravity,
+              1e-9);
+}
+
+// ISO 8855, end to end through the whole tier rather than through
+// load_transfer.hpp on its own: a LEFT turn is positive steer, gives positive
+// ay, and loads the RIGHT-hand wheels. This is the sign that catches people
+// and the one the whole convention rests on.
+TEST(L2, ALeftTurnLoadsTheRightHandWheels) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(5.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.06, hold_speed(s, 5.0)}, kDt, &d);
+  }
+
+  EXPECT_GT(d.ay, 0.0) << "a left turn is positive ay in ISO 8855";
+  EXPECT_GT(s.yaw_rate(), 0.0);
+  EXPECT_GT(d.fz[kFrontRight], d.fz[kFrontLeft]);
+  EXPECT_GT(d.fz[kRearRight], d.fz[kRearLeft]);
+  EXPECT_GT(d.load_transfer_lat, 0.0);
+
+  // Weight is still conserved with the load moved across.
+  EXPECT_NEAR(d.fz[0] + d.fz[1] + d.fz[2] + d.fz[3], p.mass * slipx::kGravity,
+              1e-9);
+
+  // And the lateral force points left, which is the sign a negative slip angle
+  // produces (conventions.hpp).
+  EXPECT_GT(d.fy_front, 0.0);
+  EXPECT_GT(d.fy_rear, 0.0);
+  EXPECT_LT(d.alpha_front, 0.0);
+}
+
+// The reported wheel speeds and the reported slip ratios describe one car.
+// omega R = v (1 + kappa) by the definition of slip ratio, so this is a
+// consistency check on the quasi-static inversion (ADR-0027) rather than on
+// the physics: it is what stops the two diagnostics drifting apart.
+TEST(L2, WheelSpeedsAgreeWithTheReportedSlipRatios) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  // Held at a modest speed with a gentle steer, so the car stays well inside
+  // the friction limit. A constant acceleration demand here runs the car past
+  // its limit within a second and the ordering assertions below stop meaning
+  // anything, which is how this case was first written.
+  VehicleState s = travelling(5.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 4000; ++i) {
+    model->step(s, DriveInput{0.03, hold_speed(s, 5.0) + 0.4}, kDt, &d);
+  }
+  ASSERT_LT(std::fabs(d.ay), 0.5 * slipx::kGravity) << "operating point is "
+      << "outside the region this case is about";
+
+  // The wheel centre longitudinal velocities, recomputed here from the state
+  // rather than read out of the model.
+  const double r = s.yaw_rate();
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    const bool front = (i == kFrontLeft || i == kFrontRight);
+    const bool left = (i == kFrontLeft || i == kRearLeft);
+    const double track = front ? p.track_front : p.track_rear;
+    const double yw = left ? 0.5 * track : -0.5 * track;
+    const double vxw = s.vx() - r * yw;
+
+    EXPECT_NEAR(s.omega_w[i] * p.wheel_radius, vxw * (1.0 + d.kappa[i]), 1e-9)
+        << "wheel " << i;
+  }
+
+  // Driving rather than coasting, so the slip ratio is positive.
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_GT(d.kappa[i], 0.0) << "wheel " << i;
+  }
+
+  // The outer wheels of a left turn travel further and therefore faster.
+  //
+  // Not as obvious as it looks, and worth the comment. The drive force is
+  // split equally, and the outer wheels carry more load and so have a higher
+  // slip stiffness, so they need LESS slip ratio for the same force. That
+  // works against the geometry. Inside the linear region the geometric term
+  // wins by an order of magnitude; past the limit it need not, which is the
+  // other reason this case pins its operating point.
+  EXPECT_GT(s.omega_w[kFrontRight], s.omega_w[kFrontLeft]);
+  EXPECT_GT(s.omega_w[kRearRight], s.omega_w[kRearLeft]);
+  EXPECT_LT(d.kappa[kFrontRight], d.kappa[kFrontLeft]);
+}
+
+// The drive split is equal, so on a symmetric car it produces no yaw moment.
+// A load-proportional split does, by putting more thrust on the loaded outside
+// wheels, and it is worth about 2% of steady-state radius at 0.36 g. This case
+// exists because that was found by measurement and not by inspection.
+TEST(L2, HardAccelerationInAStraightLineProducesNoYaw) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  // Half a second only. Run it for three seconds and the car reaches v_max,
+  // the speed clamp zeroes the demand, drag takes over and the load transfer
+  // reverses, which is correct behaviour and not what this case is about.
+  VehicleState s = travelling(2.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 500; ++i) {
+    model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+  }
+  ASSERT_FALSE(d.speed_saturated);
+  ASSERT_FALSE(d.accel_saturated);
+
+  EXPECT_EQ(s.yaw_rate(), 0.0);
+  EXPECT_EQ(s.pos.y, 0.0);
+  EXPECT_EQ(d.fx[kFrontLeft], d.fx[kFrontRight]);
+  EXPECT_EQ(d.fx[kRearLeft], d.fx[kRearRight]);
+
+  // Accelerating moves load to the rear, which is the other half of the
+  // straight-line case.
+  EXPECT_GT(d.fz_rear, d.fz_front);
+  EXPECT_GT(d.load_transfer_long, 0.0);
+}
+
+// Braking in a corner costs cornering force overall, and it does NOT cost it
+// evenly. Two mechanisms act at once and they pull in opposite directions at
+// the front:
+//
+//   the friction ellipse takes lateral force away from every tyre that is
+//   also being asked for longitudinal force, and
+//
+//   longitudinal load transfer moves vertical load onto the front axle, which
+//   RAISES the front tyres' budget and lowers the rear's.
+//
+// So the front can end up producing more lateral force under braking than
+// coasting, which is why trail braking helps a car turn in, while the rear
+// gives up most of its grip. The net is less total lateral acceleration. The
+// first version of this case asserted that every wheel loses lateral force and
+// was simply wrong about the car.
+TEST(L2, BrakingInACornerMovesGripForwardAndCostsLateralOverall) {
+  const VehicleParams p = reference_params();
+
+  auto settle = [&](double accel_cmd) {
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    VehicleState s = travelling(7.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 40; ++i) {
+      model->step(s, DriveInput{0.16, accel_cmd}, kDt, &d);
+    }
+    return d;
+  };
+
+  // Forty milliseconds only, so the two runs are at nearly the same speed and
+  // the comparison is about the friction budget rather than about one car
+  // having slowed down more.
+  const StepDiagnostics coasting = settle(0.0);
+  const StepDiagnostics braking = settle(-p.decel_max);
+
+  // The headline: less lateral acceleration.
+  EXPECT_LT(std::fabs(braking.ay), std::fabs(coasting.ay));
+
+  // Every tyre is braking, and at least one is at its budget, or the ellipse
+  // never engaged and this case is measuring something else.
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_LT(braking.fx[i], 0.0) << "wheel " << i;
+  }
+  EXPECT_TRUE(braking.tyre_saturated[0] || braking.tyre_saturated[1] ||
+              braking.tyre_saturated[2] || braking.tyre_saturated[3]);
+
+  // Load moved forward.
+  EXPECT_GT(braking.fz_front, coasting.fz_front);
+  EXPECT_LT(braking.fz_rear, coasting.fz_rear);
+
+  // And the grip followed it: the rear axle gives up most of its lateral
+  // force, the front does not.
+  EXPECT_LT(std::fabs(braking.fy_rear), 0.5 * std::fabs(coasting.fy_rear));
+  EXPECT_GT(std::fabs(braking.fy_front), std::fabs(coasting.fy_front));
+}
+
+// No slip angle, no load and no arithmetic anywhere in the tier may produce a
+// NaN over a run that includes a limit-exceeding input. The friction ellipse
+// and the peak force laws both have zero-load guards; this is the case that
+// exercises them through the assembled model rather than in isolation.
+TEST(L2, AWheelLiftingRoundATightCornerProducesNoNaN) {
+  VehicleParams p = reference_params();
+  p.h_cog = 0.14;   // deliberately tall, so the inside wheels lift early
+  p.steer_max = 0.6;
+
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  VehicleState s = travelling(9.0);
+  StepDiagnostics d;
+
+  bool lifted = false;
+  for (int i = 0; i < 4000; ++i) {
+    model->step(s, DriveInput{0.6, hold_speed(s, 9.0)}, kDt, &d);
+    for (unsigned w = 0; w < slipx::kWheelCount; ++w) {
+      ASSERT_FALSE(std::isnan(d.fz[w])) << "step " << i << " wheel " << w;
+      ASSERT_FALSE(std::isnan(d.fy[w])) << "step " << i << " wheel " << w;
+      ASSERT_FALSE(std::isnan(d.fx[w])) << "step " << i << " wheel " << w;
+      ASSERT_FALSE(std::isnan(s.alpha_lag[w])) << "step " << i;
+      if (d.fz[w] == 0.0) lifted = true;
+    }
+    ASSERT_FALSE(std::isnan(s.vx()));
+    ASSERT_FALSE(std::isnan(s.yaw_rate()));
+  }
+  EXPECT_TRUE(lifted) << "the case did not reach the condition it exists to "
+                         "test; raise h_cog or the speed";
+}
+
+// The reported per-wheel forces must explain the car's motion, including the
+// yaw moment the LONGITUDINAL forces make. That term, -y_w Fx, is what lets a
+// double-track model yaw under asymmetric braking, and a bicycle model has no
+// way to produce it at all.
+//
+// It is invisible in every symmetric case, because the drive split is equal
+// and the two sides cancel exactly. It only appears once the left and right
+// tyres deliver different longitudinal force, which happens when one side is
+// nearer its friction budget than the other. So this case brakes hard in a
+// hard corner, checks that the asymmetry is really there, and then closes the
+// moment balance against the yaw acceleration the model actually produced.
+TEST(L2, ThePerWheelForcesExplainTheYawAccelerationIncludingTheirFxTerm) {
+  VehicleParams p = reference_params();
+  p.steer_max = 0.5;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p,
+                                    slipx::Integrator::kSemiImplicitEuler);
+
+  VehicleState s = travelling(9.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 300; ++i) {
+    model->step(s, DriveInput{0.42, -p.decel_max}, kDt, &d);
+  }
+
+  // The asymmetry this case depends on. Without it the fx term cancels and
+  // the assertion below would pass whether or not the term exists.
+  const double fx_asym = std::fabs(d.fx[kFrontLeft] - d.fx[kFrontRight]) +
+                         std::fabs(d.fx[kRearLeft] - d.fx[kRearRight]);
+  ASSERT_GT(fx_asym, 0.5) << "left and right must differ for this case to "
+                             "test anything";
+
+  // One more very small step, so the yaw acceleration over it is close to the
+  // instantaneous value the reported forces describe.
+  const double r_before = s.yaw_rate();
+  const double tiny = 1e-7;
+  model->step(s, DriveInput{0.42, -p.decel_max}, tiny, &d);
+  const double yaw_accel = (s.yaw_rate() - r_before) / tiny;
+
+  // The moment, rebuilt from the diagnostics rather than read from the model.
+  const double cos_d = std::cos(0.42);
+  const double sin_d = std::sin(0.42);
+  double mz = 0.0;
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    const bool front = (i == kFrontLeft || i == kFrontRight);
+    const bool left = (i == kFrontLeft || i == kRearLeft);
+    const double xw = front ? p.lf : -p.lr;
+    const double track = front ? p.track_front : p.track_rear;
+    const double yw = left ? 0.5 * track : -0.5 * track;
+    const double ci = front ? cos_d : 1.0;
+    const double si = front ? sin_d : 0.0;
+    const double fx_b = d.fx[i] * ci - d.fy[i] * si;
+    const double fy_b = d.fx[i] * si + d.fy[i] * ci;
+    mz += xw * fy_b - yw * fx_b;
+  }
+
+  EXPECT_NEAR(yaw_accel, mz / p.izz, 1e-6 * std::fabs(mz / p.izz) + 1e-6);
+
+  // And the lateral equation closes too, which is the same statement for the
+  // other degree of freedom.
+  double fy_total = 0.0;
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    const bool front = (i == kFrontLeft || i == kFrontRight);
+    const double ci = front ? cos_d : 1.0;
+    const double si = front ? sin_d : 0.0;
+    fy_total += d.fx[i] * si + d.fy[i] * ci;
+  }
+  EXPECT_NEAR(d.ay, fy_total / p.mass, 1e-9);
+}
+
+// The tyre transient, through the assembled tier rather than in
+// relaxation.hpp on its own. Every other L2 case here settles first, and in
+// steady state the lagged slip angle equals the instantaneous one, so none of
+// them can tell whether the tier uses the state it carries.
+TEST(L2, TheForceFollowsTheLaggedSlipAngleAndNotTheInstantaneousOne) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  // Straight and settled, so every lagged angle starts at zero.
+  VehicleState s = travelling(8.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 500; ++i) {
+    model->step(s, DriveInput{0.0, hold_speed(s, 8.0)}, kDt, &d);
+  }
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    ASSERT_NEAR(s.alpha_lag[i], 0.0, 1e-9);
+  }
+
+  // Now step the steering and take a handful of steps, far less than one
+  // relaxation length of travel.
+  for (int i = 0; i < 3; ++i) {
+    model->step(s, DriveInput{0.12, hold_speed(s, 8.0)}, kDt, &d);
+  }
+
+  const slipx::WheelLoads statics = slipx::static_loads(p);
+  const MfLite front = slipx::make_mf_lite(p.tyre_front, 0.5 * p.c_alpha_f,
+                                           statics.fz[kFrontLeft]);
+
+  for (const unsigned i : {kFrontLeft, kFrontRight}) {
+    // The tyre has not caught up: it carries a fraction of the slip the
+    // geometry is asking for.
+    ASSERT_LT(std::fabs(s.alpha_lag[i]), 0.5 * std::fabs(d.alpha[i]))
+        << "wheel " << i;
+
+    // And the force it is making is the one the LAGGED angle produces, not the
+    // one the instantaneous angle would. Compared against both, so the case
+    // says which of the two it is rather than only that it is small.
+    const double from_lagged = mf_lite_fy(front, s.alpha_lag[i], d.fz[i]);
+    const double from_instant = mf_lite_fy(front, d.alpha[i], d.fz[i]);
+    EXPECT_NEAR(d.fy[i], from_lagged, 1e-6 * std::fabs(from_lagged) + 1e-9)
+        << "wheel " << i;
+    EXPECT_GT(std::fabs(from_instant), 2.0 * std::fabs(d.fy[i]))
+        << "wheel " << i;
+  }
+}
+
+// A longer relaxation length is a slower car. Asserted at the vehicle level,
+// where it is the thing a driver or a controller would notice.
+//
+// Note what is NOT asserted here. The tyre's lag is a distance, but the car's
+// yaw response also carries its own lag from yaw inertia against tyre
+// stiffness, and that one is a time constant. The two are in series, so
+// vehicle yaw response is not distance-invariant and travelling the same
+// distance at two speeds does not reach the same fraction of it: measured on
+// the reference car, 0.2 m of travel gets to 78% of steady-state yaw at 4 m/s
+// and 32% at 12 m/s. That mixture is exactly why identifying sigma from a step
+// steer needs runs at two speeds to separate the two terms. Distance
+// invariance holds at the tyre, and test_analytical.cpp's Relaxation section
+// asserts it there.
+TEST(L2, ALongerRelaxationLengthDelaysTheYawResponse) {
+  auto yaw_fraction_after = [](double sigma, double v, double travel) {
+    VehicleParams p = reference_params();
+    p.tyre_front.relax_length = sigma;
+    p.tyre_rear.relax_length = sigma;
+
+    auto settled = [&] {
+      auto m = VehicleModel::create(Tier::L2_DoubleTrack, p);
+      VehicleState t = travelling(v);
+      StepDiagnostics dd;
+      for (int i = 0; i < 8000; ++i) {
+        m->step(t, DriveInput{0.06, hold_speed(t, v)}, kDt, &dd);
+      }
+      return t.yaw_rate();
+    }();
+
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    VehicleState s = travelling(v);
+    StepDiagnostics d;
+    for (int i = 0; i < 500; ++i) {
+      model->step(s, DriveInput{0.0, hold_speed(s, v)}, kDt, &d);
+    }
+    const int steps = static_cast<int>(travel / (v * kDt) + 0.5);
+    for (int i = 0; i < steps; ++i) {
+      model->step(s, DriveInput{0.06, hold_speed(s, v)}, kDt, &d);
+    }
+    return s.yaw_rate() / settled;
+  };
+
+  // Same speed, three relaxation lengths, monotonically slower.
+  const double quick = yaw_fraction_after(0.04, 8.0, 0.10);
+  const double mid = yaw_fraction_after(0.10, 8.0, 0.10);
+  const double slow = yaw_fraction_after(0.20, 8.0, 0.10);
+
+  EXPECT_GT(quick, mid);
+  EXPECT_GT(mid, slow);
+  EXPECT_GT(quick - slow, 0.05) << "quick " << quick << " slow " << slow;
 }
 
 }  // namespace

@@ -19,6 +19,27 @@
 
 namespace slipx {
 
+namespace {
+
+// One tyre's coefficients. The message does not name the axle, because a
+// string literal cannot be built at run time and this file allocates nothing;
+// a caller who needs to know which axle has two fields to look at.
+const char* validate_tyre(const TyreCoefficients& t) {
+  if (!(t.mu_y0 > 0.0)) return "tyre mu_y0 must be positive [-]";
+  if (!(t.mu_x0 > 0.0)) return "tyre mu_x0 must be positive [-]";
+  if (!(t.k_mu >= 0.0)) return "tyre k_mu must not be negative [-]";
+  // Zero relaxation length is a division by zero in relaxation_rate, not an
+  // instantaneous tyre. A caller who wants no transient wants a tier below L2.
+  if (!(t.relax_length > 0.0)) return "tyre relax_length must be positive [m]";
+  // Below 1 the Magic Formula has no peak, which is not a tyre; above 1 the
+  // curvature factor folds the curve back on itself.
+  if (!(t.shape_c > 1.0)) return "tyre shape_c must exceed 1 [-]";
+  if (!(t.curvature_e <= 1.0)) return "tyre curvature_e must not exceed 1 [-]";
+  return nullptr;
+}
+
+}  // namespace
+
 const char* validate(const VehicleParams& p) {
   if (!(p.mass > 0.0)) return "mass must be positive [kg]";
   if (!(p.izz > 0.0)) return "izz must be positive [kg m^2]";
@@ -44,9 +65,12 @@ const char* validate(const VehicleParams& p) {
   if (!(p.c_alpha_r > 0.0)) return "c_alpha_r must be positive [N/rad]";
   if (!(p.mu_clip > 0.0)) return "mu_clip must be positive [-]";
 
-  // Zero relaxation length is a division by zero in relaxation_rate, not an
-  // instantaneous tyre. A caller who wants no transient wants a tier below L2.
-  if (!(p.relax_length > 0.0)) return "relax_length must be positive [m]";
+  // The MF-lite block, used from L2. Checked here rather than only in the
+  // schema because the core is reachable without the schema (CORE-01), and
+  // every one of these divides or exponentiates something.
+  if (!(p.c_kappa > 0.0)) return "c_kappa must be positive [N per unit slip]";
+  if (const char* why = validate_tyre(p.tyre_front)) return why;
+  if (const char* why = validate_tyre(p.tyre_rear)) return why;
 
   if (!(p.accel_max > 0.0)) return "accel_max must be positive [m/s^2]";
   if (!(p.decel_max > 0.0))

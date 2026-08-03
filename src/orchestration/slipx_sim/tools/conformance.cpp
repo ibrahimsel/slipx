@@ -52,8 +52,9 @@ int main(int argc, char** argv) {
       const std::string v = next("--tier");
       if (v == "L0") spec.tier = slipx::Tier::L0_Kinematic;
       else if (v == "L1") spec.tier = slipx::Tier::L1_Bicycle;
+      else if (v == "L2") spec.tier = slipx::Tier::L2_DoubleTrack;
       else {
-        // L2 and L3 are not implemented (CORE-02, P1). Refused rather than
+        // L3 is not implemented (CORE-16, P4). Refused rather than
         // substituted, as everywhere else.
         std::fprintf(stderr, "slipx_conformance: unknown or unavailable tier "
                              "'%s'\n", v.c_str());

@@ -92,6 +92,31 @@ def to_vehicle_params(parameters) -> VehicleParams:
     return params
 
 
+
+def _copy_params(source: VehicleParams) -> VehicleParams:
+    """A field-for-field copy, because the binding exposes no copy constructor.
+
+    Only the fields a tier could care about; the tyre blocks are copied as
+    values rather than shared, so mutating one car's parameters cannot reach
+    another's.
+    """
+    out = VehicleParams()
+    for name in (
+        "mass", "izz", "ixx", "iyy", "lf", "lr", "track_front", "track_rear",
+        "h_cog", "wheel_radius", "c_alpha_f", "c_alpha_r", "mu_clip",
+        "c_kappa", "accel_max", "decel_max", "v_max", "steer_max",
+        "drag_coeff", "roll_resist", "provenance", "v_eps",
+    ):
+        setattr(out, name, getattr(source, name))
+    for axle in ("tyre_front", "tyre_rear"):
+        src = getattr(source, axle)
+        dst = getattr(out, axle)
+        for name in ("mu_y0", "mu_x0", "k_mu", "relax_length", "shape_c",
+                     "curvature_e"):
+            setattr(dst, name, getattr(src, name))
+    return out
+
+
 class Car:
     """A loaded car directory, with its parameters ready for the core.
 
@@ -122,6 +147,68 @@ class Car:
     def warnings(self) -> list[str]:
         """Values that validated but look wrong (SCH-04)."""
         return self.spec.warnings
+
+    def params_for_tier(self, tier) -> VehicleParams:
+        """Parameters for one tier, refusing rather than defaulting.
+
+        ``params`` carries everything L0 and L1 need and is what most callers
+        want. L2 additionally needs the MF-lite block and a longitudinal slip
+        stiffness, and ``tyre.schema.json`` at schema 0.1.0 carries the first
+        and not the second (ADR-0025).
+
+        This raises rather than filling ``c_kappa`` from the core's default.
+        Silent defaulting is what SCH-02 forbids, and a parameter nobody
+        identified is exactly the failure ADR-0009 exists to prevent. A refusal
+        produces nothing; a default would produce a trajectory that looks
+        right, is labelled L2, and rests on a number that came from nowhere.
+
+        This is NOT the ADR-0005 failure of substituting a simpler tier: no
+        model is returned at all.
+        """
+        from . import Tier  # local, to keep the module import graph flat
+
+        if tier is not Tier.L2_DoubleTrack:
+            return self.params
+
+        params = _copy_params(self.params)
+        front = self.spec.tyre_front
+        rear = self.spec.tyre_rear
+
+        missing = []
+        for label, tyre, target, c_alpha_axle in (
+            ("front", front, params.tyre_front, params.c_alpha_f),
+            ("rear", rear, params.tyre_rear, params.c_alpha_r),
+        ):
+            if tyre.mf_lite is None:
+                missing.append(f"{label} tyre mf_lite block")
+            else:
+                target.shape_c = float(tyre.mf_lite["C"])
+                target.curvature_e = float(tyre.mf_lite["E"])
+            if tyre.k_mu is None:
+                missing.append(f"{label} tyre friction.k_mu")
+            else:
+                target.k_mu = float(tyre.k_mu)
+            if tyre.sigma is None:
+                missing.append(f"{label} tyre relaxation.sigma")
+            else:
+                target.relax_length = float(tyre.sigma)
+            target.mu_y0 = float(tyre.mu_y0)
+            target.mu_x0 = float(tyre.mu_x0)
+
+        # There is no field for the longitudinal slip stiffness at schema
+        # 0.1.0. It is identifiable in a car park, so it is not missing on
+        # principle; nobody wrote the field. Schema 0.2.0 adds it.
+        missing.append("longitudinal slip stiffness (c_kappa)")
+
+        raise ValueError(
+            "this car cannot parameterise tier L2: "
+            + ", ".join(missing)
+            + ". tyre.schema.json 0.1.0 has no field for the longitudinal slip "
+            "stiffness; schema 0.2.0 adds it. Nothing here is defaulted, "
+            "because a parameter nobody identified is worse than one that does "
+            "not exist (ADR-0025, ADR-0009). L0 and L1 are unaffected and are "
+            "available through .params."
+        )
 
     def summary(self) -> str:
         """One block of text, leading with the provenance label (NFR-08)."""
