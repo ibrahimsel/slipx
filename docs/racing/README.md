@@ -51,13 +51,24 @@ order. The rest stand alone.
 |---|---|---|
 | 7 | [Fitting a tyre model](07-fitting-a-tyre-model.md) | Where do the coefficients in a tyre model come from? |
 
+**Part four: beyond steady state**
+
+Articles 1 to 6 describe a car in a settled condition. These are about what
+happens while it is still settling, which is most of a lap.
+
+| | Article | What it answers |
+|---|---|---|
+| 8 | [Tyre relaxation](08-tyre-relaxation.md) | Why does grip arrive late, and why does that change with speed? |
+
 **Reference**
 
 - [Glossary](glossary.md), for when a word turns up before its article does.
 
 **Planned, not yet written.** Listed so the shape of the series is visible and
 so nobody writes the same article twice: combined slip and the limits of a
-friction ellipse; differentials; motor, ESC and battery behaviour; actuator lag;
+friction ellipse; differentials; motor, ESC and battery behaviour; actuator lag,
+which belongs beside article 8 and is a different mechanism with a different
+time constant;
 the autonomy pipeline; localisation and mapping; global and local planning; path
 tracking, from pure pursuit to MPC; state estimation and sensor models; the
 sim-to-real gap; and reproducibility and benchmarking. Contributions welcome,

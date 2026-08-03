@@ -107,7 +107,7 @@ technical report, 1992.
 
 **Relaxation length** (`sigma`). The rolling distance a tyre needs for lateral
 force to reach about 63 per cent of its steady value. A few centimetres, giving
-a lag of `sigma/v`.
+a lag of `sigma/v`. See [article 8](08-tyre-relaxation.md).
 
 **Nominal load** (`Fz_nom`). The vertical load a set of tyre coefficients was
 identified at. Load sensitivity is an exponent *about* this load, so

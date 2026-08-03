@@ -498,6 +498,56 @@ def fig_peak_location():
 
 # ======================================================= 5. friction ellipse
 
+def fig_relaxation():
+    """The same transient plotted against time and against distance.
+
+    The whole point of the relaxation length is that the second panel collapses
+    the two speeds onto one curve and the first does not, so the two panels are
+    the argument and the caption only names them.
+    """
+    SIGMA = 0.08          # relaxation length                              [m]
+    SPEEDS = (3.0, 12.0)  # slow and fast                                [m/s]
+
+    f = Fig(880, 400, "Tyre relaxation, in time and in distance")
+    f.head("Grip arrives late, and how late depends on speed",
+           f"first-order lag, relaxation length {SIGMA} m, illustrative")
+
+    # --- left: response against time -------------------------------------
+    a = Axes(f, 70, 90, 330, 240, (0.0, 0.06), (0.0, 1.05))
+    a.frame([0, 0.02, 0.04, 0.06], [0, 0.5, 1.0])
+    f.text(235, 368, "time after the steering step [s]", "ts", "middle")
+    f.text(70, 78, "fraction of the steady-state " + FY, "ts")
+
+    for speed, cls in zip(SPEEDS, ("a1", "a2")):
+        ts = frange(0.0, 0.06, 300)
+        ys = [1.0 - math.exp(-t * speed / SIGMA) for t in ts]
+        a.curve(ts, ys, cls)
+
+    f.line(a.px(0), a.py(1.0), a.px(0.06), a.py(1.0), "mut thin dash")
+    f.text(a.px(0.06) - 4, a.py(1.0) - 7, "steady state", "ts", "end")
+
+    f.text(a.px(0.026), a.py(0.88), "12 m/s", "k2")
+    f.text(a.px(0.030), a.py(0.55), "3 m/s", "k1")
+
+    # --- right: response against distance rolled -------------------------
+    b = Axes(f, 500, 90, 330, 240, (0.0, 0.30), (0.0, 1.05))
+    b.frame([0, 0.1, 0.2, 0.3], [0, 0.5, 1.0])
+    f.text(665, 368, "distance rolled since the step [m]", "ts", "middle")
+    f.text(500, 78, "the same two runs, one curve", "ts")
+
+    ss = frange(0.0, 0.30, 300)
+    ys = [1.0 - math.exp(-d / SIGMA) for d in ss]
+    b.curve(ss, ys, "ok")
+
+    f.line(b.px(0), b.py(1.0), b.px(0.30), b.py(1.0), "mut thin dash")
+    f.line(b.px(SIGMA), b.y0, b.px(SIGMA), b.y0 + b.h, "mut thin dot")
+    f.text(b.px(SIGMA) + 6, b.py(0.20), "one " + "&#963;", "ts")
+    f.line(b.px(0), b.py(0.632), b.px(SIGMA), b.py(0.632), "mut thin dot")
+    f.text(b.px(SIGMA) - 8, b.py(0.632) - 8, "63%", "ts", "end")
+
+    f.save("relaxation.svg")
+
+
 def fig_friction_ellipse():
     f = Fig(560, 400, "The friction ellipse: one budget, two demands")
     f.head("The friction ellipse", "Braking and cornering spend the same "
@@ -914,6 +964,7 @@ def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
                fig_peak_location,
+               fig_relaxation,
                fig_friction_ellipse, fig_load_transfer_long,
                fig_load_transfer_lat, fig_vehicle_models,
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
