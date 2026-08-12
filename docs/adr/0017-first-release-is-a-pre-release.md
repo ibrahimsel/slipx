@@ -1,6 +1,8 @@
 # ADR-0017: The first published release is `0.1.0a1`, a pre-release
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part by
+  [ADR-0029](0029-no-0-1-0-final-first-final-is-0-2-0.md) (`0.1.0` final is
+  never cut)
 - **Date recorded:** 2026-08-02
 - **Requirements:** NFR-09
 - **Related:** [ADR-0015](0015-independent-versioning.md),

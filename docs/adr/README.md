@@ -64,11 +64,12 @@ Use [`template.md`](template.md) for a new record.
 | [0014](0014-apache-2-throughout.md) | Apache-2.0 throughout, and no copyleft anywhere near the core | Accepted |
 | [0015](0015-independent-versioning.md) | `slipx_core` and `slipx_schema` are versioned independently, and it is checked | Accepted |
 | [0016](0016-one-distribution-two-packages.md) | One distribution, two importable packages, and `slipx_core` is not on PyPI | Accepted |
-| [0017](0017-first-release-is-a-pre-release.md) | The first published release is `0.1.0a1`, a pre-release | Accepted |
+| [0017](0017-first-release-is-a-pre-release.md) | The first published release is `0.1.0a1`, a pre-release | Accepted, superseded in part by 0029 |
 | [0018](0018-wheel-coverage.md) | Wheels for five platforms on CPython 3.9 to 3.13 | Accepted |
 | [0019](0019-trusted-publishing.md) | Publish with Trusted Publishing, not an API token | Accepted |
 | [0020](0020-wheels-assert-nothing-about-their-hash.md) | A released wheel asserts nothing about its own trajectory hash | Accepted |
 | [0021](0021-readme-is-the-pypi-description.md) | The README is the PyPI long description | Accepted |
+| [0029](0029-no-0-1-0-final-first-final-is-0-2-0.md) | `0.1.0` final is never published; the first final release is `0.2.0` | Accepted |
 
 ## Looking at a run
 

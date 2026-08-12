@@ -73,7 +73,7 @@ actual number is decided at each release.
 
 ## M0. Housekeeping and loose ends
 
-Status: in-progress. Size: small (hours). Hash impact: none.
+Status: done. Size: small (hours). Hash impact: none.
 
 - [x] **M0.1** Commit `docs/adr/0028-runs-are-emitted-to-sinks-viewers-are-external.md`
   (currently untracked) together with the unstaged index row in
@@ -92,7 +92,7 @@ Status: in-progress. Size: small (hours). Hash impact: none.
   (code comments must stand alone for readers without the spec).
   Done when: `help(slipx.Tier)` describes L2 as built and minimal, and names
   what it lacks; the L3 text still says it raises.
-- [ ] **M0.4** **DECISION**: whether to publish `0.1.0` final. The plan of
+- [x] **M0.4** **DECISION**: whether to publish `0.1.0` final. The plan of
   record (ADR-0017) cuts it from the same tree as `0.1.0a1`, i.e. from commit
   `644cb12`, now that the pre-release has rendered and installed correctly.
   The current tree cannot be `0.1.0`: its reference hashes are incompatible
@@ -103,6 +103,8 @@ Status: in-progress. Size: small (hours). Hash impact: none.
   by default is not.
   Done when: decided and recorded (CHANGELOG note or ADR if it changes the
   release policy).
+  Decided 2026-08-12: option (b), recorded as ADR-0029 with a CHANGELOG note;
+  `0.1.0` is skipped and never published, the first final is `0.2.0` at M4.
 
 ## M1. Schema 0.2.0: the longitudinal slip stiffness
 

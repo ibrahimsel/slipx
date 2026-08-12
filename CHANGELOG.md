@@ -16,6 +16,13 @@ incomparable.
 
 ## Unreleased
 
+**`0.1.0` final will never be published.** ADR-0017 planned to cut it from the
+`0.1.0a1` tree once the pre-release had proven the packaging path; it has, and
+that proof is the whole of what a content-identical final would have added.
+The first final release is `0.2.0`, at the milestone where L2 is complete and
+reachable from a car file. Reasoning in
+[ADR-0029](docs/adr/0029-no-0-1-0-final-first-final-is-0-2-0.md).
+
 P1 in progress: L2, the double-track tier. `VehicleModel::create` still throws
 for L2 until the tier is complete; the pieces below are usable on their own but
 no tier consumes them yet.
