@@ -15,7 +15,18 @@ namespace {
 // Digest of a parameter set, for the manifest. Fixed field order, and it
 // covers every field: two runs whose cars differ in any parameter must be
 // distinguishable, including in the ones a given tier ignores, because the
-// tier can change without the file changing.
+// tier can change without the file changing. When VehicleParams grows a
+// field, it is added here in the same change; the tyre blocks and c_kappa
+// were once missed by exactly that omission.
+void update_tyre(TrajectoryHash& h, const TyreCoefficients& t) {
+  h.update(t.mu_y0);
+  h.update(t.mu_x0);
+  h.update(t.k_mu);
+  h.update(t.relax_length);
+  h.update(t.shape_c);
+  h.update(t.curvature_e);
+}
+
 std::string params_digest(const VehicleParams& p) {
   TrajectoryHash h;
   h.update(p.mass);
@@ -31,10 +42,30 @@ std::string params_digest(const VehicleParams& p) {
   h.update(p.c_alpha_f);
   h.update(p.c_alpha_r);
   h.update(p.mu_clip);
+  update_tyre(h, p.tyre_front);
+  update_tyre(h, p.tyre_rear);
+  h.update(p.c_kappa);
   h.update(p.accel_max);
   h.update(p.decel_max);
   h.update(p.v_max);
+  h.update_u64(static_cast<std::uint64_t>(p.layout));
+  h.update_u64(static_cast<std::uint64_t>(p.differential));
+  h.update(p.lsd_preload);
+  h.update(p.torque_stall);
+  h.update(p.omega_free);
+  h.update(p.torque_per_amp);
+  h.update(p.drive_efficiency);
+  h.update(p.current_max);
+  h.update(p.regen_current_max);
+  h.update(p.pack_nominal_v);
+  h.update(p.pack_v_full);
+  h.update(p.pack_v_empty);
+  h.update(p.pack_capacity_ah);
+  h.update(p.pack_internal_resistance);
   h.update(p.steer_max);
+  h.update(p.steer_rate_max);
+  h.update(p.steer_bandwidth);
+  h.update(p.steer_damping);
   h.update(p.drag_coeff);
   h.update(p.roll_resist);
   h.update(p.v_eps);

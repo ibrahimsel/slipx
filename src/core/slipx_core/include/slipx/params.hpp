@@ -35,6 +35,23 @@ enum class Provenance {
   kMeasured      // directly measured on a rig or scale.
 };
 
+// Which axles the motor drives. There is no centre-differential option because
+// a typical 1/10-scale 4WD is a locked belt or shaft; kAllWheelDrive splits
+// torque 50/50 between the axles (ADR-0031).
+enum class DriveLayout {
+  kRearWheelDrive,   // schema "2WD_rear"; the common competition layout
+  kFrontWheelDrive,  // schema "2WD_front"
+  kAllWheelDrive     // schema "4WD", locked centre
+};
+
+// How the driven axle splits torque between its two wheels. Modelled from L2
+// (ADR-0031); below L2 it cannot affect the trajectory.
+enum class Differential {
+  kOpen,   // equal torque; the weaker wheel caps both
+  kSpool,  // locked axle: one shared wheel speed
+  kLsd     // preloaded limited-slip; needs lsd_preload
+};
+
 struct VehicleParams {
   // ------------------------------------------------------------------ mass
   double mass = 3.5;         // total sprung + unsprung mass            [kg]
@@ -113,21 +130,81 @@ struct VehicleParams {
 
   // ----------------------------------------------------------- drivetrain
   // At L0 and L1 the drivetrain is a commanded longitudinal acceleration with
-  // limits. ESC torque-speed curve, current limit, regen and battery sag are
-  // CORE-08 and CORE-09, which arrive at L2 in P1. Until then a caller asking
-  // for 40 m/s^2 gets the limit, not the request, and StepDiagnostics says the
-  // actuator saturated.
+  // limits, and these three are the whole of it. From L2 the ESC block below
+  // supersedes accel_max as the mechanism; accel_max and decel_max remain
+  // command bounds, and the ESC decides what is actually delivered.
   double accel_max = 8.0;    // peak forward acceleration          [m/s^2]
   double decel_max = 12.0;   // peak braking deceleration, positive
                              // magnitude                          [m/s^2]
   double v_max = 20.0;       // top speed                            [m/s]
 
+  // Drive layout and differential, used from L2 (ADR-0031). The default is an
+  // open differential on the rear axle: the open diff produces no
+  // drive-induced yaw moment on a symmetric car, which keeps the struct
+  // defaults agreeing with the single-track tiers at low lateral
+  // acceleration. The reference car FILE says spool, because most 1/10
+  // competition cars run a locked rear axle; the file describes a real class
+  // of car, the default describes the neutral baseline.
+  //
+  // Braking goes through the driven axle only: a 1/10-scale car brakes
+  // through its motor and has no friction brakes, so there is no brake bias
+  // parameter anywhere.
+  DriveLayout layout = DriveLayout::kRearWheelDrive;
+  Differential differential = Differential::kOpen;
+  double lsd_preload = 0.0;  // LSD locking preload torque across the
+                             // axle; consumed only when differential
+                             // is kLsd                             [N m]
+
+  // ------------------------------------------------------------------ ESC
+  // The motor and ESC torque-speed curve, stated at the WHEELS and at
+  // pack_nominal_v so that no gear ratio or motor constant is a parameter
+  // (ADR-0030 records why the electrical parameterisation was rejected).
+  // Used from L2; below L2 the accel limits above are the whole model.
+  //
+  //   T_avail(omega) = torque_stall * s * (1 - omega / (omega_free * s))
+  //   s = pack_v / pack_nominal_v
+  //
+  // then capped by torque_per_amp * current_max. Negative (braking) torque is
+  // capped by torque_per_amp * regen_current_max, and that regen cap is the
+  // only brake the model has.
+  double torque_stall = 2.0;      // total wheel torque at zero wheel
+                                  // speed, full throttle, before the
+                                  // current limit                    [N m]
+  double omega_free = 480.0;      // wheel speed at which drive torque
+                                  // reaches zero                   [rad/s]
+  double torque_per_amp = 0.01;   // wheel torque per ampere of motor
+                                  // current                        [N m/A]
+  double drive_efficiency = 0.85; // wheel power over battery-terminal
+                                  // power, in (0, 1]. Losses apply in
+                                  // both directions                    [-]
+  double current_max = 120.0;     // ESC drive current limit            [A]
+  double regen_current_max = 40.0;  // regen current limit, its own
+                                  // number and usually well below
+                                  // drive                             [A]
+
+  // -------------------------------------------------------------- battery
+  // Open-circuit voltage linear in state of charge between pack_v_empty and
+  // pack_v_full; internal resistance produces sag under load (ADR-0031).
+  // Used from L2. Setting pack_v_full = pack_v_empty = pack_nominal_v with
+  // zero internal resistance is the ideal-supply configuration and is valid.
+  double pack_nominal_v = 11.1;   // the voltage the ESC curve is
+                                  // stated at; 3S LiPo nominal        [V]
+  double pack_v_full = 12.6;      // open-circuit voltage at soc 1     [V]
+  double pack_v_empty = 9.9;      // open-circuit voltage at soc 0     [V]
+  double pack_capacity_ah = 5.2;  //                                 [A h]
+  double pack_internal_resistance = 0.020;  //                       [ohm]
+
   // ------------------------------------------------------------- steering
-  // Servo rate limit and second-order lag are CORE-10, L2, P1. At L0 and L1
-  // the road wheel angle follows the command instantaneously, clipped to
-  // travel.
+  // The road wheel angle follows the command instantaneously at L0 and L1,
+  // clipped to travel. From L2 the servo is a slew-limited second-order lag
+  // (ADR-0031) and steer/steer_rate become integrated state.
   double steer_max = 0.40;   // road wheel travel, symmetric, positive
                              // magnitude; positive command is left  [rad]
+  double steer_rate_max = 10.0;   // servo slew limit              [rad/s]
+  double steer_bandwidth = 45.0;  // second-order natural frequency
+                                  //                               [rad/s]
+  double steer_damping = 0.7;     // damping ratio; below 1 the servo
+                                  // overshoots, which is physics       [-]
 
   // ------------------------------------------------------------ resistance
   // Both act against the direction of travel. At 1/10 scale aerodynamic drag

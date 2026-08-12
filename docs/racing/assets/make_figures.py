@@ -17,9 +17,12 @@ Two kinds of figure live here and they are not the same kind of claim.
 SCHEMATICS (slip-angle, load-transfer-*, vehicle-models, understeer-oversteer,
 racing-line) are geometry. They show how quantities are defined and how a
 picture is labelled, and there is no model behind them to be right or wrong.
+The left panel of differential-speeds is one too: it is a pair of concentric
+arcs and nothing else.
 
 PLOTS (tyre-curve, load-sensitivity, peak-location, friction-ellipse,
-gg-diagram, speed-profile) are computed from the formulae written out below, at
+gg-diagram, speed-profile, differential-speeds' right panel, torque-speed,
+servo-step) are computed from the formulae written out below, at
 parameter values chosen to be plausible for a 1/10-scale car. They are
 ILLUSTRATIVE. They
 are not output from `slipx_core`, and no parameter set in this file has been
@@ -1026,6 +1029,277 @@ def fig_speed_profile():
     f.save("speed-profile.svg")
 
 
+# ================================================== 12. differential geometry
+
+# One axle, one corner. The two panels are the same fact stated twice: a
+# geometric speed difference the axle has to absorb somehow, and the slip
+# ratio a locked axle is therefore forced into.
+
+TRACK = 0.24        # track width of a 1/10-scale car                     [m]
+KAPPA_PEAK = 0.10   # where a rubber tyre's longitudinal force peaks      [-]
+
+
+def fig_differential_speeds():
+    f = Fig(880, 400, "Why a driven axle needs a differential")
+    f.head("One axle, two path radii",
+           f"track {TRACK} m; the outer wheel travels the longer arc")
+
+    # --- left: the geometry ----------------------------------------------
+    #
+    # A quarter turn about a centre placed at the panel's bottom-left corner.
+    # Scale is chosen so a 1 m corner radius fills the panel; the two arcs are
+    # therefore drawn to scale, and the visible gap between them IS the track
+    # width, not an exaggeration for clarity.
+    cx, cy, scale = 62.0, 372.0, 240.0
+    r_mid = 1.0                                 # corner radius            [m]
+    r_in = (r_mid - TRACK / 2) * scale
+    r_out = (r_mid + TRACK / 2) * scale
+    assert abs(r_out - r_in - TRACK * scale) < 1e-9, "arcs must differ by t"
+    assert cy - r_out > 90.0, "the outer arc must stay inside the panel"
+
+    f.arc(cx, cy, r_in, -90, 0, "mut thin dash")
+    f.arc(cx, cy, r_out, -90, 0, "mut thin dash")
+
+    theta = math.radians(-45.0)
+    ix, iy = cx + r_in * math.cos(theta), cy + r_in * math.sin(theta)
+    ox, oy = cx + r_out * math.cos(theta), cy + r_out * math.sin(theta)
+
+    f.line(cx, cy, ox + 26 * math.cos(theta), oy + 26 * math.sin(theta),
+           "grid thin")
+    f.line(cx, cy, cx + (r_out + 26), cy, "grid thin")
+    f.line(cx, cy, cx, cy - (r_out + 26), "grid thin")
+
+    # The axle, straddling both arcs, with a wheel at each end. The wheels sit
+    # square to the axle, which is the tangent direction at this point.
+    tangent = math.degrees(theta) + 90.0
+    f.line(ix, iy, ox, oy, "fg")
+    f.rot_rect(ix, iy, 9, 22, tangent, "body")
+    f.rot_rect(ox, oy, 9, 22, tangent, "body")
+    f.circle(cx, cy, 3.5, "a1f")
+
+    f.text(cx + 8, cy - 8, "turn centre", "ts")
+    f.text(ix - 10, iy + 16, "inner wheel", "k1", "end")
+    f.text(ox + 12, oy - 8, "outer wheel", "k2")
+
+    # The two radii, labelled where the arcs cross the vertical radius: the
+    # annulus is widest to read there and nothing else is drawn in it.
+    f.text(cx + 10, cy - r_out - 8, "R + t/2", "ts")
+    f.text(cx + 10, cy - r_in - 8, "R &#8722; t/2", "ts")
+
+    ratio = (r_mid + TRACK / 2) / (r_mid - TRACK / 2)
+    f.text(312, 200, f"R = {r_mid:g} m:", "ts")
+    f.text(312, 219, "the outer wheel must turn", "ts")
+    f.text(312, 238, f"{100 * (ratio - 1):.0f}% faster than the inner", "k2")
+
+    # --- right: the slip ratio a locked axle forces -----------------------
+    a = Axes(f, 545, 100, 300, 230, (0.0, 6.0), (0.0, 0.30))
+    a.frame([1, 2, 3, 4, 5, 6], [0.05, 0.10, 0.15, 0.20, 0.25, 0.30])
+    f.text(695, 366, "corner radius R   [m]", "ts", "middle")
+    f.text(545, 88, "slip ratio " + KAPPA + " forced on each wheel of a "
+                    "locked axle", "ts")
+
+    rs = frange(0.42, 6.0, 400)
+    a.clipped(rs, [TRACK / (2 * r) for r in rs], "a1")
+
+    f.line(a.px(0), a.py(KAPPA_PEAK), a.px(6.0), a.py(KAPPA_PEAK),
+           "mut thin dash")
+    f.text(a.px(6.0), a.py(KAPPA_PEAK) - 8, "tyre's peak " + KAPPA, "ts",
+           "end")
+
+    r_cross = TRACK / (2 * KAPPA_PEAK)
+    assert abs(TRACK / (2 * r_cross) - KAPPA_PEAK) < 1e-12
+    f.circle(*a.pt(r_cross, KAPPA_PEAK), 4.5, "a1f")
+    f.line(a.px(r_cross), a.py(KAPPA_PEAK), a.px(r_cross), a.y0 + a.h,
+           "mut thin dot")
+    f.text(a.px(r_cross) + 8, a.py(0.235),
+           f"tighter than {r_cross:.1f} m and a", "ts")
+    f.text(a.px(r_cross) + 8, a.py(0.215),
+           "locked axle is past the peak", "ts")
+
+    f.save("differential-speeds.svg")
+
+
+# ====================================================== 13. the torque budget
+
+# A permanent-magnet DC drive, stated at the wheel so no gear ratio appears.
+# Illustrative, like every plot here.
+
+T_STALL = 2.0       # wheel torque at zero speed, full pack             [N m]
+V_FREE = 24.0       # road speed at which the drive torque reaches zero [m/s]
+T_CURRENT = 1.2     # the current limit, expressed as wheel torque      [N m]
+V_SAG = 0.85        # a depleted-and-sagging pack, as a voltage fraction  [-]
+
+
+def drive_torque(v, s=1.0):
+    """The torque-speed line at voltage fraction s, capped by current."""
+    line = T_STALL * s * (1.0 - v / (V_FREE * s))
+    return max(0.0, min(line, T_CURRENT))
+
+
+def fig_torque_speed():
+    f = Fig(880, 400, "The torque a small electric drivetrain can deliver")
+    f.head("Torque, power, and the two things that limit them",
+           "a current limit clips the launch; the pack voltage scales "
+           "everything")
+
+    # --- left: torque against speed --------------------------------------
+    a = Axes(f, 70, 100, 330, 230, (0.0, 26.0), (0.0, 2.2))
+    a.frame([5, 10, 15, 20, 25], [0.5, 1.0, 1.5, 2.0])
+    f.text(235, 366, "road speed   [m/s]", "ts", "middle")
+    f.text(70, 88, "wheel torque   [N m]", "ts")
+
+    vs = frange(0.0, 26.0, 400)
+    # The uncapped line, so the reader can see what the cap removes.
+    a.clipped(vs, [T_STALL * (1.0 - v / V_FREE) for v in vs], "mut thin dot")
+    a.curve(vs, [drive_torque(v) for v in vs], "a1")
+    a.curve(vs, [drive_torque(v, V_SAG) for v in vs], "a2 dash")
+
+    v_knee = V_FREE * (1.0 - T_CURRENT / T_STALL)
+    assert abs(T_STALL * (1.0 - v_knee / V_FREE) - T_CURRENT) < 1e-12
+    f.circle(*a.pt(v_knee, T_CURRENT), 4.5, "a1f")
+    f.text(a.px(0.6), a.py(T_CURRENT) + 16, "current limit", "k1")
+    f.text(a.px(v_knee) + 8, a.py(T_CURRENT) + 4,
+           f"{v_knee:.1f} m/s", "ts")
+    f.text(a.px(13.5), a.py(1.02), "full pack", "k1")
+    f.text(a.px(9.0), a.py(0.30), f"pack at {100 * V_SAG:.0f}% voltage", "k2")
+
+    # --- right: the same thing as power ----------------------------------
+    b = Axes(f, 545, 100, 300, 230, (0.0, 26.0), (0.0, 280.0))
+    b.frame([5, 10, 15, 20, 25], [50, 100, 150, 200, 250])
+    f.text(695, 366, "road speed   [m/s]", "ts", "middle")
+    f.text(545, 88, "mechanical power at the wheels   [W]", "ts")
+
+    def power(v, s=1.0):
+        return drive_torque(v, s) * v / 0.05      # T omega, wheel radius 5 cm
+
+    b.curve(vs, [power(v) for v in vs], "a1")
+    b.curve(vs, [power(v, V_SAG) for v in vs], "a2 dash")
+
+    # Peak power of an uncapped line is at half the free speed. The cap is to
+    # the left of that here, so it costs launch torque and no peak power at
+    # all, which is the panel's whole point.
+    v_peak = V_FREE / 2
+    assert v_peak > v_knee, "the cap must not touch the power peak"
+    p_full, p_sag = power(v_peak), power(V_SAG * v_peak, V_SAG)
+    f.circle(*b.pt(v_peak, p_full), 4.5, "a1f")
+    f.circle(*b.pt(V_SAG * v_peak, p_sag), 4.5, "a2f")
+    f.text(b.px(v_peak) + 8, b.py(p_full) - 8, f"{p_full:.0f} W", "k1")
+    f.text(b.px(V_SAG * v_peak) - 8, b.py(p_sag) - 12, f"{p_sag:.0f} W",
+           "k2", "end")
+    f.text(b.px(1.0), b.py(268.0),
+           f"{100 * (1 - V_SAG):.0f}% less voltage, "
+           f"{100 * (1 - p_sag / p_full):.0f}% less power", "ts")
+
+    f.save("torque-speed.svg")
+
+
+# ======================================================== 14. actuator lag
+
+WN = 45.0          # servo natural frequency                          [rad/s]
+ZETA = 0.7         # damping ratio                                        [-]
+RATE_MAX = 10.0    # slew limit                                       [rad/s]
+STEER_STEP = 0.40  # a full-travel steering command                     [rad]
+SIGMA = 0.08       # tyre relaxation length, from article 8               [m]
+
+
+def second_order_step(t, amp, wn, zeta):
+    """Unit-step response of a linear second-order lag, underdamped."""
+    wd = wn * math.sqrt(1.0 - zeta * zeta)
+    return amp * (1.0 - math.exp(-zeta * wn * t) *
+                  (math.cos(wd * t) +
+                   zeta / math.sqrt(1.0 - zeta * zeta) * math.sin(wd * t)))
+
+
+def peak_rate_factor(zeta):
+    """Peak of the step response's derivative, in units of amplitude * wn.
+
+    Differentiating the response above leaves a single sine lobe,
+
+        dx/dt = A (wn / r) exp(-zeta wn t) sin(wd t),   r = sqrt(1 - zeta^2)
+
+    whose peak sits where tan(wd t) = r / zeta. At that point sin(wd t) is
+    exactly r, which cancels the leading 1/r and leaves a factor depending on
+    the damping ratio alone. That is what makes "does the slew limit bind?"
+    answerable without simulating anything: compare amplitude * wn * this
+    against the limit.
+    """
+    r = math.sqrt(1.0 - zeta * zeta)
+    return math.exp(-zeta * math.atan2(r, zeta) / r)
+
+
+def fig_servo_step():
+    f = Fig(880, 400, "The two limits of a steering actuator, and how they "
+                      "compare with the tyre's own lag")
+    f.head("A servo has two limits, and they look different",
+           f"second-order lag at {WN:g} rad/s and damping {ZETA:g}, against "
+           f"a {RATE_MAX:g} rad/s slew limit")
+
+    # --- left: bandwidth-limited against slew-limited ---------------------
+    a = Axes(f, 70, 100, 330, 230, (0.0, 0.20), (0.0, 0.46))
+    a.frame([0.05, 0.10, 0.15, 0.20], [0.1, 0.2, 0.3, 0.4],
+            xfmt="{:.2f}")
+    f.text(235, 366, "time after the command   [s]", "ts", "middle")
+    f.text(70, 88, "road wheel angle   [rad]", "ts")
+
+    f.line(a.px(0), a.py(STEER_STEP), a.px(0.20), a.py(STEER_STEP),
+           "mut thin dash")
+    f.text(a.px(0.008), a.py(STEER_STEP) - 8, "commanded", "ts")
+
+    # The soft servo's own peak rate stays inside the slew limit even for a
+    # full-travel step, so this curve is honestly unlimited: drawing the
+    # second-order response here would be wrong if it were not.
+    assert STEER_STEP * WN * peak_rate_factor(ZETA) < RATE_MAX
+
+    ts = frange(0.0, 0.20, 400)
+    a.curve(ts, [second_order_step(t, STEER_STEP, WN, ZETA) for t in ts], "a1")
+
+    # A stiffer servo asks for more rate than it has, so its angle is a
+    # straight ramp at the limit until it arrives. Nothing curved about it.
+    t_ramp = STEER_STEP / RATE_MAX
+    a.curve([0.0, t_ramp, 0.20], [0.0, STEER_STEP, STEER_STEP], "a2")
+
+    over = math.exp(-math.pi * ZETA / math.sqrt(1.0 - ZETA * ZETA))
+    t_peak = math.pi / (WN * math.sqrt(1.0 - ZETA * ZETA))
+    assert abs(second_order_step(t_peak, 1.0, WN, ZETA) - (1.0 + over)) < 1e-12
+    f.circle(*a.pt(t_peak, STEER_STEP * (1 + over)), 4.5, "a1f")
+    f.text(a.px(t_peak) + 8, a.py(STEER_STEP * (1 + over)) - 6,
+           f"overshoot {100 * over:.1f}%", "k1")
+    f.text(a.px(t_ramp) + 6, a.py(0.145), "slew-limited:", "k2")
+    f.text(a.px(t_ramp) + 6, a.py(0.105), f"a straight {RATE_MAX:g} rad/s "
+                                          "ramp", "k2")
+    f.text(a.px(0.052), a.py(0.055), "bandwidth-limited", "k1")
+
+    # --- right: which lag dominates, and where ---------------------------
+    b = Axes(f, 545, 100, 300, 230, (0.0, 15.0), (0.0, 0.30))
+    b.frame([3, 6, 9, 12, 15], [0.05, 0.10, 0.15, 0.20, 0.25, 0.30],
+            yfmt="{:.2f}")
+    f.text(695, 366, "speed   [m/s]", "ts", "middle")
+    f.text(545, 88, "time to come within 5% of the command   [s]", "ts")
+
+    # Both curves are the same threshold: the servo's envelope reaches 5% at
+    # 3/(zeta wn), and the tyre reaches 95% of its force after three
+    # relaxation lengths. Comparing a 2% number against a 95% one would make
+    # the crossing an artefact of the definitions.
+    t_servo = 3.0 / (ZETA * WN)
+    b.curve([0.0, 15.0], [t_servo, t_servo], "a2")
+    f.text(b.px(8.4), b.py(t_servo) - 10, "the servo, fixed in seconds", "k2")
+
+    vs = frange(0.9, 15.0, 400)
+    b.clipped(vs, [3.0 * SIGMA / v for v in vs], "a1")
+    f.text(b.px(3.4), b.py(0.200), "the tyre, " + "3&#963;/v", "k1")
+
+    v_cross = 3.0 * SIGMA / t_servo
+    assert abs(3.0 * SIGMA / v_cross - t_servo) < 1e-12
+    f.circle(*b.pt(v_cross, t_servo), 4.5, "a1f")
+    f.line(*b.pt(v_cross + 0.4, t_servo - 0.008), *b.pt(5.0, 0.079),
+           "mut thin")
+    f.text(b.px(5.2), b.py(0.082),
+           f"above {v_cross:.1f} m/s the servo", "ts")
+    f.text(b.px(5.2), b.py(0.060), "is the slower of the two", "ts")
+
+    f.save("servo-step.svg")
+
+
 def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
@@ -1035,7 +1309,8 @@ def main():
                fig_load_transfer_long,
                fig_load_transfer_lat, fig_vehicle_models,
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
-               fig_speed_profile):
+               fig_speed_profile,
+               fig_differential_speeds, fig_torque_speed, fig_servo_step):
         fn()
     print("done")
 

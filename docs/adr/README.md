@@ -37,6 +37,7 @@ Use [`template.md`](template.md) for a new record.
 | [0026](0026-relaxation-lags-the-slip-angle-not-the-force.md) | Tyre relaxation lags the slip angle, not the lateral force | Accepted |
 | [0027](0027-l2-closes-its-algebraic-loops-without-iterating.md) | L2 closes its algebraic loops without iterating and without a wheel rotational state | Accepted |
 | [0028](0028-runs-are-emitted-to-sinks-viewers-are-external.md) | Runs are emitted to sinks, and interactive viewers stay external | Accepted |
+| [0031](0031-drivetrain-and-actuators-are-quasi-static-except-the-servo.md) | Drivetrain and actuators close in closed form; only the servo and the state of charge add state | Accepted |
 
 ## Determinism
 

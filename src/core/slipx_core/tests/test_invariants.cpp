@@ -864,49 +864,106 @@ TEST(InvariantsRelaxation, ForceStaysInsideTheBudgetWhenTheWheelUnloads) {
 // The properties the assembled tier must have whatever it is driven through,
 // as opposed to the operating points test_analytical.cpp pins down.
 
-// A right turn is a left turn mirrored, bit for bit, through ten states and
-// four contact patches. Not within a tolerance: every operation in the tier is
-// either odd or even in the lateral direction, so any asymmetry here has been
-// introduced rather than tolerated.
+// A right turn is a left turn mirrored, bit for bit, through thirteen states
+// and four contact patches. Not within a tolerance: every operation in the
+// tier is either odd or even in the lateral direction, so any asymmetry here
+// has been introduced rather than tolerated.
 //
 // This is the single strongest test of the whole tier. A sign error anywhere
-// in the wheel offsets, the load transfer split, the yaw moment or the slip
-// angles breaks it, and almost nothing else does.
+// in the wheel offsets, the load transfer split, the yaw moment, the slip
+// angles or the differential's torque split breaks it, and almost nothing
+// else does. It runs once per differential because the split rules have
+// their own left/right logic, including tie cases chosen specifically to
+// commute with the mirror (ADR-0031); the LSD's small preload is picked so
+// the run crosses between its locked and slipping regimes.
 TEST(InvariantsL2, MirroringTheSteeringMirrorsTheEntireCar) {
-  const VehicleParams p = reference_params();
-  auto left = VehicleModel::create(Tier::L2_DoubleTrack, p);
-  auto right = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  for (const auto diff :
+       {slipx::Differential::kOpen, slipx::Differential::kSpool,
+        slipx::Differential::kLsd}) {
+    VehicleParams p = reference_params();
+    p.differential = diff;
+    p.lsd_preload = 0.02;
+    auto left = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    auto right = VehicleModel::create(Tier::L2_DoubleTrack, p);
 
-  VehicleState sl = travelling(6.0);
-  VehicleState sr = travelling(6.0);
-  StepDiagnostics dl;
-  StepDiagnostics dr;
+    VehicleState sl = travelling(6.0);
+    VehicleState sr = travelling(6.0);
+    StepDiagnostics dl;
+    StepDiagnostics dr;
 
-  for (int i = 0; i < 3000; ++i) {
-    const double steer = 0.12 * std::sin(0.004 * i);
-    const double accel = 2.0;
-    left->step(sl, DriveInput{steer, accel}, kDt, &dl);
-    right->step(sr, DriveInput{-steer, accel}, kDt, &dr);
+    for (int i = 0; i < 3000; ++i) {
+      const double steer = 0.12 * std::sin(0.004 * i);
+      const double accel = 2.0;
+      left->step(sl, DriveInput{steer, accel}, kDt, &dl);
+      right->step(sr, DriveInput{-steer, accel}, kDt, &dr);
 
-    ASSERT_EQ(sl.vel_body.x, sr.vel_body.x) << "step " << i;
-    ASSERT_EQ(sl.vel_body.y, -sr.vel_body.y) << "step " << i;
-    ASSERT_EQ(sl.yaw_rate(), -sr.yaw_rate()) << "step " << i;
-    ASSERT_EQ(sl.pos.x, sr.pos.x) << "step " << i;
-    ASSERT_EQ(sl.pos.y, -sr.pos.y) << "step " << i;
-    ASSERT_EQ(sl.yaw, -sr.yaw) << "step " << i;
+      ASSERT_EQ(sl.vel_body.x, sr.vel_body.x) << "step " << i;
+      ASSERT_EQ(sl.vel_body.y, -sr.vel_body.y) << "step " << i;
+      ASSERT_EQ(sl.yaw_rate(), -sr.yaw_rate()) << "step " << i;
+      ASSERT_EQ(sl.pos.x, sr.pos.x) << "step " << i;
+      ASSERT_EQ(sl.pos.y, -sr.pos.y) << "step " << i;
+      ASSERT_EQ(sl.yaw, -sr.yaw) << "step " << i;
 
-    // Left and right swap across the mirror, front and rear do not.
-    ASSERT_EQ(sl.alpha_lag[kFrontLeft], -sr.alpha_lag[kFrontRight])
-        << "step " << i;
-    ASSERT_EQ(sl.alpha_lag[kRearLeft], -sr.alpha_lag[kRearRight])
-        << "step " << i;
-    ASSERT_EQ(dl.fz[kFrontLeft], dr.fz[kFrontRight]) << "step " << i;
-    ASSERT_EQ(dl.fz[kRearLeft], dr.fz[kRearRight]) << "step " << i;
-    ASSERT_EQ(dl.fy[kFrontLeft], -dr.fy[kFrontRight]) << "step " << i;
-    ASSERT_EQ(dl.fx[kFrontLeft], dr.fx[kFrontRight]) << "step " << i;
-    ASSERT_EQ(dl.ay, -dr.ay) << "step " << i;
-    ASSERT_EQ(dl.ax, dr.ax) << "step " << i;
+      // The servo is odd in the command; the battery does not know which way
+      // the car is turning.
+      ASSERT_EQ(sl.steer, -sr.steer) << "step " << i;
+      ASSERT_EQ(sl.steer_rate, -sr.steer_rate) << "step " << i;
+      ASSERT_EQ(sl.soc, sr.soc) << "step " << i;
+      ASSERT_EQ(sl.pack_v, sr.pack_v) << "step " << i;
+
+      // Left and right swap across the mirror, front and rear do not.
+      ASSERT_EQ(sl.alpha_lag[kFrontLeft], -sr.alpha_lag[kFrontRight])
+          << "step " << i;
+      ASSERT_EQ(sl.alpha_lag[kRearLeft], -sr.alpha_lag[kRearRight])
+          << "step " << i;
+      ASSERT_EQ(sl.omega_w[kRearLeft], sr.omega_w[kRearRight])
+          << "step " << i;
+      ASSERT_EQ(dl.fz[kFrontLeft], dr.fz[kFrontRight]) << "step " << i;
+      ASSERT_EQ(dl.fz[kRearLeft], dr.fz[kRearRight]) << "step " << i;
+      ASSERT_EQ(dl.fy[kFrontLeft], -dr.fy[kFrontRight]) << "step " << i;
+      ASSERT_EQ(dl.fx[kFrontLeft], dr.fx[kFrontRight]) << "step " << i;
+      ASSERT_EQ(dl.fx[kRearLeft], dr.fx[kRearRight]) << "step " << i;
+      ASSERT_EQ(dl.ay, -dr.ay) << "step " << i;
+      ASSERT_EQ(dl.ax, dr.ax) << "step " << i;
+    }
   }
+}
+
+// The servo invariant: the achieved angle does not move before the command
+// does, and never leads it by more than the second-order overshoot fraction
+// exp(-pi zeta / sqrt(1 - zeta^2)). An underdamped servo genuinely
+// overshoots, so asserting achieved <= commanded would be asserting the
+// wrong physics; the bound is what a linear servo cannot exceed (ADR-0031).
+TEST(InvariantsL2, TheAchievedSteerNeverLeadsTheCommandBeyondTheBound) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(5.0);
+
+  // Before any command: not a twitch.
+  for (int i = 0; i < 200; ++i) {
+    model->step(s, DriveInput{0.0, 0.0}, kDt, nullptr);
+    ASSERT_EQ(s.steer, 0.0) << "step " << i;
+    ASSERT_EQ(s.steer_rate, 0.0) << "step " << i;
+  }
+
+  const double cmd = 0.20;
+  const double zeta = p.steer_damping;
+  const double overshoot =
+      std::exp(-slipx::kPi * zeta / std::sqrt(1.0 - zeta * zeta));
+
+  double peak = 0.0;
+  for (int i = 0; i < 2000; ++i) {
+    model->step(s, DriveInput{cmd, 0.0}, kDt, nullptr);
+    peak = std::fmax(peak, s.steer);
+    ASSERT_LE(s.steer, cmd * (1.0 + overshoot) + 1e-9) << "step " << i;
+    ASSERT_GE(s.steer, -1e-12) << "a step from rest never undershoots zero";
+  }
+
+  // And the overshoot is real: at damping 0.7 the peak sits a few percent
+  // over the command, or the servo is not the underdamped system it claims.
+  EXPECT_GT(peak, 1.01 * cmd);
+  EXPECT_NEAR(s.steer, cmd, 1e-6) << "settled on the command in the end";
 }
 
 // The four wheel loads sum to the vehicle weight at every step of a violent
@@ -984,10 +1041,24 @@ TEST(InvariantsL2, NoTyreEverExceedsItsFrictionBudget) {
 // monotonicity, which is how this case was first written.
 TEST(InvariantsL2, ARaisedCoGLiftsAWheelAtALowerSpeed) {
   double previous_speed = 1e9;
-  for (const double h : {0.12, 0.14, 0.17, 0.21}) {
+  for (const double h : {0.14, 0.16, 0.18, 0.21}) {
     VehicleParams p = reference_params();
     p.h_cog = h;
     p.steer_max = 0.6;
+    // An effectively instant servo: the lowest height in the sweep only
+    // lifts on the sharp step-steer transient, which any realistic servo
+    // rounds off. This case is about CoG height, not the actuator, and the
+    // core deliberately accepts values the schema would not.
+    p.steer_bandwidth = 2000.0;
+    p.steer_rate_max = 500.0;
+    // A spool, so the speed hold keeps working near the limit. With the open
+    // default the unloading inner wheel caps the whole axle's drive (that is
+    // the open diff's teaching artefact), the car scrubs speed off, and the
+    // marginal heights never reach their lift threshold. The sweep also
+    // starts higher than it did before the drivetrain landed: the rear tyres
+    // now spend friction budget holding speed, so the transient peak lateral
+    // acceleration is honestly lower than the old four-wheel split gave.
+    p.differential = slipx::Differential::kSpool;
 
     // A tall car at half a radian of steer lifts at around 2 m/s, so the
     // sweep starts below that and steps finely: starting at 3 m/s puts every

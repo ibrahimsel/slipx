@@ -108,8 +108,14 @@ def test_a_single_track_run_records_no_per_wheel_quantity(l1_recording):
         assert all_nan(agent.diagnostics[name]), name
     for name in WHEEL_STATE:
         assert all_nan(agent.state[name]), name
-    for name in ("load_transfer_long", "load_transfer_lat"):
+    for name in ("load_transfer_long", "load_transfer_lat",
+                 "drive_torque", "pack_current"):
         assert all_nan(agent.diagnostics[name]), name
+
+    # No servo and no battery below L2 (ADR-0031): these must not arrive as a
+    # plausible zero or a nominal pack voltage nobody computed.
+    for name in ("steer_rate", "soc", "pack_v"):
+        assert all_nan(agent.state[name]), name
 
 
 def test_a_single_track_run_still_records_what_it_does_represent(l1_recording):
@@ -149,17 +155,31 @@ def test_a_double_track_run_records_every_contact_patch(l2_recording):
         assert no_nan(agent.state[f"Fz.{wheel}"])
         assert no_nan(agent.state[f"alpha_lag.{wheel}"])
         assert no_nan(agent.state[f"omega_w.{wheel}"])
-    for name in ("load_transfer_long", "load_transfer_lat"):
+    for name in ("load_transfer_long", "load_transfer_lat",
+                 "drive_torque", "pack_current"):
         assert no_nan(agent.diagnostics[name])
 
 
-def test_a_double_track_run_still_hides_what_no_tier_writes(l2_recording):
-    """The rows of the table that are about the future, asserted so that
-    landing CORE-09 or CORE-10 breaks a test rather than quietly shipping a
-    battery reading nobody modelled."""
+def test_a_double_track_run_records_the_actuators_and_the_battery(l2_recording):
+    """The rows that moved when ADR-0031 landed the servo and the battery:
+    present at L2, and the earlier test holds them absent below it, so no
+    battery reading ships from a tier that never modelled one."""
     agent = l2_recording.agents[0]
 
-    for name in ("soc", "pack_v", "steer_rate", "pitch", "roll",
+    for name in ("steer_rate", "soc", "pack_v"):
+        assert no_nan(agent.state[name]), name
+    # And the numbers mean what they claim: a driven run drains the pack.
+    assert agent.state["soc"][-1] < agent.state["soc"][0]
+    assert all(v > 0.0 for v in agent.state["pack_v"])
+
+
+def test_a_double_track_run_still_hides_what_no_tier_writes(l2_recording):
+    """The rows of the table that are about the future (suspension, the
+    vertical degree of freedom), asserted so that landing them breaks a test
+    rather than quietly shipping a reading nobody modelled."""
+    agent = l2_recording.agents[0]
+
+    for name in ("pitch", "roll",
                  "pos.z", "vel_body.z", "rates.x", "rates.y"):
         assert all_nan(agent.state[name]), name
 
@@ -190,8 +210,12 @@ def test_the_zeros_a_lower_tier_leaves_behind_are_not_recorded_as_zeros():
         ("alpha_lag.RR", 1, False),
         ("alpha_lag.RR", 2, True),
         ("omega_w.FL", 2, True),
-        ("soc", 2, False),
-        ("steer_rate", 2, False),
+        ("soc", 1, False),
+        ("soc", 2, True),
+        ("pack_v", 1, False),
+        ("pack_v", 2, True),
+        ("steer_rate", 1, False),
+        ("steer_rate", 2, True),
         ("roll", 2, False),
         ("rates.z", 0, True),
         ("vel_body.y", 0, True),
@@ -338,6 +362,9 @@ def test_the_rerun_plan_carries_every_contact_patch_at_l2(l2_recording):
     for wheel in sinks.WHEELS:
         assert f"/car/state/Fz/{wheel}" in entities
         assert f"/car/diagnostics/kappa/{wheel}" in entities
+    assert "/car/state/soc" in entities
+    assert "/car/state/pack_v" in entities
+    assert "/car/diagnostics/drive_torque" in entities
 
 
 def test_the_rerun_plan_drops_absent_frames_and_keeps_their_neighbours():

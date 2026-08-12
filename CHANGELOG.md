@@ -181,6 +181,82 @@ No reference hash moves: nothing here touches a numerical path, and
 `tools/check_conformance.py` was verified unchanged against the recorded
 rows.
 
+### Drivetrain and actuators: L2 is complete
+
+The four deliberate gaps in minimal L2, closed in one slice. Design and costs
+in
+[ADR-0031](docs/adr/0031-drivetrain-and-actuators-are-quasi-static-except-the-servo.md).
+
+- **Differentials and drive layouts** (CORE-11). Open, spool and
+  preloaded-LSD torque splits on 2WD front, 2WD rear or 4WD (locked centre,
+  50/50), replacing the equal four-wheel split, all in closed form inside
+  ADR-0027's two-pass structure with no wheel rotational state. The open
+  diff reproduces the no-yaw-moment behaviour the equal split was chosen
+  for, and its defining failure: a lifted inside wheel starves the whole
+  axle. The spool drives the inner wheel harder, scrubs while coasting and
+  pushes wide. **Braking goes through the driven axle only**: a 1/10-scale
+  car brakes through its motor, so there are no friction brakes and no brake
+  bias field, and the previous equal four-wheel braking split is gone.
+- **ESC** (CORE-08). A torque-speed curve stated at the wheels, scaled by
+  actual pack voltage, capped by `torque_per_amp * current_max`; braking
+  torque capped by the regen limit, which on the provisional numbers is
+  about 0.23 g and is the only brake the car has. `accel_max` and
+  `decel_max` remain command bounds. New diagnostics `drive_torque`,
+  `pack_current` and `esc_saturated` (NaN or false below L2).
+- **Battery** (CORE-09). Open-circuit voltage linear in state of charge
+  between `pack_v_empty` and `pack_v_full`, internal-resistance sag closed
+  in a fixed two passes, state of charge integrated from the terminal
+  current. `soc` becomes integrator state at L2; `pack_v` is written
+  algebraically each step. An ideal supply (equal endpoints, zero
+  resistance) reproduces the bare curve exactly, and the tests hold it to
+  exact equality.
+- **Steering servo** (CORE-10). `steer` and `steer_rate` become integrated
+  state: a slew-limited second-order lag with a hard travel stop, so
+  commanded and achieved steer are different numbers and both are visible.
+  An underdamped servo overshoots by up to
+  `exp(-pi zeta / sqrt(1 - zeta^2))`, and the invariant suite bounds it
+  rather than denying it.
+- `VehicleParams` gains the `layout` and `differential` enums,
+  `lsd_preload`, the ESC block (`torque_stall`, `omega_free`,
+  `torque_per_amp`, `drive_efficiency`, `current_max`,
+  `regen_current_max`), the battery block (`pack_nominal_v`, `pack_v_full`,
+  `pack_v_empty`, `pack_capacity_ah`, `pack_internal_resistance`) and the
+  servo constants (`steer_rate_max`, `steer_bandwidth`, `steer_damping`),
+  all with units and sign conventions in the bindings. The struct default
+  differential is **open** on the rear axle; the reference car's file stays
+  `spool`, because it describes a real class of car.
+- `Car.params_for_tier(L2)` fills the new fields from `limits.yaml` and
+  `dynamics.yaml` and refuses by name when a block is absent, including the
+  ADR-0030 case of current limits stated in amperes with no
+  `torque_per_amp` to turn them into torque. The reference car's
+  `limits.yaml` gains its `esc` block and pack endpoints, provisional like
+  everything else in it.
+- Recordings carry `steer_rate`, `soc` and `pack_v` from L2 (previously
+  reserved rows), plus the new diagnostics columns; below L2 they still
+  arrive absent, never as a plausible zero.
+- The manifest's parameter digest now covers the tyre blocks and `c_kappa`,
+  which it had missed, and every new field.
+- Three articles the tutorial series owed:
+  [differentials](docs/racing/10-differentials.md),
+  [the motor, the ESC and the battery](docs/racing/11-motor-esc-and-battery.md)
+  and [actuator lag](docs/racing/12-actuator-lag.md), with three new figures.
+  Concepts, not SlipX, as the series brief requires.
+
+### The six L2 reference rows move
+
+The L2 state vector grew from 10 to 13 and the drivetrain changed the
+forces, so every L2 hash moves, once, at the end of the slice. L0 and L1
+were re-measured under all three compilers and are byte-identical to before,
+as they must be: no code either tier executes changed. A previous L2 result
+is **not comparable** with one produced from this tree. Old and new values
+for x86-64 `RelWithDebInfo`, identical across GCC 11, GCC 13 and Clang 18
+and measured separately under each:
+
+| Case | Before | Now |
+|---|---|---|
+| L2 / rk4 | `5735026d574b9b59` | `1e6c4659f6d3193a` |
+| L2 / semi_implicit_euler | `81a36eefe4447697` | `bbb29ca838cb97ba` |
+
 ## 0.1.0a1
 
 First publication. Pre-release: the version number is the one part of a release

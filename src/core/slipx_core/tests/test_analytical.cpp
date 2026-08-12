@@ -1270,22 +1270,26 @@ TEST(L2, WheelSpeedsAgreeWithTheReportedSlipRatios) {
         << "wheel " << i;
   }
 
-  // Driving rather than coasting, so the slip ratio is positive.
-  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
-    EXPECT_GT(d.kappa[i], 0.0) << "wheel " << i;
-  }
+  // Driving through the rear axle (the default layout), so the rear slip
+  // ratios are positive and the undriven front wheels freewheel at exactly
+  // zero slip: no torque, no slip, by the quasi-static inversion.
+  EXPECT_GT(d.kappa[kRearLeft], 0.0);
+  EXPECT_GT(d.kappa[kRearRight], 0.0);
+  EXPECT_EQ(d.kappa[kFrontLeft], 0.0);
+  EXPECT_EQ(d.kappa[kFrontRight], 0.0);
 
   // The outer wheels of a left turn travel further and therefore faster.
   //
-  // Not as obvious as it looks, and worth the comment. The drive force is
-  // split equally, and the outer wheels carry more load and so have a higher
-  // slip stiffness, so they need LESS slip ratio for the same force. That
-  // works against the geometry. Inside the linear region the geometric term
-  // wins by an order of magnitude; past the limit it need not, which is the
-  // other reason this case pins its operating point.
+  // Not as obvious as it looks, and worth the comment. The open differential
+  // delivers equal force to both rear wheels, and the outer wheel carries
+  // more load and so has a higher slip stiffness, so it needs LESS slip
+  // ratio for the same force. That works against the geometry. Inside the
+  // linear region the geometric term wins by an order of magnitude; past the
+  // limit it need not, which is the other reason this case pins its
+  // operating point.
   EXPECT_GT(s.omega_w[kFrontRight], s.omega_w[kFrontLeft]);
   EXPECT_GT(s.omega_w[kRearRight], s.omega_w[kRearLeft]);
-  EXPECT_LT(d.kappa[kFrontRight], d.kappa[kFrontLeft]);
+  EXPECT_LT(d.kappa[kRearRight], d.kappa[kRearLeft]);
 }
 
 // The drive split is equal, so on a symmetric car it produces no yaw moment.
@@ -1319,58 +1323,68 @@ TEST(L2, HardAccelerationInAStraightLineProducesNoYaw) {
 }
 
 // Braking in a corner costs cornering force overall, and it does NOT cost it
-// evenly. Two mechanisms act at once and they pull in opposite directions at
-// the front:
+// evenly. Two mechanisms act at once and they pull in opposite directions:
 //
 //   the friction ellipse takes lateral force away from every tyre that is
-//   also being asked for longitudinal force, and
+//   also being asked for longitudinal force, which at L2 means the DRIVEN
+//   axle only, because a 1/10-scale car brakes through its motor (ADR-0031);
 //
 //   longitudinal load transfer moves vertical load onto the front axle, which
 //   RAISES the front tyres' budget and lowers the rear's.
 //
-// So the front can end up producing more lateral force under braking than
-// coasting, which is why trail braking helps a car turn in, while the rear
-// gives up most of its grip. The net is less total lateral acceleration. The
-// first version of this case asserted that every wheel loses lateral force and
-// was simply wrong about the car.
-TEST(L2, BrakingInACornerMovesGripForwardAndCostsLateralOverall) {
-  const VehicleParams p = reference_params();
+// On the rear-driven default both mechanisms punish the rear together: it is
+// braking AND being unloaded, while the front is braking not at all and
+// gaining load. That is why lifting off mid-corner rotates a rear-driven car
+// in, and it is the motor-braking version of the trail-braking story. The
+// regen limit is raised here so the braking is strong enough to engage the
+// ellipse; the provisional default's 0.23 g would not.
+TEST(L2, BrakingInACornerMovesGripForwardAndCostsTheRearItsLateral) {
+  VehicleParams p = reference_params();
+  p.torque_per_amp = 0.05;  // regen cap 2 N m: about 1.1 g of rear braking
 
   auto settle = [&](double accel_cmd) {
     auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
     VehicleState s = travelling(7.0);
+    // Settle into the corner first, so the servo has reached the steer angle
+    // and both runs differ only in the braking demand.
     StepDiagnostics d;
+    for (int i = 0; i < 1000; ++i) {
+      model->step(s, DriveInput{0.16, 0.0}, kDt, &d);
+    }
     for (int i = 0; i < 40; ++i) {
       model->step(s, DriveInput{0.16, accel_cmd}, kDt, &d);
     }
     return d;
   };
 
-  // Forty milliseconds only, so the two runs are at nearly the same speed and
-  // the comparison is about the friction budget rather than about one car
-  // having slowed down more.
+  // Forty milliseconds of braking only, so the two runs are at nearly the
+  // same speed and the comparison is about the friction budget rather than
+  // about one car having slowed down more.
   const StepDiagnostics coasting = settle(0.0);
   const StepDiagnostics braking = settle(-p.decel_max);
 
   // The headline: less lateral acceleration.
   EXPECT_LT(std::fabs(braking.ay), std::fabs(coasting.ay));
 
-  // Every tyre is braking, and at least one is at its budget, or the ellipse
-  // never engaged and this case is measuring something else.
-  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
-    EXPECT_LT(braking.fx[i], 0.0) << "wheel " << i;
-  }
-  EXPECT_TRUE(braking.tyre_saturated[0] || braking.tyre_saturated[1] ||
-              braking.tyre_saturated[2] || braking.tyre_saturated[3]);
+  // The rear wheels are braking and at least one is at its budget; the front
+  // wheels carry NO braking force at all, because there is nothing up there
+  // to brake with.
+  EXPECT_LT(braking.fx[kRearLeft], 0.0);
+  EXPECT_LT(braking.fx[kRearRight], 0.0);
+  EXPECT_EQ(braking.fx[kFrontLeft], 0.0);
+  EXPECT_EQ(braking.fx[kFrontRight], 0.0);
+  EXPECT_TRUE(braking.tyre_saturated[kRearLeft] ||
+              braking.tyre_saturated[kRearRight]);
 
   // Load moved forward.
   EXPECT_GT(braking.fz_front, coasting.fz_front);
   EXPECT_LT(braking.fz_rear, coasting.fz_rear);
 
   // And the grip followed it: the rear axle gives up most of its lateral
-  // force, the front does not.
-  EXPECT_LT(std::fabs(braking.fy_rear), 0.5 * std::fabs(coasting.fy_rear));
-  EXPECT_GT(std::fabs(braking.fy_front), std::fabs(coasting.fy_front));
+  // force, while the front, braking nothing and carrying more load, keeps
+  // everything it had.
+  EXPECT_LT(std::fabs(braking.fy_rear), 0.7 * std::fabs(coasting.fy_rear));
+  EXPECT_GE(std::fabs(braking.fy_front), std::fabs(coasting.fy_front));
 }
 
 // No slip angle, no load and no arithmetic anywhere in the tier may produce a
@@ -1408,22 +1422,23 @@ TEST(L2, AWheelLiftingRoundATightCornerProducesNoNaN) {
 // double-track model yaw under asymmetric braking, and a bicycle model has no
 // way to produce it at all.
 //
-// It is invisible in every symmetric case, because the drive split is equal
-// and the two sides cancel exactly. It only appears once the left and right
-// tyres deliver different longitudinal force, which happens when one side is
-// nearer its friction budget than the other. So this case brakes hard in a
-// hard corner, checks that the asymmetry is really there, and then closes the
-// moment balance against the yaw acceleration the model actually produced.
+// It is invisible in every symmetric case, and the open differential keeps it
+// invisible even in a corner, because equal torque both sides is the whole
+// point of an open diff. So this case runs a SPOOL, whose locked axle drives
+// the inner wheel harder in a corner (ADR-0031), checks the asymmetry is
+// really there, and then closes the moment balance against the yaw
+// acceleration the model actually produced.
 TEST(L2, ThePerWheelForcesExplainTheYawAccelerationIncludingTheirFxTerm) {
   VehicleParams p = reference_params();
   p.steer_max = 0.5;
+  p.differential = slipx::Differential::kSpool;
   auto model = VehicleModel::create(Tier::L2_DoubleTrack, p,
                                     slipx::Integrator::kSemiImplicitEuler);
 
   VehicleState s = travelling(9.0);
   StepDiagnostics d;
   for (int i = 0; i < 300; ++i) {
-    model->step(s, DriveInput{0.42, -p.decel_max}, kDt, &d);
+    model->step(s, DriveInput{0.42, 4.0}, kDt, &d);
   }
 
   // The asymmetry this case depends on. Without it the fx term cancels and
@@ -1437,12 +1452,15 @@ TEST(L2, ThePerWheelForcesExplainTheYawAccelerationIncludingTheirFxTerm) {
   // instantaneous value the reported forces describe.
   const double r_before = s.yaw_rate();
   const double tiny = 1e-7;
-  model->step(s, DriveInput{0.42, -p.decel_max}, tiny, &d);
+  model->step(s, DriveInput{0.42, 4.0}, tiny, &d);
   const double yaw_accel = (s.yaw_rate() - r_before) / tiny;
 
-  // The moment, rebuilt from the diagnostics rather than read from the model.
-  const double cos_d = std::cos(0.42);
-  const double sin_d = std::sin(0.42);
+  // The moment, rebuilt from the diagnostics rather than read from the model,
+  // at the ACHIEVED steer angle: the servo means the road wheels are not
+  // where the command asked (ADR-0031), and the forces were resolved through
+  // where they actually are.
+  const double cos_d = std::cos(s.steer);
+  const double sin_d = std::sin(s.steer);
   double mz = 0.0;
   for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
     const bool front = (i == kFrontLeft || i == kFrontRight);
@@ -1535,6 +1553,11 @@ TEST(L2, ALongerRelaxationLengthDelaysTheYawResponse) {
     VehicleParams p = reference_params();
     p.tyre_front.relax_length = sigma;
     p.tyre_rear.relax_length = sigma;
+    // A near-instant servo, so the response being measured is the tyre's lag
+    // and not the actuator's. Separating the two is exactly what this case
+    // is for; the servo has its own cases.
+    p.steer_bandwidth = 400.0;
+    p.steer_rate_max = 45.0;
 
     auto settled = [&] {
       auto m = VehicleModel::create(Tier::L2_DoubleTrack, p);
@@ -1567,6 +1590,585 @@ TEST(L2, ALongerRelaxationLengthDelaysTheYawResponse) {
   EXPECT_GT(quick, mid);
   EXPECT_GT(mid, slow);
   EXPECT_GT(quick - slow, 0.05) << "quick " << quick << " slow " << slow;
+}
+
+// --------------------------------------- L2 drivetrain and actuators
+//
+// The ADR-0031 slice: servo, ESC, battery and differential, each pinned
+// against its closed form or its defining behaviour. The ideal-supply
+// configuration (pack_v_full = pack_v_empty = pack_nominal_v, zero internal
+// resistance) appears throughout because it makes the voltage scale exactly
+// one, which turns "the curve" into an exact claim rather than a tolerance.
+
+// The servo dynamics are decoupled from the vehicle states by construction,
+// so the achieved angle must match the closed-form response of a linear
+// second-order system exactly as long as neither the slew limit nor the
+// travel stop engages. RK4 at 1 kHz integrates a 45 rad/s oscillator to well
+// below 1e-6 absolute, so the tolerance here is integration error, not slack.
+TEST(L2Servo, SmallStepResponseMatchesTheSecondOrderClosedForm) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  const double cmd = 0.10;  // peak unlimited rate about 2.6 rad/s, well
+                            // inside the 10 rad/s slew limit
+  VehicleState s = travelling(5.0);
+
+  const double wn = p.steer_bandwidth;
+  const double zeta = p.steer_damping;
+  const double wd = wn * std::sqrt(1.0 - zeta * zeta);
+  const auto closed_form = [&](double t) {
+    return cmd * (1.0 - std::exp(-zeta * wn * t) *
+                            (std::cos(wd * t) +
+                             (zeta / std::sqrt(1.0 - zeta * zeta)) *
+                                 std::sin(wd * t)));
+  };
+
+  int steps = 0;
+  for (const double t_check : {0.02, 0.05, 0.10, 0.30}) {
+    const int target = static_cast<int>(std::lround(t_check / kDt));
+    for (; steps < target; ++steps) {
+      model->step(s, DriveInput{cmd, 0.0}, kDt, nullptr);
+    }
+    EXPECT_NEAR(s.steer, closed_form(t_check), 1e-6) << "at t " << t_check;
+  }
+}
+
+// A command too large for the servo's slew rate makes the angle ramp at the
+// limit rather than follow the second-order shape: the defining signature of
+// a rate-limited actuator, and the reason a fast chicane at 1/10 scale is
+// steered slower than the controller asked.
+//
+// The servo here is deliberately stiffer than the provisional default. At
+// 45 rad/s of bandwidth the damping term holds the rate under the slew limit
+// for all but a few milliseconds of the largest legal step, so the default
+// servo is bandwidth-limited, not slew-limited; a stiff one winds the rate
+// state well past the limit and holds a clean plateau there.
+TEST(L2Servo, ALargeStepIsSlewRateLimited) {
+  VehicleParams p = reference_params();
+  p.steer_bandwidth = 200.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(5.0);
+  double previous = s.steer;
+  double max_slope = 0.0;
+  for (int i = 0; i < 36; ++i) {
+    model->step(s, DriveInput{0.40, 0.0}, kDt, nullptr);
+    const double slope = (s.steer - previous) / kDt;
+    max_slope = std::fmax(max_slope, slope);
+    // The limit is a limit: the angle never moves faster than max_rate, at
+    // any step, whatever the internal rate state wound up to.
+    ASSERT_LE(slope, p.steer_rate_max + 1e-9) << "step " << i;
+    previous = s.steer;
+  }
+
+  // Not there yet after 36 ms: 0.4 rad at 10 rad/s takes 40 ms, although the
+  // unlimited 200 rad/s response would long since have arrived. The ramp is
+  // what a rate limit looks like.
+  EXPECT_LT(s.steer, 0.37);
+
+  // And the limit genuinely engaged rather than the command being too small
+  // to reach it: the plateau runs at max_rate.
+  EXPECT_GT(max_slope, 0.99 * p.steer_rate_max);
+}
+
+// The mechanical end stop is inelastic: the rack arrives and stops dead. The
+// command is clipped to travel, so the only way to reach the stop is the
+// servo's own overshoot, and an underdamped servo commanded to full lock
+// overshoots by exp(-pi zeta / sqrt(1 - zeta^2)) and therefore does reach it.
+//
+// The discriminating quantity is the RATE, not the angle. Without the rate
+// dying at the stop, the angle is pinned by the travel clamp anyway and looks
+// identical; what persists is a rate state reporting a mechanism moving into
+// a stop it is already resting against, which then has to be unwound before
+// the servo can come off the lock.
+TEST(L2Servo, TheTravelStopIsInelasticAndKillsTheRate) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  const double zeta = p.steer_damping;
+  const double overshoot =
+      std::exp(-slipx::kPi * zeta / std::sqrt(1.0 - zeta * zeta));
+  ASSERT_GT(p.steer_max * (1.0 + overshoot), p.steer_max)
+      << "an overdamped servo never reaches the stop and this case is void";
+
+  VehicleState s = travelling(5.0);
+  StepDiagnostics d;
+  // Command beyond the travel; it is clipped to steer_max on the way in, so
+  // the stop is reached by overshoot rather than by the command.
+  for (int i = 0; i < 600; ++i) {
+    model->step(s, DriveInput{2.0 * p.steer_max, 0.0}, kDt, &d);
+  }
+
+  EXPECT_EQ(s.steer, p.steer_max) << "the travel stop must hold the angle";
+  EXPECT_EQ(s.steer_rate, 0.0)
+      << "resting against an inelastic stop is not motion";
+
+  // And it is genuinely at rest rather than momentarily crossing zero: it
+  // stays there, step after step, with the command still pushing.
+  for (int i = 0; i < 50; ++i) {
+    model->step(s, DriveInput{2.0 * p.steer_max, 0.0}, kDt, &d);
+    ASSERT_EQ(s.steer, p.steer_max) << "step " << i;
+    ASSERT_EQ(s.steer_rate, 0.0) << "step " << i;
+  }
+
+  // The same on the other lock, because the stop is symmetric.
+  for (int i = 0; i < 600; ++i) {
+    model->step(s, DriveInput{-2.0 * p.steer_max, 0.0}, kDt, &d);
+  }
+  EXPECT_EQ(s.steer, -p.steer_max);
+  EXPECT_EQ(s.steer_rate, 0.0);
+}
+
+// The ESC's torque-speed curve, exactly, through the assembled tier: settle
+// at a speed, read the driven wheels' speeds out of the state, demand more
+// than the curve can give, and the delivered torque must equal the curve at
+// that speed capped by the current limit. Ideal supply, so the voltage scale
+// is exactly one and EXPECT_EQ means equal.
+TEST(L2Esc, DeliveredTorqueFollowsTheCurveAndTheCurrentCap) {
+  VehicleParams p = reference_params();
+  p.pack_v_full = p.pack_nominal_v;
+  p.pack_v_empty = p.pack_nominal_v;
+  p.pack_internal_resistance = 0.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  for (const double v : {2.0, 6.0, 10.0, 14.0}) {
+    VehicleState s = travelling(v);
+    StepDiagnostics d;
+    for (int i = 0; i < 2000; ++i) {
+      model->step(s, DriveInput{0.0, hold_speed(s, v)}, kDt, &d);
+    }
+
+    // The budget the next step must grant, from the state it will read.
+    const double omega_mean =
+        0.5 * (s.omega_w[slipx::kRearLeft] + s.omega_w[slipx::kRearRight]);
+    const double curve =
+        p.torque_stall * (1.0 - omega_mean / p.omega_free);
+    const double expected =
+        std::fmin(curve, p.torque_per_amp * p.current_max);
+
+    model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+    EXPECT_EQ(d.drive_torque, expected) << "at " << v << " m/s";
+    EXPECT_TRUE(d.esc_saturated) << "the demand of 1.4 N m exceeds the "
+                                    "budget everywhere in this sweep";
+    EXPECT_FALSE(d.accel_saturated) << "accel_max itself was not exceeded";
+  }
+}
+
+// At launch the curve is worth its stall value and the current limit is what
+// actually binds: 1.2 N m against a 2.0 N m stall on the provisional set.
+// This is the observable difference between a torque-limited and a
+// current-limited drivetrain, and it is why the limit is a schema field.
+TEST(L2Esc, TheCurrentLimitBindsAtLaunch) {
+  VehicleParams p = reference_params();
+  p.pack_v_full = p.pack_nominal_v;
+  p.pack_v_empty = p.pack_nominal_v;
+  p.pack_internal_resistance = 0.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = at_rest();
+  StepDiagnostics d;
+  model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+
+  EXPECT_EQ(d.drive_torque, p.torque_per_amp * p.current_max);
+  EXPECT_TRUE(d.esc_saturated);
+  EXPECT_LT(d.drive_torque, p.torque_stall) << "the curve did not bind";
+}
+
+// Braking is regen, regen has its own limit, and that limit is the only
+// brake the car has (ADR-0031). decel_max remains a command bound; on the
+// provisional numbers the regen cap of 0.4 N m is about 0.23 g, which is
+// weak and honestly so.
+TEST(L2Esc, BrakingIsCappedByTheRegenLimitNotDecelMax) {
+  VehicleParams p = reference_params();
+  p.pack_v_full = p.pack_nominal_v;
+  p.pack_v_empty = p.pack_nominal_v;
+  p.pack_internal_resistance = 0.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(8.0);
+  StepDiagnostics d;
+  model->step(s, DriveInput{0.0, -p.decel_max}, kDt, &d);
+
+  EXPECT_EQ(d.drive_torque, -p.torque_per_amp * p.regen_current_max);
+  EXPECT_TRUE(d.esc_saturated);
+  EXPECT_FALSE(d.accel_saturated) << "-decel_max is a legal command; the "
+                                     "ESC is what could not deliver it";
+
+  // About 0.23 g, delivered through the rear axle only.
+  const double decel = d.drive_torque / (p.wheel_radius * p.mass);
+  EXPECT_NEAR(decel, -2.29, 0.05);
+}
+
+// The battery, isolated: driving sags the terminal voltage below the
+// open-circuit value and drains the state of charge monotonically; coasting
+// holds the voltage at open circuit exactly, because no power is flowing.
+TEST(L2Battery, SagUnderLoadAndMonotoneSocDecay) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  const auto ocv = [&](double soc) {
+    return p.pack_v_empty + soc * (p.pack_v_full - p.pack_v_empty);
+  };
+
+  VehicleState s = travelling(4.0);
+  StepDiagnostics d;
+  double soc_prev = s.soc;
+  int sagging_steps = 0;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+    // Sag needs current, and the battery current is the electrical power
+    // over the voltage, so a stalled wheel draws nothing: the very first
+    // step, taken at zero wheel speed, sags nothing and that is the model
+    // rather than a bug (ADR-0031).
+    if (d.pack_current > 0.0) {
+      ASSERT_LT(s.pack_v, ocv(s.soc)) << "step " << i;
+      ++sagging_steps;
+    }
+    ASSERT_LE(s.soc, soc_prev) << "step " << i;
+    soc_prev = s.soc;
+  }
+  EXPECT_GT(sagging_steps, 2900) << "the run must actually have been under "
+                                    "load for the assertions to have bitten";
+  EXPECT_LT(s.soc, 1.0 - 1e-5) << "three seconds of full throttle must "
+                                  "visibly cost charge";
+
+  // Coasting: no demand, no current, no sag.
+  model->step(s, DriveInput{0.0, 0.0}, kDt, &d);
+  EXPECT_EQ(d.drive_torque, 0.0);
+  EXPECT_EQ(d.pack_current, 0.0);
+  EXPECT_EQ(s.pack_v, ocv(s.soc));
+}
+
+// A drained pack is a slower car: the open-circuit voltage falls with state
+// of charge, the voltage scale drops below one, and the whole curve comes
+// down with it. This is the mechanism that makes the last lap slower than
+// the first, and it must be visible in the delivered torque.
+TEST(L2Battery, ALowerStateOfChargeDeliversLessTorque) {
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  // 14 m/s, high enough on the curve that the current limit is not the
+  // binding cap at any state of charge here; at low speed it would hide the
+  // voltage effect entirely, which is itself asserted in the launch case.
+  const auto torque_at = [&](double soc) {
+    VehicleState s = travelling(14.0);
+    s.soc = soc;
+    // One settling step so the wheel speeds match the velocity, then read
+    // the delivered torque under full demand.
+    StepDiagnostics d;
+    model->step(s, DriveInput{0.0, 0.0}, kDt, &d);
+    model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+    return d.drive_torque;
+  };
+
+  const double full = torque_at(1.0);
+  const double half = torque_at(0.5);
+  const double low = torque_at(0.1);
+  EXPECT_GT(full, half);
+  EXPECT_GT(half, low);
+  EXPECT_GT(low, 0.0) << "a low pack is weak, not absent; there is no "
+                         "low-voltage cutoff in the model (ADR-0031)";
+}
+
+// The no-battery fixture: an ideal supply must reproduce the bare curve
+// EXACTLY, not within a woolly tolerance. This is the case that proves the
+// battery model composes with the ESC rather than leaking into it.
+TEST(L2Battery, AnIdealSupplyReproducesTheBareCurveExactly) {
+  VehicleParams p = reference_params();
+  p.pack_v_full = p.pack_nominal_v;
+  p.pack_v_empty = p.pack_nominal_v;
+  p.pack_internal_resistance = 0.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(9.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 400; ++i) {
+    model->step(s, DriveInput{0.0, hold_speed(s, 9.0)}, kDt, &d);
+  }
+  const double omega_mean =
+      0.5 * (s.omega_w[slipx::kRearLeft] + s.omega_w[slipx::kRearRight]);
+  model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+
+  const double curve = p.torque_stall * (1.0 - omega_mean / p.omega_free);
+  EXPECT_EQ(d.drive_torque,
+            std::fmin(curve, p.torque_per_amp * p.current_max));
+  EXPECT_EQ(s.pack_v, p.pack_nominal_v) << "no sag without resistance";
+}
+
+// Sag is not merely reported, it is FED BACK: the second pass re-evaluates the
+// torque budget at the sagged terminal voltage, so what the ESC delivers is
+// the curve at pack_v and not the curve at the open-circuit voltage. Skipping
+// the second pass leaves the two agreeing on the voltage and disagreeing on
+// the torque, which is why this case pins the torque against the reported
+// voltage rather than against a tolerance.
+//
+// A large internal resistance is used deliberately. At the provisional 20
+// mohm the two passes differ by about 10%, which a tolerance could swallow;
+// this makes the effect unmissable and the equality still exact.
+TEST(L2Battery, TheSaggedVoltageRescalesTheTorqueBudget) {
+  VehicleParams p = reference_params();
+  p.pack_internal_resistance = 0.08;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  // High enough on the curve that the curve binds rather than the current
+  // limit: below the knee the cap hides the voltage entirely.
+  const double v = 14.0;
+  VehicleState s = travelling(v);
+  StepDiagnostics d;
+  for (int i = 0; i < 2000; ++i) {
+    model->step(s, DriveInput{0.0, hold_speed(s, v)}, kDt, &d);
+  }
+
+  const double omega_mean =
+      0.5 * (s.omega_w[slipx::kRearLeft] + s.omega_w[slipx::kRearRight]);
+  const double ocv =
+      p.pack_v_empty + s.soc * (p.pack_v_full - p.pack_v_empty);
+
+  model->step(s, DriveInput{0.0, p.accel_max}, kDt, &d);
+
+  const auto curve_at = [&](double v_pack) {
+    const double scale = v_pack / p.pack_nominal_v;
+    return p.torque_stall * scale *
+           (1.0 - omega_mean / (p.omega_free * scale));
+  };
+
+  ASSERT_LT(s.pack_v, ocv) << "the case must actually have sagged";
+  ASSERT_LT(curve_at(ocv), p.torque_per_amp * p.current_max)
+      << "the curve must be the binding cap, not the current limit";
+
+  // The delivered torque is the curve at the SAGGED voltage, exactly.
+  EXPECT_EQ(d.drive_torque, curve_at(s.pack_v));
+  // And that is a materially different number from the curve at open circuit,
+  // so the equality above is not vacuous.
+  EXPECT_LT(d.drive_torque, 0.9 * curve_at(ocv));
+}
+
+// Drivetrain efficiency is a loss in BOTH directions: driving, the pack must
+// supply more than the wheels receive; regenerating, the pack recovers less
+// than the wheels give up. An efficiency that only divides is half a model,
+// and on an ideal supply the two cases pin exactly, because halving the
+// efficiency leaves the torque budget untouched and scales the pack current
+// by exactly two one way and one half the other.
+TEST(L2Battery, EfficiencyLosesPowerInBothDirections) {
+  const auto current_at = [](double efficiency, double accel_cmd) {
+    VehicleParams p = reference_params();
+    p.pack_v_full = p.pack_nominal_v;
+    p.pack_v_empty = p.pack_nominal_v;
+    p.pack_internal_resistance = 0.0;
+    p.drive_efficiency = efficiency;
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+    VehicleState s = travelling(8.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 2000; ++i) {
+      model->step(s, DriveInput{0.0, hold_speed(s, 8.0)}, kDt, &d);
+    }
+    model->step(s, DriveInput{0.0, accel_cmd}, kDt, &d);
+    return std::make_pair(d.pack_current, d.drive_torque);
+  };
+
+  const VehicleParams ref = reference_params();
+
+  // Driving: the same wheel torque, drawn through half the efficiency, is
+  // exactly twice the pack current.
+  const auto lossless_drive = current_at(1.0, ref.accel_max);
+  const auto lossy_drive = current_at(0.5, ref.accel_max);
+  ASSERT_GT(lossless_drive.first, 0.0);
+  EXPECT_EQ(lossy_drive.second, lossless_drive.second)
+      << "an ideal supply's budget must not depend on efficiency";
+  EXPECT_EQ(lossy_drive.first, 2.0 * lossless_drive.first);
+
+  // Regenerating: the same wheel torque, recovered through half the
+  // efficiency, returns exactly half the current to the pack.
+  const auto lossless_regen = current_at(1.0, -ref.decel_max);
+  const auto lossy_regen = current_at(0.5, -ref.decel_max);
+  ASSERT_LT(lossless_regen.first, 0.0) << "regen must charge the pack";
+  EXPECT_EQ(lossy_regen.second, lossless_regen.second);
+  EXPECT_EQ(lossy_regen.first, 0.5 * lossless_regen.first);
+}
+
+// The open differential: equal torque both sides of the driven axle, in a
+// corner where the loads are anything but equal. That equality is the no-yaw
+// -moment property the measured equal split of ADR-0027 demanded, now
+// produced by an actual differential model.
+TEST(L2Differential, AnOpenDiffDeliversEqualForceInACorner) {
+  const VehicleParams p = reference_params();  // open, rear drive
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(6.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.06, hold_speed(s, 6.0) + 0.3}, kDt, &d);
+  }
+  ASSERT_GT(d.fz[kRearRight], d.fz[kRearLeft]) << "the corner must load the "
+                                                  "outside for this to test "
+                                                  "anything";
+  EXPECT_GT(d.fx[kRearLeft], 0.0);
+  EXPECT_EQ(d.fx[kRearLeft], d.fx[kRearRight]);
+  EXPECT_EQ(d.fx[kFrontLeft], 0.0) << "nothing drives the front axle";
+  EXPECT_EQ(d.fx[kFrontRight], 0.0);
+}
+
+// And the open diff's defining failure: lift the inside wheel and the whole
+// axle delivers nothing, because the unloaded side can support no torque and
+// equal torque means the loaded side gets the same nothing. The teaching
+// artefact, asserted.
+TEST(L2Differential, AnOpenDiffIsHelplessWithAWheelInTheAir) {
+  VehicleParams p = reference_params();
+  p.h_cog = 0.18;  // tall enough to lift the inside rear in a hard corner
+  p.steer_max = 0.6;
+  p.steer_bandwidth = 2000.0;  // instant steer; the servo is not the point
+  p.steer_rate_max = 500.0;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(8.0);
+  StepDiagnostics d;
+  bool lifted_under_demand = false;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.5, 4.0}, kDt, &d);
+    if (d.fz[kRearLeft] == 0.0 && d.drive_torque > 0.0) {
+      lifted_under_demand = true;
+      EXPECT_EQ(d.fx[kRearLeft], 0.0) << "step " << i;
+      EXPECT_EQ(d.fx[kRearRight], 0.0)
+          << "the loaded wheel must be held to the lifted wheel's nothing";
+    }
+  }
+  ASSERT_TRUE(lifted_under_demand) << "the case never reached the condition "
+                                      "it exists to test";
+}
+
+// The spool: one axle speed, so the slower inner wheel runs the higher slip
+// ratio and drives harder. The force asymmetry is inboard, its yaw moment
+// fights the corner, and the sum still meets the demand.
+TEST(L2Differential, ASpoolDrivesTheInnerWheelHarder) {
+  VehicleParams p = reference_params();
+  p.differential = slipx::Differential::kSpool;
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+
+  VehicleState s = travelling(6.0);
+  StepDiagnostics d;
+  for (int i = 0; i < 3000; ++i) {
+    model->step(s, DriveInput{0.06, hold_speed(s, 6.0) + 0.3}, kDt, &d);
+  }
+  ASSERT_FALSE(d.tyre_saturated[kRearLeft] || d.tyre_saturated[kRearRight])
+      << "this case is about the constraint, not the friction cap";
+
+  // Left turn: the left wheels are inner and slower.
+  EXPECT_GT(d.fx[kRearLeft], d.fx[kRearRight]);
+  EXPECT_GT(d.kappa[kRearLeft], d.kappa[kRearRight]);
+
+  // The split still sums to what the ESC granted.
+  EXPECT_NEAR(d.fx[kRearLeft] + d.fx[kRearRight],
+              d.drive_torque / p.wheel_radius, 1e-9);
+}
+
+// Coasting, a spool scrubs: with no demand at all the locked axle drags the
+// outer wheel and drives the inner one, and the resulting yaw moment pushes
+// the car wide. An open diff does neither. This is the turn-in difference a
+// driver feels between the two, expressed as path radius.
+TEST(L2Differential, ASpoolScrubsAndUndersteersWhereAnOpenDiffRollsFree) {
+  const auto settled = [](slipx::Differential diff) {
+    VehicleParams p = reference_params();
+    p.differential = diff;
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    VehicleState s = travelling(5.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 8000; ++i) {
+      model->step(s, DriveInput{0.08, hold_speed(s, 5.0)}, kDt, &d);
+    }
+    struct Out {
+      double radius;
+      double fx_inner;
+      double fx_outer;
+    };
+    return Out{s.speed() / std::fabs(s.yaw_rate()), d.fx[kRearLeft],
+               d.fx[kRearRight]};
+  };
+
+  const auto open = settled(slipx::Differential::kOpen);
+  const auto spool = settled(slipx::Differential::kSpool);
+
+  // The scrub: inner wheel driving, outer wheel dragging, with only the
+  // speed-hold's trickle of demand.
+  EXPECT_GT(spool.fx_inner, spool.fx_outer);
+  EXPECT_LT(spool.fx_outer, 0.0) << "the outer wheel is dragged";
+
+  // And the car runs wider for the same steer: understeer push.
+  EXPECT_GT(spool.radius, 1.01 * open.radius)
+      << "open " << open.radius << " spool " << spool.radius;
+}
+
+// The preloaded LSD is a spool until the axle torque difference exceeds the
+// preload, and past that it transfers exactly the preload toward the slower
+// wheel. Both regimes pinned; the huge-preload case must be bit-identical to
+// the spool, because it takes the same code path with the same numbers.
+TEST(L2Differential, AnLsdIsASpoolInsideThePreloadAndTransfersItPastIt) {
+  const auto run = [](slipx::Differential diff, double preload) {
+    VehicleParams p = reference_params();
+    p.differential = diff;
+    p.lsd_preload = preload;
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    VehicleState s = travelling(6.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 4000; ++i) {
+      model->step(s, DriveInput{0.10, hold_speed(s, 6.0)}, kDt, &d);
+    }
+    return std::make_pair(s, d);
+  };
+
+  // Locked regime: a preload no corner can exceed.
+  const auto spool = run(slipx::Differential::kSpool, 0.0);
+  const auto locked = run(slipx::Differential::kLsd, 10.0);
+  EXPECT_EQ(spool.first.pos.x, locked.first.pos.x);
+  EXPECT_EQ(spool.first.pos.y, locked.first.pos.y);
+  EXPECT_EQ(spool.first.yaw, locked.first.yaw);
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_EQ(spool.second.fx[i], locked.second.fx[i]) << "wheel " << i;
+  }
+
+  // Slipping regime: a small preload, exceeded in this corner, so the axle
+  // holds exactly the preload's worth of force difference, slow side up.
+  const double preload = 0.02;
+  const auto slipping = run(slipx::Differential::kLsd, preload);
+  ASSERT_FALSE(slipping.second.tyre_saturated[kRearLeft] ||
+               slipping.second.tyre_saturated[kRearRight]);
+  const double diff_force =
+      slipping.second.fx[kRearLeft] - slipping.second.fx[kRearRight];
+  EXPECT_NEAR(diff_force * reference_params().wheel_radius, preload, 1e-12)
+      << "the clutch transfers the preload toward the slower inner wheel";
+}
+
+// The layouts: who gets driven, who freewheels. The 4WD centre is locked
+// 50/50 (ADR-0031), so under straight-line drive the two axles' forces
+// match.
+TEST(L2Differential, TheLayoutsDriveTheAxlesTheyName) {
+  const auto forces = [](slipx::DriveLayout layout) {
+    VehicleParams p = reference_params();
+    p.layout = layout;
+    auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+    VehicleState s = travelling(4.0);
+    StepDiagnostics d;
+    for (int i = 0; i < 300; ++i) {
+      model->step(s, DriveInput{0.0, 4.0}, kDt, &d);
+    }
+    return d;
+  };
+
+  const StepDiagnostics rwd = forces(slipx::DriveLayout::kRearWheelDrive);
+  EXPECT_GT(rwd.fx[kRearLeft], 0.0);
+  EXPECT_EQ(rwd.fx[kFrontLeft], 0.0);
+
+  const StepDiagnostics fwd = forces(slipx::DriveLayout::kFrontWheelDrive);
+  EXPECT_GT(fwd.fx[kFrontLeft], 0.0);
+  EXPECT_EQ(fwd.fx[kRearLeft], 0.0);
+
+  const StepDiagnostics awd = forces(slipx::DriveLayout::kAllWheelDrive);
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_GT(awd.fx[i], 0.0) << "wheel " << i;
+  }
+  EXPECT_NEAR(awd.fx[kFrontLeft] + awd.fx[kFrontRight],
+              awd.fx[kRearLeft] + awd.fx[kRearRight], 1e-9)
+      << "a locked centre splits 50/50";
 }
 
 }  // namespace

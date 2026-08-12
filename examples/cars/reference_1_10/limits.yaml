@@ -1,12 +1,12 @@
 # Actuator and electrical limits.
 #
 # Separate from dynamics.yaml because these are properties of the hardware
-# fitted: changing the servo or the battery changes this file and nothing else.
+# fitted: changing the servo, the ESC or the battery changes this file and
+# nothing else.
 #
-# Several fields here are validated but not yet consumed. The ESC and servo
-# models are CORE-08 and CORE-10 and arrive with L2 in P1. They are written now
-# so that a team measuring their car has somewhere to put the numbers, and so
-# that this directory does not need editing when L2 lands.
+# Everything here is consumed from L2 (ADR-0031): the servo constants, the
+# ESC torque-speed curve and the battery model all read from this file, and a
+# file missing any of them is refused for L2 with the field named.
 #
 # PROVISIONAL. See provenance.yaml.
 
@@ -26,16 +26,29 @@ steering:
 drivetrain:
   # At L0 and L1 these three are the whole drivetrain model. From L2 the ESC
   # torque-speed curve supersedes accel_max, which becomes a bound rather than
-  # the mechanism.
+  # the mechanism, and braking is motor braking capped by the regen current
+  # limit, which is usually far below what decel_max would allow.
   accel_max: 8.0     #                                             [m/s^2]
   decel_max: 12.0    # positive magnitude                          [m/s^2]
   v_max: 20.0        # mechanical top speed                          [m/s]
+
+esc:
+  # The torque-speed curve, stated at the WHEELS and at pack_nominal_v so no
+  # gear ratio or motor constant is needed (ADR-0030). With these numbers the
+  # current limit is what binds at launch: 1.2 N m of cap against a 2.0 N m
+  # stall, which is how most sensored ESCs are actually configured.
+  torque_stall: 2.0      # wheel torque at zero speed, full throttle [N m]
+  omega_free: 480.0      # wheel speed at zero drive torque        [rad/s]
+  torque_per_amp: 0.01   # wheel torque per ampere                 [N m/A]
+  efficiency: 0.85       # wheel power over battery power              [-]
 
 electrical:
   # Consumed from L2 (CORE-08, CORE-09). Battery sag is what makes the last
   # lap slower than the first; a car tuned without it is tuned for a battery
   # state that lasts thirty seconds.
   pack_nominal_v: 11.1            # 3S lithium polymer                 [V]
+  pack_v_full: 12.6               # open-circuit voltage at soc 1      [V]
+  pack_v_empty: 9.9               # open-circuit floor at soc 0        [V]
   pack_capacity_ah: 5.2           #                                  [A h]
   pack_internal_resistance: 0.020 #                                  [ohm]
   current_max: 120.0              #                                    [A]

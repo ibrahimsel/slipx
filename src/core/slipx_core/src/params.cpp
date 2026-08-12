@@ -77,10 +77,43 @@ const char* validate(const VehicleParams& p) {
     return "decel_max must be positive; it is a magnitude [m/s^2]";
   if (!(p.v_max > 0.0)) return "v_max must be positive [m/s]";
 
+  if (!(p.lsd_preload >= 0.0)) return "lsd_preload must not be negative [N m]";
+
+  // The ESC and battery block, used from L2. Every one of these divides
+  // something or scales a torque, so a zero or a sign error here is a NaN or
+  // a backwards car three frames later.
+  if (!(p.torque_stall > 0.0)) return "torque_stall must be positive [N m]";
+  if (!(p.omega_free > 0.0)) return "omega_free must be positive [rad/s]";
+  if (!(p.torque_per_amp > 0.0))
+    return "torque_per_amp must be positive [N m/A]";
+  if (!(p.drive_efficiency > 0.0 && p.drive_efficiency <= 1.0))
+    return "drive_efficiency must be in (0, 1] [-]";
+  if (!(p.current_max > 0.0)) return "current_max must be positive [A]";
+  if (!(p.regen_current_max >= 0.0))
+    return "regen_current_max must not be negative [A]";
+
+  if (!(p.pack_nominal_v > 0.0)) return "pack_nominal_v must be positive [V]";
+  if (!(p.pack_capacity_ah > 0.0))
+    return "pack_capacity_ah must be positive [A h]";
+  if (!(p.pack_internal_resistance >= 0.0))
+    return "pack_internal_resistance must not be negative [ohm]";
+  // Non-strict on purpose: pack_v_full = pack_v_empty = pack_nominal_v with
+  // zero internal resistance is the ideal-supply configuration, which is both
+  // a legitimate model and the no-battery test fixture (ADR-0031).
+  if (!(p.pack_v_empty > 0.0)) return "pack_v_empty must be positive [V]";
+  if (!(p.pack_v_empty <= p.pack_nominal_v && p.pack_nominal_v <= p.pack_v_full))
+    return "pack voltages must be ordered: v_empty <= v_nominal <= v_full [V]";
+
   if (!(p.steer_max > 0.0))
     return "steer_max must be positive; it is a symmetric magnitude [rad]";
   if (!(p.steer_max < 0.5 * kPi))
     return "steer_max must be below pi/2 [rad]; degrees are not SI";
+  if (!(p.steer_rate_max > 0.0))
+    return "steer_rate_max must be positive [rad/s]";
+  if (!(p.steer_bandwidth > 0.0))
+    return "steer_bandwidth must be positive [rad/s]";
+  if (!(p.steer_damping > 0.0))
+    return "steer_damping must be positive [-]";
 
   if (!(p.drag_coeff >= 0.0)) return "drag_coeff must not be negative [kg/m]";
   if (!(p.roll_resist >= 0.0)) return "roll_resist must not be negative [-]";

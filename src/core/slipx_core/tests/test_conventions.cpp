@@ -319,25 +319,80 @@ TEST(ConventionsL2, EverythingTheTierRepresentsIsANumber) {
   EXPECT_FALSE(std::isnan(d.ay));
 }
 
-// And the things it still cannot represent stay NaN or zero as documented,
-// rather than acquiring a plausible-looking value because the tier grew.
-// steer_rate, soc and pack_v belong to CORE-08 to CORE-10 and have not landed;
-// this case is what will fail, correctly, when they do.
-TEST(ConventionsL2, TheActuatorAndBatteryStatesAreStillUntouched) {
+// The actuator and battery states are live at this tier now (ADR-0031), so
+// the discipline is the reverse of what it was while they were CORE-08 to
+// CORE-10 promises: they must move, plausibly, and the states the tier still
+// does not represent must stay exactly where they were.
+TEST(ConventionsL2, TheActuatorAndBatteryStatesAreAlive) {
   auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
   VehicleState s = travelling(6.0);
   const VehicleState before = s;
   StepDiagnostics d;
-  for (int i = 0; i < 200; ++i) {
+
+  // Early in the transient the servo is still travelling, so the rate state
+  // is visibly nonzero.
+  for (int i = 0; i < 20; ++i) {
+    model->step(s, DriveInput{0.3, 4.0}, kDefaultDt, &d);
+  }
+  EXPECT_GT(s.steer_rate, 0.0) << "the servo is mid-swing towards +0.3";
+  EXPECT_GT(s.steer, 0.0);
+  EXPECT_LT(s.steer, 0.3) << "and has not arrived yet";
+
+  for (int i = 0; i < 380; ++i) {
     model->step(s, DriveInput{0.3, 4.0}, kDefaultDt, &d);
   }
 
-  EXPECT_EQ(s.steer_rate, 0.0) << "no servo model at this tier (CORE-10)";
-  EXPECT_EQ(s.steer, 0.3) << "the road wheel follows the command exactly";
-  EXPECT_EQ(s.soc, before.soc) << "no battery model at this tier (CORE-09)";
-  EXPECT_EQ(s.pack_v, before.pack_v);
+  // Settled: the achieved angle is at the command to servo accuracy, but it
+  // got there through dynamics rather than assignment.
+  EXPECT_NEAR(s.steer, 0.3, 1e-3);
+  EXPECT_NEAR(s.steer_rate, 0.0, 0.05);
+
+  // The battery has been paying for the drive the whole time. The terminal
+  // voltage sits below the full-charge open-circuit 12.6 V (sag), and above
+  // the fresh state's placeholder 11.1 V, which is nominal rather than an
+  // open-circuit value and is overwritten on the first step.
+  EXPECT_LT(s.soc, before.soc) << "driving must drain the pack (CORE-09)";
+  EXPECT_LT(s.pack_v, 12.6) << "terminal voltage must sag below the OCV";
+  EXPECT_GT(s.pack_v, 11.1);
+  EXPECT_GT(s.soc, 0.99) << "but 0.4 s of driving is not a whole pack";
+
   EXPECT_EQ(s.roll, 0.0) << "no suspension at this tier";
   EXPECT_EQ(s.pitch, 0.0);
+}
+
+// The regen sign conventions, end to end (ADR-0031): braking while rolling
+// forward is a negative wheel torque, a negative battery current (the pack is
+// being charged), a rising state of charge, and a negative slip ratio on the
+// driven wheels only, because the motor is the only brake the car has.
+TEST(ConventionsL2, RegenBrakingCarriesTheChargeSigns) {
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, reference_params());
+  VehicleState s = travelling(10.0);
+  s.soc = 0.8;  // headroom to charge into
+  StepDiagnostics d;
+
+  // A moment of coasting so the wheel speeds match the velocity.
+  for (int i = 0; i < 50; ++i) {
+    model->step(s, DriveInput{0.0, 0.0}, kDefaultDt, &d);
+  }
+  const double soc_before = s.soc;
+
+  for (int i = 0; i < 500; ++i) {
+    model->step(s, DriveInput{0.0, -6.0}, kDefaultDt, &d);
+  }
+
+  EXPECT_LT(d.drive_torque, 0.0) << "braking is negative wheel torque";
+  EXPECT_LT(d.pack_current, 0.0) << "regen charges: negative terminal current";
+  EXPECT_GT(s.soc, soc_before) << "the charge went somewhere";
+  EXPECT_TRUE(d.esc_saturated) << "-6 m/s^2 wants 1.05 N m against a 0.4 N m "
+                                  "regen cap, so the limit must have engaged";
+
+  EXPECT_LT(d.fx[slipx::kRearLeft], 0.0);
+  EXPECT_LT(d.fx[slipx::kRearRight], 0.0);
+  EXPECT_EQ(d.fx[slipx::kFrontLeft], 0.0) << "no friction brakes anywhere";
+  EXPECT_EQ(d.fx[slipx::kFrontRight], 0.0);
+  EXPECT_LT(d.kappa[slipx::kRearLeft], 0.0) << "braking slip is negative";
+  EXPECT_EQ(d.kappa[slipx::kFrontLeft], 0.0) << "a freewheeling wheel has "
+                                                "no slip at all";
 }
 
 // The lateral load transfer sign, through the assembled tier. Positive ay is a

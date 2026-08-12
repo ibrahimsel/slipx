@@ -39,9 +39,12 @@ void reset_diagnostics(StepDiagnostics& d, Tier tier) {
   d.ay = nan;
   d.load_transfer_long = nan;
   d.load_transfer_lat = nan;
+  d.drive_torque = nan;
+  d.pack_current = nan;
   d.steer_saturated = false;
   d.accel_saturated = false;
   d.speed_saturated = false;
+  d.esc_saturated = false;
   d.tier = static_cast<int>(tier);
 }
 

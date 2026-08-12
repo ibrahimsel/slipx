@@ -20,12 +20,11 @@ parameter is identifiable from a manoeuvre driven in a car park with the
 sensors already on a competition car, so there is nothing to guess.
 
 **Early days.** Three of the four tiers are built, and a car directory
-parameterises all three: schema 0.2.0 added the longitudinal slip stiffness
-the double-track tier was refusing to guess. The double-track tier is the
-minimal one, with no drivetrain or actuator models yet. The extended tier
-raises rather than handing back a simpler model. No parameter set here has
-been fitted to a real vehicle, and the tooling says so every time it loads
-one.
+parameterises all three: schema 0.2.0 carries the longitudinal slip
+stiffness, the ESC curve, the battery endpoints and the servo constants the
+double-track tier consumes. The extended tier raises rather than handing
+back a simpler model. No parameter set here has been fitted to a real
+vehicle, and the tooling says so every time it loads one.
 
 ## Quickstart
 
@@ -81,15 +80,19 @@ so moving between them is one argument rather than a rewrite.
 |---|---|---|---|
 | `L0_Kinematic` | Kinematic bicycle | 4 | built |
 | `L1_Bicycle` | Dynamic bicycle, linear tyres | 6 | built |
-| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres, relaxation | 10 | built, minimal |
+| `L2_DoubleTrack` | Double-track, load transfer, MF-lite tyres, relaxation, drivetrain | 13 | built |
 | `L3_Extended` | Adds thermal and suspension | | raises |
 
 `L2_DoubleTrack` has four contact patches, per-corner vertical loads, MF-lite
-with a real peak and falling branch, a combined-slip friction ellipse and a
-tyre relaxation transient. It has no differential, ESC, battery or steering
-servo, it uses parallel steer rather than Ackermann, and it has no wheel
-rotational state, so a locked or spinning wheel is not representable. Each of
-those is named in the source.
+with a real peak and falling branch, a combined-slip friction ellipse, a tyre
+relaxation transient, and the drivetrain: an open, spool or preloaded-LSD
+differential on a 2WD or 4WD layout, an ESC torque-speed curve with current
+and regen limits, battery sag and state of charge, and a slew-limited
+second-order steering servo, so commanded and achieved steer are separate
+numbers. Braking is motor braking through the driven axle, capped by the
+regen limit. It uses parallel steer rather than Ackermann, and it has no
+wheel rotational state, so a locked or spinning wheel is not representable.
+Each of those is named in the source.
 
 Below `L2_DoubleTrack` nothing represents CoG height, weight distribution,
 differential or tyre compound, so those parameters correctly have no effect.
@@ -223,7 +226,7 @@ Verification runs in four layers.
   parameter set with a validation report, the honest phrasing is *physically
   structured and identifiable*, not *validated*.
 
-The first three are in place: 221 C++ tests and 176 Python tests, including an
+The first three are in place: 240 C++ tests and 194 Python tests, including an
 allocation counter proving `step` never touches the allocator. Every shipped
 parameter set carries a `measured`, `identified` or `provisional` label, and
 the tooling prints it rather than leaving it in the documentation.
@@ -235,7 +238,9 @@ themselves, for somebody arriving from robotics or computer science rather than
 vehicle dynamics:
 [**Autonomous racing, from the ground up**](https://github.com/ibrahimsel/slipx/tree/main/docs/racing).
 Slip angles, load transfer, understeer and oversteer, the racing line, the g-g
-diagram, combined slip. A guide to the subject, not a manual for this library.
+diagram, combined slip, differentials, and where a small electric car's
+acceleration and braking actually come from. A guide to the subject, not a
+manual for this library.
 
 ## Where the reasoning lives
 

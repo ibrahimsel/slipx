@@ -22,6 +22,16 @@ Separate idea from the Ackermann angle, confusingly.
 corner. A *geometric* apex sits at the middle of the corner; a *late* apex sits
 further round. See [the racing line](05-the-racing-line.md).
 
+**Back-EMF**. The voltage a motor generates by turning, proportional to speed.
+It is what makes the torque-speed line fall, and what makes regenerative
+braking fade to nothing at a standstill. See
+[article 11](11-motor-esc-and-battery.md).
+
+**Bandwidth** (`wn`). For an actuator, the natural frequency of its control
+loop: how fast it converges on a new setpoint when it is not rate limited.
+Distinct from the slew rate, and the two limits look completely different in
+logged data. See [actuator lag](12-actuator-lag.md).
+
 **Body slip angle** (also **sideslip angle**). The angle between where the car
 is pointing and where its centre of gravity is actually travelling,
 `atan2(v_y, v_x)`. Distinct from a tyre's slip angle, and usually smaller.
@@ -51,6 +61,17 @@ useful number about a tyre. See [tyres and grip](01-tyres-and-grip.md).
 which the car is **unstable** and must be actively stabilised. Has no analogue
 for an understeering car.
 
+**Damping ratio** (`zeta`). Dimensionless, how an actuator or any second-order
+system converges: below 1 it overshoots, at 1 it does not. 0.7 is the usual
+compromise and gives 4.6 per cent overshoot. See
+[actuator lag](12-actuator-lag.md).
+
+**Differential**. The device reconciling one drive shaft with two wheels that
+must turn at different speeds in a corner. An **open** differential equalises
+torque and leaves the speeds free; a **spool** or locked axle equalises speed
+and leaves the torques free; a **limited-slip** differential equalises torque
+until a preload is exceeded. See [differentials](10-differentials.md).
+
 **Double track model**. A model with all four wheels represented separately,
 so load transfer and per-corner tyre behaviour exist. See
 [vehicle models](03-vehicle-models.md).
@@ -58,6 +79,11 @@ so load transfer and per-corner tyre behaviour exist. See
 **Downforce**. Aerodynamic load pressing the car onto the road, increasing
 grip with speed. Negligible at 1/10 scale below roughly 15 m/s, and the main
 reason full-size racing intuitions do not transfer directly.
+
+**ESC** (electronic speed controller). The power stage between battery and
+motor. At 1/10 scale it also owns the drive current limit, the regenerative
+current limit and, since there are no friction brakes, the entire braking
+system. See [article 11](11-motor-esc-and-battery.md).
 
 **Friction ellipse** (loosely, **friction circle**). The closed curve bounding
 the combined longitudinal and lateral force one tyre can make. Braking and
@@ -112,6 +138,12 @@ where most F1TENTH teams start. Introduced in Coulter, "Implementation of the
 Pure Pursuit Path Tracking Algorithm", Carnegie Mellon Robotics Institute
 technical report, 1992.
 
+**Regenerative braking**. Braking by running the drive motor as a generator.
+The only brake a 1/10-scale car has, weak because the pack accepts far less
+current than it delivers and because it acts through the driven wheels alone,
+and it fades to zero as the car stops. See
+[article 11](11-motor-esc-and-battery.md).
+
 **Relaxation length** (`sigma`). The rolling distance a tyre needs for lateral
 force to reach about 63 per cent of its steady value. A few centimetres, giving
 a lag of `sigma/v`. See [article 8](08-tyre-relaxation.md).
@@ -129,6 +161,11 @@ between the front and rear axles on a car with suspension. The main tool for
 adjusting limit balance on a full-size car, and largely absent at 1/10 scale
 where suspension travel is short or nonexistent.
 
+**Slew rate limit**. A hard ceiling on how fast an actuator's output can
+change, in rad/s. A hobby servo's "0.10 s per 60 degrees" is one, in disguise.
+It either engages or it does not, and once it does the system is no longer
+linear. See [actuator lag](12-actuator-lag.md).
+
 **Slip angle** (`alpha`). The angle between where a wheel points and where it
 is travelling. Force is a consequence of this, never of steering angle on its
 own. See [tyres and grip](01-tyres-and-grip.md).
@@ -142,12 +179,22 @@ heading error at the front axle, from the Stanford DARPA Grand Challenge entry.
 See Thrun et al., "Stanley: The robot that won the DARPA Grand Challenge",
 *Journal of Field Robotics*, 2006.
 
+**State of charge** (`soc`). How full a battery is, from 1 to 0. Open-circuit
+voltage falls with it, and a motor's torque and free speed both scale with
+voltage, so peak power goes as the square: this is why the last lap is slower
+than the first. See [article 11](11-motor-esc-and-battery.md).
+
 **Static stability factor**. `t / 2h`, the rollover threshold in units of g.
 Quoted for road cars in safety ratings.
 
 **Skidpad**. A constant-radius circle driven at slowly increasing speed, the
 standard manoeuvre for measuring cornering stiffness and peak lateral friction.
 See [fitting a tyre model](07-fitting-a-tyre-model.md).
+
+**Torque-speed curve**. A permanent-magnet motor's defining relationship: a
+straight line from the stall torque at zero speed to zero torque at the free
+speed, scaling with supply voltage at both ends. A current limit clips its top
+flat. See [article 11](11-motor-esc-and-battery.md).
 
 **Trail braking**. Carrying braking into the corner and releasing it as
 steering is added, so the combined demand stays on the g-g boundary rather than

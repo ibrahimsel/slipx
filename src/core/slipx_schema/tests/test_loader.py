@@ -49,6 +49,60 @@ def test_c_kappa_crosses_from_the_tyre_file_to_the_parameters(
     assert not any("slip stiffness" in note for note in car.notes)
 
 
+def test_the_actuator_blocks_cross_from_the_files(reference_car: Path) -> None:
+    # The ADR-0030 fields, read into the parameters as optionals: the schema
+    # layer carries them and the loader above (slipx) refuses L2 by name for
+    # any that are None. No arithmetic, no defaulting.
+    car = load_car(reference_car)
+    p = car.params
+
+    assert p.layout == "2WD_rear"
+    assert p.differential == "spool"
+    assert p.lsd_preload is None  # not an lsd, and not defaulted to one
+
+    assert p.torque_stall == 2.0
+    assert p.omega_free == 480.0
+    assert p.torque_per_amp == 0.01
+    assert p.drive_efficiency == 0.85
+
+    assert p.pack_nominal_v == 11.1
+    assert p.pack_v_full == 12.6
+    assert p.pack_v_empty == 9.9
+    assert p.pack_capacity_ah == 5.2
+    assert p.pack_internal_resistance == 0.020
+    assert p.current_max == 120.0
+    assert p.regen_current_max == 40.0
+
+    assert p.steer_rate_max == 10.0
+    assert p.steer_bandwidth == 45.0
+    assert p.steer_damping == 0.7
+
+
+def test_absent_actuator_blocks_load_as_none_not_as_numbers(car_factory) -> None:
+    # A 0.1.0-shaped file has no esc block and no pack endpoints. Loading it
+    # must leave the fields None, never a plausible default: the refusal
+    # downstream is only honest if nothing was invented here.
+    def strip(d):
+        d.pop("esc")
+        d["electrical"].pop("pack_v_full")
+        d["electrical"].pop("pack_v_empty")
+        d["steering"].pop("max_rate")
+
+    path = car_factory("limits.yaml", strip)
+    p = load_car(path).params
+
+    assert p.torque_stall is None
+    assert p.omega_free is None
+    assert p.torque_per_amp is None
+    assert p.drive_efficiency is None
+    assert p.pack_v_full is None
+    assert p.pack_v_empty is None
+    assert p.steer_rate_max is None
+    # And what remained still crossed.
+    assert p.pack_nominal_v == 11.1
+    assert p.steer_bandwidth == 45.0
+
+
 def test_differing_c_kappa_values_are_reduced_to_the_mean_out_loud(
     car_factory,
 ) -> None:

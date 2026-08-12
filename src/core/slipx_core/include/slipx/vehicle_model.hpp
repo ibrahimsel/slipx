@@ -38,9 +38,9 @@ enum class Tier {
   // understeer gradient, step-steer transient, linear tyres. Lateral force is
   // clipped rather than saturated, so there is no spin. CoG height is inert.
   L1_Bicycle,
-  // ~15 states. Load transfer, MF-lite, combined slip, drivetrain, ESC and
-  // servo dynamics. The default tier and the one system ID fits against.
-  // CORE-02 places it in P1; create() rejects it until then.
+  // 13 states. Load transfer, MF-lite, combined slip, differential and drive
+  // layout, ESC torque curve with battery sag, and servo dynamics. The
+  // default tier and the one system ID fits against.
   L2_DoubleTrack,
   // L2 plus thermal and suspension states. P4.
   L3_Extended

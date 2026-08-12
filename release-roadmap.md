@@ -171,7 +171,7 @@ milestone makes that error message come true.
 
 ## M2. Drivetrain and actuators (slice 6)
 
-Status: not-started. Size: large (weeks). Hash impact: **every L2 row moves;
+Status: done. Size: large (weeks). Hash impact: **every L2 row moves;
 L0 and L1 rows must not** (the state layout already carries `omega_w`,
 `steer`, `steer_rate`, `soc`, `pack_v`; only L2's values change). Record the
 L2 rows **once, at the end of the slice**, not per feature.
@@ -184,7 +184,7 @@ second-order lag, exposing commanded versus achieved angle; spool, open and
 preloaded-LSD differentials with 2WD and 4WD, replacing L2's equal drive
 split.
 
-- [ ] **M2.1** Design pass first, and it needs an ADR: how the differential
+- [x] **M2.1** Design pass first, and it needs an ADR: how the differential
   models coexist with ADR-0027 (exactly two load/force passes, no convergence
   loop, no wheel rotational state; slip ratio inverted quasi-statically from
   delivered force). A spool constrains left and right wheel speeds, an LSD
@@ -194,20 +194,20 @@ split.
   nondeterminism hides in convergence loops and the pass count is in the
   trajectory.
   Done when: an ADR records the chosen representation and its costs.
-- [ ] **M2.2** Steering servo (slew limit, second-order lag). `steer` and
+- [x] **M2.2** Steering servo (slew limit, second-order lag). `steer` and
   `steer_rate` become integrated state at L2; diagnostics expose commanded
   versus achieved.
   Done when: analytical cases (step response rise, slew saturation) and an
   invariant case (achieved never leads commanded) pass.
-- [ ] **M2.3** ESC: torque-speed curve, current limit, reverse/regen braking
+- [x] **M2.3** ESC: torque-speed curve, current limit, reverse/regen braking
   with its own limit.
   Done when: analytical cases against the curve, saturation flags in
   diagnostics, and a conventions case for sign of regen torque pass.
-- [ ] **M2.4** Battery: internal-resistance sag and state-of-charge decay
+- [x] **M2.4** Battery: internal-resistance sag and state-of-charge decay
   reducing available torque. `soc` and `pack_v` become integrated at L2.
   Done when: sag under load and monotone SoC decay are asserted; a full-SoC
   run reproduces the no-battery torque within tolerance.
-- [ ] **M2.5** Differential and drive layout (spool, open, preloaded LSD;
+- [x] **M2.5** Differential and drive layout (spool, open, preloaded LSD;
   2WD, 4WD), replacing the equal drive split. Keep the measured insight that
   motivated equal split: a load-proportional split puts extra thrust on the
   loaded outer wheels, which is a spurious yaw moment turning the car in
@@ -216,7 +216,7 @@ split.
   assert L1/L2 radius agreement at low lateral acceleration survives.
   Done when: per-type analytical cases pass and the cross-tier low-ay
   agreement holds for the open differential default.
-- [ ] **M2.6** Update `_STATE_REPRESENTED_FROM` in
+- [x] **M2.6** Update `_STATE_REPRESENTED_FROM` in
   `src/bindings/slipx/slipx/sinks/recording.py`: the `steer_rate`, `soc` and
   `pack_v` rows currently read "L3" meaning "no tier that exists", and a
   test asserts they arrive absent from sink output. Landing this slice makes
@@ -224,25 +224,25 @@ split.
   deliberately, so no battery reading ships that nobody modelled.
   Done when: sink tests assert those quantities now arrive present at L2 and
   absent below it.
-- [ ] **M2.7** Schema and loader wiring for every new parameter (fields cut
+- [x] **M2.7** Schema and loader wiring for every new parameter (fields cut
   in M1.1's 0.2.0 audit), bindings for the new `VehicleParams` members, units
   and sign conventions in every doc comment. No silent defaulting: a file
   missing a needed field gets a refusal that names it.
   Done when: L2 with each drivetrain type is buildable from a car file and
   the dependency lint, licence scan and version check pass.
-- [ ] **M2.8** Rerecord the L2 reference rows once, at slice end, measured
+- [x] **M2.8** Rerecord the L2 reference rows once, at slice end, measured
   separately under GCC 11, GCC 13 and Clang 18 (which must agree). CHANGELOG
   section with old and new values side by side; reason in the commit message;
   TSV header note. Assert L0 and L1 rows are byte-identical to before.
   Done when: `tools/check_conformance.py` passes and the CHANGELOG carries
   the table.
-- [ ] **M2.9** Tutorial articles the index already owes: differentials, ESC
+- [x] **M2.9** Tutorial articles the index already owes: differentials, ESC
   and battery behaviour, actuator lag. Follow the brief in full (concepts, not
   SlipX; worked numbers; British spelling; no em dashes; figures via
   `make_figures.py` and render-checked).
   Done when: articles exist, are indexed, and figures render correctly in
   headless Chrome.
-- [ ] **M2.10** Mutation pass over the slice: try targeted mutations against
+- [x] **M2.10** Mutation pass over the slice: try targeted mutations against
   the new code (sign flips, dropped limits, swapped axles); every escape
   produces a new test before the slice is called done.
   Done when: the mutations tried and their outcomes are listed in the commit

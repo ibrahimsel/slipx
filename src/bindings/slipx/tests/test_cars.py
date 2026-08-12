@@ -222,3 +222,149 @@ def test_l2_is_still_refused_by_name_for_a_file_without_c_kappa(car_factory) -> 
         params = car.params_for_tier(tier)
         assert params.validate() is None
         assert params.mass == car.params.mass
+
+
+# ------------------------------------------- the drivetrain slice (ADR-0031)
+
+
+def test_the_actuator_fields_cross_from_the_files_to_the_struct() -> None:
+    # limits.yaml's esc, electrical and steering blocks and dynamics.yaml's
+    # drivetrain block, field for field, no arithmetic.
+    car = slipx.load_reference_car()
+    params = car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+    assert params.torque_stall == 2.0
+    assert params.omega_free == 480.0
+    assert params.torque_per_amp == 0.01
+    assert params.drive_efficiency == 0.85
+    assert params.current_max == 120.0
+    assert params.regen_current_max == 40.0
+
+    assert params.pack_nominal_v == 11.1
+    assert params.pack_v_full == 12.6
+    assert params.pack_v_empty == 9.9
+    assert params.pack_capacity_ah == 5.2
+    assert params.pack_internal_resistance == 0.020
+
+    assert params.steer_rate_max == 10.0
+    assert params.steer_bandwidth == 45.0
+    assert params.steer_damping == 0.7
+
+    # The reference car is a locked rear axle, which is what the file says
+    # and most 1/10 competition cars run; the core STRUCT default is an open
+    # diff, and the two answering different questions is deliberate
+    # (ADR-0031).
+    assert params.layout == slipx.DriveLayout.RearWheelDrive
+    assert params.differential == slipx.Differential.Spool
+    assert slipx.VehicleParams().differential == slipx.Differential.Open
+
+
+@pytest.mark.parametrize(
+    "edit,layout,differential",
+    [
+        (lambda d: None, slipx.DriveLayout.RearWheelDrive,
+         slipx.Differential.Spool),
+        (lambda d: d["drivetrain"].update(differential="open"),
+         slipx.DriveLayout.RearWheelDrive, slipx.Differential.Open),
+        (lambda d: d["drivetrain"].update(differential="lsd",
+                                          lsd_preload=0.05),
+         slipx.DriveLayout.RearWheelDrive, slipx.Differential.Lsd),
+        (lambda d: d["drivetrain"].update(layout="4WD"),
+         slipx.DriveLayout.AllWheelDrive, slipx.Differential.Spool),
+        (lambda d: d["drivetrain"].update(layout="2WD_front"),
+         slipx.DriveLayout.FrontWheelDrive, slipx.Differential.Spool),
+    ],
+)
+def test_l2_is_buildable_with_every_drivetrain_type(
+    car_factory, edit, layout, differential
+) -> None:
+    path = car_factory("dynamics.yaml", edit)
+    params = slipx.load_car(path).params_for_tier(slipx.Tier.L2_DoubleTrack)
+    assert params.layout == layout
+    assert params.differential == differential
+
+    model = slipx.VehicleModel.create(slipx.Tier.L2_DoubleTrack, params)
+    state = slipx.VehicleState()
+    state.vel_body.x = 4.0
+    for _ in range(200):
+        model.step(state, slipx.DriveInput(0.05, 2.0), 1e-3)
+    assert state.pos.x > 0.0
+
+
+def test_an_lsd_car_carries_its_preload(car_factory) -> None:
+    path = car_factory(
+        "dynamics.yaml",
+        lambda d: d["drivetrain"].update(differential="lsd", lsd_preload=0.08),
+    )
+    params = slipx.load_car(path).params_for_tier(slipx.Tier.L2_DoubleTrack)
+    assert params.lsd_preload == 0.08
+
+
+def test_a_missing_esc_block_is_refused_by_name(car_factory) -> None:
+    path = car_factory("limits.yaml", lambda d: d.pop("esc"))
+    car = slipx.load_car(path)
+
+    with pytest.raises(ValueError) as raised:
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    message = str(raised.value)
+    assert "esc.torque_stall" in message
+    assert "esc.omega_free" in message
+    assert "esc.torque_per_amp" in message
+    assert "esc.efficiency" in message
+    # And nothing that is present is named.
+    assert "pack_v_full" not in message
+    assert "c_kappa" not in message
+
+    # L0 and L1 still load; the ESC is not their model.
+    assert car.params_for_tier(slipx.Tier.L1_Bicycle).validate() is None
+
+
+def test_amp_limits_without_torque_per_amp_are_called_incomplete(
+    car_factory,
+) -> None:
+    # ADR-0030: current_max and regen_current_max are authoritative for what
+    # they measure, but without torque_per_amp an ampere cannot become a
+    # torque, and the refusal says so rather than just naming a field.
+    path = car_factory("limits.yaml", lambda d: d["esc"].pop("torque_per_amp"))
+    car = slipx.load_car(path)
+
+    with pytest.raises(ValueError, match="amperes"):
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+
+def test_missing_battery_endpoints_are_refused_by_name(car_factory) -> None:
+    # The 0.2.0 additions specifically: a 0.1.0 electrical block has the
+    # nominal voltage and capacity but no charge-range endpoints, and without
+    # them state of charge cannot map to a voltage (ADR-0030).
+    def strip(d):
+        d["electrical"].pop("pack_v_full")
+        d["electrical"].pop("pack_v_empty")
+
+    path = car_factory("limits.yaml", strip)
+    car = slipx.load_car(path)
+
+    with pytest.raises(ValueError) as raised:
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    message = str(raised.value)
+    assert "electrical.pack_v_full" in message
+    assert "electrical.pack_v_empty" in message
+    assert "pack_nominal_v" not in message
+
+
+def test_a_servo_without_its_dynamics_is_refused_by_name(car_factory) -> None:
+    def strip(d):
+        d["steering"].pop("max_rate")
+        d["steering"].pop("bandwidth")
+        d["steering"].pop("damping")
+
+    path = car_factory("limits.yaml", strip)
+    car = slipx.load_car(path)
+
+    with pytest.raises(ValueError) as raised:
+        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    message = str(raised.value)
+    assert "steering.max_rate" in message
+    assert "steering.bandwidth" in message
+    assert "steering.damping" in message
+    # max_angle is present and consumed from L0; it is not what is missing.
+    assert "max_angle" not in message

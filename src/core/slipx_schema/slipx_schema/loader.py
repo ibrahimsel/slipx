@@ -356,6 +356,16 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
             f"'{effective_label}'"
         )
 
+    # The optional actuator blocks (ADR-0030). Absent fields stay None, and
+    # the L2 refusal downstream names each one; nothing is defaulted here.
+    steering = limits["steering"]
+    esc = limits.get("esc", {})
+    electrical = limits.get("electrical", {})
+
+    def _opt(block: Dict[str, Any], key: str) -> Optional[float]:
+        value = block.get(key)
+        return float(value) if value is not None else None
+
     params = VehicleParameters(
         mass=float(dynamics["mass"]),
         izz=float(dynamics["inertia"]["izz"]),
@@ -379,6 +389,23 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
         provenance_label=effective_label,
         v_eps=float(v_eps) if v_eps is not None else None,
         c_kappa=c_kappa,
+        layout=str(dynamics["drivetrain"]["layout"]),
+        differential=str(dynamics["drivetrain"]["differential"]),
+        lsd_preload=_opt(dynamics["drivetrain"], "lsd_preload"),
+        torque_stall=_opt(esc, "torque_stall"),
+        omega_free=_opt(esc, "omega_free"),
+        torque_per_amp=_opt(esc, "torque_per_amp"),
+        drive_efficiency=_opt(esc, "efficiency"),
+        pack_nominal_v=_opt(electrical, "pack_nominal_v"),
+        pack_v_full=_opt(electrical, "pack_v_full"),
+        pack_v_empty=_opt(electrical, "pack_v_empty"),
+        pack_capacity_ah=_opt(electrical, "pack_capacity_ah"),
+        pack_internal_resistance=_opt(electrical, "pack_internal_resistance"),
+        current_max=_opt(electrical, "current_max"),
+        regen_current_max=_opt(electrical, "regen_current_max"),
+        steer_rate_max=_opt(steering, "max_rate"),
+        steer_bandwidth=_opt(steering, "bandwidth"),
+        steer_damping=_opt(steering, "damping"),
     )
 
     return Car(

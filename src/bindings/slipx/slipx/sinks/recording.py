@@ -51,18 +51,17 @@ _L0, _L1, _L2, _L3 = 0, 1, 2, 3
 # recorded as NaN, which every sink then carries through as absent.
 #
 # The rows are read off state.hpp's own per-field comments and off the tier
-# sources, not guessed. Three of them are guesses about the future and are
-# therefore written as L3, meaning "no tier that exists represents this":
-#
-#   steer_rate   needs the steering servo, CORE-10. l2_double_track.cpp sets
-#                it to zero and says so. It becomes L2 when CORE-10 lands.
-#   soc, pack_v  need the battery, CORE-09. L2 does not write them.
+# sources, not guessed. steer_rate, soc and pack_v became L2 rows when the
+# servo and battery landed (ADR-0031); below L2 there is still no servo and no
+# battery, so they stay absent there rather than arriving as a plausible zero
+# or a nominal voltage nobody computed.
 #
 # omega_w is L2 and not L3 even though ADR-0027 gave L2 no wheel rotational
 # state: L2 inverts the wheel speed quasi-statically from the delivered slip
 # ratio, so the number is computed from the step rather than left over from
 # construction. It is a derived wheel speed and not an integrated one, which is
-# a limitation of the tier and not a reason to hide it.
+# a limitation of the tier and not a reason to hide it. pack_v is the same
+# kind of number: written algebraically each step, like Fz.
 #
 # This table is the coupling ADR-0028 accepted when it multiplied the number of
 # formats tracking the state layout: a new state field is added here, once, and
@@ -81,9 +80,9 @@ _STATE_REPRESENTED_FROM: Dict[str, int] = {
     "rates.y": _L3,
     "rates.z": _L0,
     "steer": _L0,
-    "steer_rate": _L3,
-    "soc": _L3,
-    "pack_v": _L3,
+    "steer_rate": _L2,
+    "soc": _L2,
+    "pack_v": _L2,
     "omega_w": _L2,
     "Fz": _L2,
     "alpha_lag": _L2,
@@ -117,6 +116,7 @@ def _diagnostic_columns() -> List[str]:
         "fz_front", "fz_rear",
         "ax", "ay",
         "load_transfer_long", "load_transfer_lat",
+        "drive_torque", "pack_current",
     ])
     return names
 
@@ -127,7 +127,10 @@ def _flag_columns() -> List[str]:
     # axle carry that axle's flag, which state.hpp documents; the float arrays
     # stay NaN there rather than duplicating a value the tier did not compute.
     names = [f"tyre_saturated.{wheel}" for wheel in WHEELS]
-    names.extend(["steer_saturated", "accel_saturated", "speed_saturated"])
+    names.extend([
+        "steer_saturated", "accel_saturated", "speed_saturated",
+        "esc_saturated",
+    ])
     return names
 
 
@@ -290,13 +293,15 @@ def _read_diagnostics(diagnostics) -> Tuple[Dict[str, float], Dict[str, bool]]:
         "alpha_front", "alpha_rear", "fy_front", "fy_rear",
         "fz_front", "fz_rear", "ax", "ay",
         "load_transfer_long", "load_transfer_lat",
+        "drive_torque", "pack_current",
     ):
         values[name] = getattr(diagnostics, name)
 
     flags: Dict[str, bool] = {}
     for i, wheel in enumerate(WHEELS):
         flags[f"tyre_saturated.{wheel}"] = bool(diagnostics.tyre_saturated[i])
-    for name in ("steer_saturated", "accel_saturated", "speed_saturated"):
+    for name in ("steer_saturated", "accel_saturated", "speed_saturated",
+                 "esc_saturated"):
         flags[name] = bool(getattr(diagnostics, name))
     return values, flags
 

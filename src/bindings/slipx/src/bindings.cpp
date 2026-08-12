@@ -105,12 +105,17 @@ PYBIND11_MODULE(_slipx, m) {
              "6 states. Sideslip, yaw dynamics, linear tyres clipped at the "
              "friction limit. No saturation shape, so no spin.")
       .value("L2_DoubleTrack", Tier::L2_DoubleTrack,
-             "10 states. Double-track: four contact patches with per-corner "
+             "13 states. Double-track: four contact patches with per-corner "
              "vertical loads, MF-lite tyres with a real peak and falling "
              "branch, combined slip, tyre relaxation, quasi-static load "
-             "transfer. Minimal, and the gaps are deliberate: no "
-             "differential (equal drive split), no ESC, no battery, no "
-             "steering servo, parallel steer rather than Ackermann.")
+             "transfer, and the drivetrain: open/spool/LSD differential with "
+             "2WD or 4WD, ESC torque-speed curve with current and regen "
+             "limits, battery sag and state of charge, and a slew-limited "
+             "second-order steering servo. Braking is motor braking through "
+             "the driven axle only. Still absent, deliberately: wheel "
+             "rotational dynamics (no lockup or wheelspin events), a "
+             "low-voltage cutoff, Ackermann geometry (parallel steer), and "
+             "suspension.")
       .value("L3_Extended", Tier::L3_Extended,
              "Not implemented. Requesting it raises rather than silently "
              "substituting a lower tier.");
@@ -127,6 +132,27 @@ PYBIND11_MODULE(_slipx, m) {
       .value("Identified", Provenance::kIdentified,
              "Fitted from vehicle data, with residuals.")
       .value("Measured", Provenance::kMeasured, "Directly measured.");
+
+  py::enum_<DriveLayout>(m, "DriveLayout",
+                         "Which axles the motor drives. Modelled from L2; a "
+                         "4WD centre is locked 50/50, because a typical "
+                         "1/10-scale 4WD is a belt with no centre diff.")
+      .value("RearWheelDrive", DriveLayout::kRearWheelDrive,
+             "schema \"2WD_rear\"; the common competition layout")
+      .value("FrontWheelDrive", DriveLayout::kFrontWheelDrive,
+             "schema \"2WD_front\"")
+      .value("AllWheelDrive", DriveLayout::kAllWheelDrive,
+             "schema \"4WD\", locked centre, 50/50");
+
+  py::enum_<Differential>(m, "Differential",
+                          "How the driven axle splits torque between its "
+                          "wheels. Modelled from L2.")
+      .value("Open", Differential::kOpen,
+             "equal torque; the weaker wheel caps both")
+      .value("Spool", Differential::kSpool,
+             "locked axle: one shared wheel speed")
+      .value("Lsd", Differential::kLsd,
+             "preloaded limited-slip; set lsd_preload");
 
   // ----------------------------------------------------------------- params
   // MF-lite coefficients (CORE-06). Exposed so a caller can build an L2 car in
@@ -178,12 +204,61 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readwrite("c_kappa", &VehicleParams::c_kappa,
                      "longitudinal slip stiffness per tyre, positive "
                      "[N per unit slip]. No effect below L2.")
-      .def_readwrite("accel_max", &VehicleParams::accel_max, "[m/s^2]")
+      .def_readwrite("accel_max", &VehicleParams::accel_max,
+                     "command bound [m/s^2]. From L2 the ESC curve decides "
+                     "what is delivered.")
       .def_readwrite("decel_max", &VehicleParams::decel_max,
-                     "positive magnitude [m/s^2]")
+                     "command bound, positive magnitude [m/s^2]. From L2 the "
+                     "regen limit is usually the operative brake limit.")
       .def_readwrite("v_max", &VehicleParams::v_max, "[m/s]")
+      .def_readwrite("layout", &VehicleParams::layout,
+                     "driven axles. No effect below L2.")
+      .def_readwrite("differential", &VehicleParams::differential,
+                     "axle torque split. No effect below L2.")
+      .def_readwrite("lsd_preload", &VehicleParams::lsd_preload,
+                     "LSD locking preload torque across the axle [N m]. "
+                     "Consumed only when differential is Lsd.")
+      .def_readwrite("torque_stall", &VehicleParams::torque_stall,
+                     "total wheel torque at zero wheel speed, full throttle, "
+                     "at pack_nominal_v, before the current limit [N m]. "
+                     "No effect below L2.")
+      .def_readwrite("omega_free", &VehicleParams::omega_free,
+                     "wheel speed at which drive torque reaches zero, at "
+                     "pack_nominal_v [rad/s]. No effect below L2.")
+      .def_readwrite("torque_per_amp", &VehicleParams::torque_per_amp,
+                     "wheel torque per ampere of motor current [N m/A]; what "
+                     "turns the current limits into torque caps. No effect "
+                     "below L2.")
+      .def_readwrite("drive_efficiency", &VehicleParams::drive_efficiency,
+                     "wheel power over battery-terminal power, in (0, 1] [-]. "
+                     "Loses power in both directions. No effect below L2.")
+      .def_readwrite("current_max", &VehicleParams::current_max,
+                     "ESC drive current limit [A]. No effect below L2.")
+      .def_readwrite("regen_current_max", &VehicleParams::regen_current_max,
+                     "regen current limit [A]; the only brake the model has. "
+                     "No effect below L2.")
+      .def_readwrite("pack_nominal_v", &VehicleParams::pack_nominal_v,
+                     "the voltage the ESC curve is stated at [V]. No effect "
+                     "below L2.")
+      .def_readwrite("pack_v_full", &VehicleParams::pack_v_full,
+                     "open-circuit voltage at soc 1 [V]. No effect below L2.")
+      .def_readwrite("pack_v_empty", &VehicleParams::pack_v_empty,
+                     "open-circuit voltage at soc 0 [V]. No effect below L2.")
+      .def_readwrite("pack_capacity_ah", &VehicleParams::pack_capacity_ah,
+                     "[A h]. No effect below L2.")
+      .def_readwrite("pack_internal_resistance",
+                     &VehicleParams::pack_internal_resistance,
+                     "[ohm]; produces sag under load. No effect below L2.")
       .def_readwrite("steer_max", &VehicleParams::steer_max,
                      "road wheel travel, symmetric magnitude [rad]")
+      .def_readwrite("steer_rate_max", &VehicleParams::steer_rate_max,
+                     "servo slew limit [rad/s]. No effect below L2.")
+      .def_readwrite("steer_bandwidth", &VehicleParams::steer_bandwidth,
+                     "servo second-order natural frequency [rad/s]. No effect "
+                     "below L2.")
+      .def_readwrite("steer_damping", &VehicleParams::steer_damping,
+                     "servo damping ratio [-]; below 1 the servo overshoots. "
+                     "No effect below L2.")
       .def_readwrite("drag_coeff", &VehicleParams::drag_coeff,
                      "0.5 rho Cd A [kg/m]")
       .def_readwrite("roll_resist", &VehicleParams::roll_resist, "[-]")
@@ -288,9 +363,19 @@ PYBIND11_MODULE(_slipx, m) {
                     "[N]. NaN below L2, which cannot transfer load.")
       .def_readonly("load_transfer_lat", &StepDiagnostics::load_transfer_lat,
                     "[N]. NaN below L2.")
+      .def_readonly("drive_torque", &StepDiagnostics::drive_torque,
+                    "total wheel torque the ESC delivered, after the curve, "
+                    "current and regen limits [N m]. Negative when braking. "
+                    "NaN below L2, which has no ESC.")
+      .def_readonly("pack_current", &StepDiagnostics::pack_current,
+                    "battery terminal current [A], positive discharging, "
+                    "negative charging under regen. NaN below L2.")
       .def_readonly("steer_saturated", &StepDiagnostics::steer_saturated)
       .def_readonly("accel_saturated", &StepDiagnostics::accel_saturated)
       .def_readonly("speed_saturated", &StepDiagnostics::speed_saturated)
+      .def_readonly("esc_saturated", &StepDiagnostics::esc_saturated,
+                    "torque demand clipped by the ESC curve, current limit "
+                    "or regen limit. Always False below L2.")
       .def_property_readonly(
           "tier", [](const StepDiagnostics& d) { return static_cast<Tier>(d.tier); },
           "which tier produced these numbers, so a plot cannot be mislabelled");

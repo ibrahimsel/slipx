@@ -38,9 +38,12 @@ order. The rest stand alone.
 | 3 | [Vehicle models](03-vehicle-models.md) | Which model is allowed to answer which question? |
 | 4 | [Understeer and oversteer](04-understeer-and-oversteer.md) | What do people mean by "balance"? |
 | 9 | [Combined slip](09-combined-slip.md) | What happens when you brake and turn at once? |
+| 10 | [Differentials](10-differentials.md) | Why does a driven axle need one, and what does the choice cost? |
+| 11 | [The motor, the ESC and the battery](11-motor-esc-and-battery.md) | Where does acceleration actually come from? |
 
-Article 9 follows straight on from article 1 and can be read there instead of
-here; it is numbered by when it was written, not by where it sits.
+Articles 9 to 11 follow straight on from articles 1 and 2 and can be read there
+instead of here; they are numbered by when they were written, not by where they
+sit.
 
 **Part two: the racing**
 
@@ -63,20 +66,21 @@ happens while it is still settling, which is most of a lap.
 | | Article | What it answers |
 |---|---|---|
 | 8 | [Tyre relaxation](08-tyre-relaxation.md) | Why does grip arrive late, and why does that change with speed? |
+| 12 | [Actuator lag](12-actuator-lag.md) | Why is the steering angle not the one you commanded? |
+
+Articles 8 and 12 are a pair: one delay that shrinks as the car speeds up and
+one that does not.
 
 **Reference**
 
 - [Glossary](glossary.md), for when a word turns up before its article does.
 
 **Planned, not yet written.** Listed so the shape of the series is visible and
-so nobody writes the same article twice: differentials; motor, ESC and battery
-behaviour; actuator lag,
-which belongs beside article 8 and is a different mechanism with a different
-time constant;
-the autonomy pipeline; localisation and mapping; global and local planning; path
-tracking, from pure pursuit to MPC; state estimation and sensor models; the
-sim-to-real gap; and reproducibility and benchmarking. Contributions welcome,
-and the articles above are the register to match.
+so nobody writes the same article twice: the autonomy pipeline; localisation and
+mapping; global and local planning; path tracking, from pure pursuit to MPC;
+state estimation and sensor models; the sim-to-real gap; and reproducibility and
+benchmarking. Contributions welcome, and the articles above are the register to
+match.
 
 ## Conventions
 

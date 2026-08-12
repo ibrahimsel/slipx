@@ -57,6 +57,10 @@ def test_the_entity_tree_mirrors_the_state_layout(l1_recording, tmp_path):
         "/car/diagnostics/alpha_rear",
         "/car/diagnostics/ax",
         "/car/diagnostics/ay",
+        # A flag, not a float: a bool has no NaN, so it cannot carry the
+        # absent rule and appears at every tier. The drivetrain FLOATS it sits
+        # beside (drive_torque, pack_current) are NaN here and do not appear.
+        "/car/diagnostics/esc_saturated",
         "/car/diagnostics/fy_front",
         "/car/diagnostics/fy_rear",
         "/car/diagnostics/fz_front",
@@ -97,8 +101,11 @@ def test_a_single_track_run_logs_no_per_wheel_entity(l1_recording, tmp_path):
             assert f"/car/state/{base}/{wheel}" not in paths
         for base in ("alpha", "kappa", "fx", "fy", "fz"):
             assert f"/car/diagnostics/{base}/{wheel}" not in paths
-    for absent in ("/car/state/soc", "/car/state/pack_v", "/car/state/roll",
-                   "/car/diagnostics/load_transfer_lat"):
+    for absent in ("/car/state/soc", "/car/state/pack_v",
+                   "/car/state/steer_rate", "/car/state/roll",
+                   "/car/diagnostics/load_transfer_lat",
+                   "/car/diagnostics/drive_torque",
+                   "/car/diagnostics/pack_current"):
         assert absent not in paths
 
 
@@ -112,9 +119,16 @@ def test_a_double_track_run_logs_every_contact_patch(l2_recording, tmp_path):
         for base in ("alpha", "kappa", "fx", "fy", "fz"):
             assert f"/car/diagnostics/{base}/{wheel}" in paths
     assert "/car/diagnostics/load_transfer_lat" in paths
-    # Still absent, because no tier writes them (CORE-09, CORE-10).
-    assert "/car/state/soc" not in paths
-    assert "/car/state/steer_rate" not in paths
+    # The drivetrain and the actuators are L2 quantities now that the tier
+    # integrates them, so they arrive present here and absent at L1. Before
+    # the drivetrain slice they were absent at every tier, and flipping this
+    # assertion was the point: nothing may plot a battery reading that no
+    # tier computed.
+    for present in ("/car/state/soc", "/car/state/pack_v",
+                    "/car/state/steer_rate",
+                    "/car/diagnostics/drive_torque",
+                    "/car/diagnostics/pack_current"):
+        assert present in paths
 
 
 def test_no_wall_clock_is_written_into_the_recording(l1_recording, tmp_path):

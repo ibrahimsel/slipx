@@ -116,6 +116,32 @@ class VehicleParameters:
     # disagree the loader takes the mean and Car.notes says so.
     c_kappa: Optional[float] = None
 
+    # The drivetrain and actuator fields, consumed from L2 (ADR-0031). The
+    # layout and differential are required by dynamics.schema.json so they are
+    # always present; everything else is optional at the schema level
+    # (ADR-0030) and None here when the file did not carry it, in which case
+    # L2 is refused with the field named, never defaulted.
+    layout: str = "2WD_rear"  # "2WD_rear" | "2WD_front" | "4WD"
+    differential: str = "spool"  # "spool" | "open" | "lsd"
+    lsd_preload: Optional[float] = None  # required when lsd         [N m]
+    # limits.yaml `esc` block
+    torque_stall: Optional[float] = None  #                          [N m]
+    omega_free: Optional[float] = None  #                          [rad/s]
+    torque_per_amp: Optional[float] = None  #                      [N m/A]
+    drive_efficiency: Optional[float] = None  # esc.efficiency         [-]
+    # limits.yaml `electrical` block
+    pack_nominal_v: Optional[float] = None  #                          [V]
+    pack_v_full: Optional[float] = None  #                             [V]
+    pack_v_empty: Optional[float] = None  #                            [V]
+    pack_capacity_ah: Optional[float] = None  #                      [A h]
+    pack_internal_resistance: Optional[float] = None  #              [ohm]
+    current_max: Optional[float] = None  #                             [A]
+    regen_current_max: Optional[float] = None  #                       [A]
+    # limits.yaml `steering` block beyond max_angle
+    steer_rate_max: Optional[float] = None  # steering.max_rate    [rad/s]
+    steer_bandwidth: Optional[float] = None  # steering.bandwidth  [rad/s]
+    steer_damping: Optional[float] = None  # steering.damping          [-]
+
     @property
     def wheelbase(self) -> float:
         return self.lf + self.lr

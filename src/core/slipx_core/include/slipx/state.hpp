@@ -138,9 +138,24 @@ struct StepDiagnostics {
   double load_transfer_long = 0.0;   // front-to-rear                   [N]
   double load_transfer_lat = 0.0;    // left-to-right                   [N]
 
+  // The drivetrain, from L2 (ADR-0031). NaN below L2, like every quantity a
+  // tier does not compute.
+  //
+  // drive_torque is the total wheel torque the ESC delivered to the driveline
+  // after the curve, current and regen limits: the tyres may deliver less
+  // force than it implies once the friction ellipse has spoken, and the
+  // per-wheel fx above are what they did deliver. pack_current is the battery
+  // terminal current, positive discharging, negative charging under regen.
+  double drive_torque = 0.0;     //                                    [N m]
+  double pack_current = 0.0;     //                                      [A]
+
   bool steer_saturated = false;   // command clipped to steer_max
   bool accel_saturated = false;   // demand clipped to accel/decel_max
   bool speed_saturated = false;   // demand clipped by v_max
+  bool esc_saturated = false;     // torque demand clipped by the ESC
+                                  // curve, current limit or regen limit
+                                  // (always false below L2, which has
+                                  // no ESC)
 
   // Which tier produced these numbers. Present so a plot cannot be mislabelled
   // after the fact.

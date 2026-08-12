@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ._slipx import Provenance, VehicleParams
+from ._slipx import Differential, DriveLayout, Provenance, VehicleParams
 
 if TYPE_CHECKING:  # pragma: no cover
     from slipx_schema.model import Car
@@ -29,6 +29,21 @@ _PROVENANCE_LABELS = {
     "provisional": Provenance.Provisional,
     "identified": Provenance.Identified,
     "measured": Provenance.Measured,
+}
+
+# The schema's enum strings against the core's enums. The strings are the
+# schema's vocabulary (dynamics.schema.json) and the enums are the core's;
+# this table is the whole of the translation, so the two cannot drift apart
+# in more than one place.
+_LAYOUTS = {
+    "2WD_rear": DriveLayout.RearWheelDrive,
+    "2WD_front": DriveLayout.FrontWheelDrive,
+    "4WD": DriveLayout.AllWheelDrive,
+}
+_DIFFERENTIALS = {
+    "open": Differential.Open,
+    "spool": Differential.Spool,
+    "lsd": Differential.Lsd,
 }
 
 
@@ -108,6 +123,12 @@ def _copy_params(source: VehicleParams) -> VehicleParams:
         "h_cog", "wheel_radius", "c_alpha_f", "c_alpha_r", "mu_clip",
         "c_kappa", "accel_max", "decel_max", "v_max", "steer_max",
         "drag_coeff", "roll_resist", "provenance", "v_eps",
+        "layout", "differential", "lsd_preload",
+        "torque_stall", "omega_free", "torque_per_amp", "drive_efficiency",
+        "current_max", "regen_current_max",
+        "pack_nominal_v", "pack_v_full", "pack_v_empty", "pack_capacity_ah",
+        "pack_internal_resistance",
+        "steer_rate_max", "steer_bandwidth", "steer_damping",
     ):
         setattr(out, name, getattr(source, name))
     for axle in ("tyre_front", "tyre_rear"):
@@ -155,15 +176,17 @@ class Car:
 
         ``params`` carries everything L0 and L1 need and is what most callers
         want. L2 additionally needs the MF-lite block, the load sensitivity,
-        the relaxation length and the longitudinal slip stiffness
-        ``linear.c_kappa``; schema 0.2.0 carries all of them (ADR-0030).
+        the relaxation length, the longitudinal slip stiffness
+        ``linear.c_kappa``, the servo constants, the ESC curve, the battery
+        endpoints and the drivetrain layout; schema 0.2.0 carries all of them
+        (ADR-0030, ADR-0031).
 
-        A tyre file that lacks any of those, which every file written at
-        schema 0.1.0 does for ``c_kappa``, produces a refusal naming each
-        absent field. Silent defaulting is forbidden, and a parameter nobody
-        identified is exactly the failure ADR-0009 exists to prevent: a
-        default would produce a trajectory that looks right, is labelled L2,
-        and rests on a number that came from nowhere.
+        A file that lacks any of those, which every file written at schema
+        0.1.0 does for several, produces a refusal naming each absent field.
+        Silent defaulting is forbidden, and a parameter nobody identified is
+        exactly the failure ADR-0009 exists to prevent: a default would
+        produce a trajectory that looks right, is labelled L2, and rests on a
+        number that came from nowhere.
 
         This is NOT the ADR-0005 failure of substituting a simpler tier: on
         refusal no model is returned at all.
@@ -174,6 +197,7 @@ class Car:
             return self.params
 
         params = _copy_params(self.params)
+        source = self.spec.params
         front = self.spec.tyre_front
         rear = self.spec.tyre_rear
 
@@ -200,10 +224,74 @@ class Car:
             target.mu_y0 = float(tyre.mu_y0)
             target.mu_x0 = float(tyre.mu_x0)
 
+        # The servo (limits.yaml steering block beyond max_angle).
+        for field, name in (
+            ("steer_rate_max", "steering.max_rate"),
+            ("steer_bandwidth", "steering.bandwidth"),
+            ("steer_damping", "steering.damping"),
+        ):
+            value = getattr(source, field)
+            if value is None:
+                missing.append(f"limits {name}")
+            else:
+                setattr(params, field, float(value))
+
+        # The ESC curve (limits.yaml esc block). An esc section that states
+        # its limits in amperes but carries no torque_per_amp is incomplete
+        # for L2 by name: the amperes cannot reach the physics (ADR-0030).
+        for field, name in (
+            ("torque_stall", "esc.torque_stall"),
+            ("omega_free", "esc.omega_free"),
+            ("drive_efficiency", "esc.efficiency"),
+        ):
+            value = getattr(source, field)
+            if value is None:
+                missing.append(f"limits {name}")
+            else:
+                setattr(params, field, float(value))
+        if source.torque_per_amp is None:
+            if source.current_max is not None or source.regen_current_max is not None:
+                missing.append(
+                    "limits esc.torque_per_amp (the current limits are "
+                    "stated in amperes and cannot become torque caps "
+                    "without it)"
+                )
+            else:
+                missing.append("limits esc.torque_per_amp")
+        else:
+            params.torque_per_amp = float(source.torque_per_amp)
+
+        # The battery (limits.yaml electrical block, endpoints from 0.2.0).
+        for field, name in (
+            ("pack_nominal_v", "electrical.pack_nominal_v"),
+            ("pack_v_full", "electrical.pack_v_full"),
+            ("pack_v_empty", "electrical.pack_v_empty"),
+            ("pack_capacity_ah", "electrical.pack_capacity_ah"),
+            ("pack_internal_resistance", "electrical.pack_internal_resistance"),
+            ("current_max", "electrical.current_max"),
+            ("regen_current_max", "electrical.regen_current_max"),
+        ):
+            value = getattr(source, field)
+            if value is None:
+                missing.append(f"limits {name}")
+            else:
+                setattr(params, field, float(value))
+
+        # The drivetrain (dynamics.yaml). Layout and differential are
+        # required by the schema, so they are present in any file that
+        # validated; the preload is conditionally required with an lsd.
+        params.layout = _LAYOUTS[source.layout]
+        params.differential = _DIFFERENTIALS[source.differential]
+        if source.differential == "lsd":
+            if source.lsd_preload is None:
+                missing.append("dynamics drivetrain.lsd_preload")
+            else:
+                params.lsd_preload = float(source.lsd_preload)
+
         if not missing:
             # Reduced to one whole-car value at load, with a note when the
             # two files disagreed; see the loader.
-            params.c_kappa = float(self.spec.params.c_kappa)
+            params.c_kappa = float(source.c_kappa)
             return params
 
         raise ValueError(
@@ -211,11 +299,10 @@ class Car:
             + ", ".join(missing)
             + " missing. Nothing here is defaulted, because a parameter "
             "nobody identified is worse than one that does not exist "
-            "(ADR-0025, ADR-0009). A tyre file written at schema 0.1.0 has "
-            "no linear.c_kappa field; schema 0.2.0 adds it, and migration "
-            "cannot invent the value, so the file needs the measurement and "
-            "not just the version bump. L0 and L1 are unaffected and are "
-            "available through .params."
+            "(ADR-0025, ADR-0009). A file written at schema 0.1.0 lacks the "
+            "0.2.0 fields; migration cannot invent the values, so the file "
+            "needs the measurements and not just the version bump. L0 and "
+            "L1 are unaffected and are available through .params."
         )
 
     def summary(self) -> str:
