@@ -1,8 +1,9 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
 Last updated: 2026-08-12. Published version: `0.1.0a1` (PyPI, tag `v0.1.0a1`,
-commit `644cb12`). Current tree: L2 minimal double-track and the sink layer are
-implemented and unreleased.
+commit `644cb12`). Current tree: L2 is complete (drivetrain, battery, servo and
+differentials), the sink layer writes MCAP, Rerun and SVG, and every figure is
+generated from `slipx_core`. All unreleased; M4 is the release.
 
 This file is the working plan from the current state to a `1.0.0` release of
 the `slipx` distribution. It is written to be executed and updated by agents
