@@ -9,10 +9,10 @@ addition the core never sees must not force a core release, and a core change
 must not invalidate every car file.
 
 Zero major: the API is not stable and semantic versioning's guarantees begin at
-1.0.0. The ``a1`` suffix is PEP 440 for a pre-release: it is the first artefact
-published to an index, it exists so that the packaging path itself is exercised
-against a version nobody should pin, and pip will not select it once a final
-release exists.
+1.0.0. Until 1.0.0 a minor bump may break the API, and this one does: 0.2.0 is
+the first final release, and ``pip install slipx`` selects it in preference to
+the 0.1.0a1 pre-release that came before it. There is no 0.1.0 and there never
+will be.
 
 This string is checked against pyproject.toml, CMakeLists.txt and
 slipx/version.hpp by tools/version_check.py, which CI runs. There are four
@@ -20,4 +20,4 @@ places a version is written and no way to make there be one; the check is what
 stops them drifting.
 """
 
-__version__ = "0.1.0a1"
+__version__ = "0.2.0"

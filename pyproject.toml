@@ -18,7 +18,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "slipx"
-version = "0.1.0a1"
+version = "0.2.0"
 # The summary line on the PyPI index page, and the only text most people will
 # read before deciding. It says what the library is and does not characterise
 # how good it is: "identifiable", "validated" and "accurate" are all claims

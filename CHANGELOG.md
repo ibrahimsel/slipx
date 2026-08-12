@@ -17,16 +17,45 @@ incomparable.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.0
+
+**The first final release**, and the one where the double-track tier is
+complete, reachable from a car file and visible.
+
+- **L2 is built and is the tier at which different cars behave differently.**
+  Thirteen states: four contact patches with per-corner loads, MF-lite tyres
+  with a real peak and falling branch, a combined-slip friction ellipse, the
+  tyre relaxation transient, an open, spool or preloaded-LSD differential on a
+  2WD or 4WD layout, an ESC torque-speed curve with current and regen limits,
+  battery sag and state of charge, and a slew-limited second-order steering
+  servo.
+- **Schema 0.2.0** adds the longitudinal slip stiffness and the actuator
+  fields, so a car directory parameterises all three built tiers.
+- **`slipx.sinks`**: a finished run is recorded once and written to a file.
+  MCAP by default, Rerun as an extra, and an SVG sink that needs nothing
+  installed at all.
+- **Every figure and the README banner are generated from `slipx_core`**
+  rather than from a model that lived beside it.
+- **Reference documentation** (`docs/reference/`), the MF-lite derivation and
+  three runnable examples.
+
 **`0.1.0` final will never be published.** ADR-0017 planned to cut it from the
 `0.1.0a1` tree once the pre-release had proven the packaging path; it has, and
 that proof is the whole of what a content-identical final would have added.
-The first final release is `0.2.0`, at the milestone where L2 is complete and
-reachable from a car file. Reasoning in
-[ADR-0029](docs/adr/0029-no-0-1-0-final-first-final-is-0-2-0.md).
+Reasoning in
+[ADR-0029](docs/adr/0029-no-0-1-0-final-first-final-is-0-2-0.md). `pip install
+slipx` now resolves to this release rather than to the pre-release.
 
-P1 in progress: L2, the double-track tier. `VehicleModel::create` still throws
-for L2 until the tier is complete; the pieces below are usable on their own but
-no tier consumes them yet.
+**Every reference hash in this release differs from `0.1.0a1`'s**, in three
+separate deliberate movements recorded below. A result compared against a
+number published in `0.1.0a1` is not comparable with one produced here.
+
+### L2, in the order it was built
+
+The pieces below landed before any tier consumed them; each is usable on its
+own.
 
 - New public header `slipx/load_transfer.hpp`: quasi-static longitudinal and
   lateral load transfer from mass, CoG height, wheelbase and track (CORE-05),

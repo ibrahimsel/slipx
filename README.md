@@ -35,9 +35,9 @@ slipx-conformance
 
 Wheels cover Linux, macOS and Windows on CPython 3.9 to 3.13, so the normal
 case needs no compiler. `slipx-conformance` integrates the canonical step steer
-and prints the run manifest and its trajectory hash. Releases are pre-releases
-for now, which `pip` selects only while no final release exists; pin one with
-`pip install slipx==0.1.0a1`.
+and prints the run manifest and its trajectory hash. `0.2.0` is the first final
+release; `0.1.0a1` before it was a pre-release spent proving the packaging
+path, there is no `0.1.0`, and until `1.0.0` a minor bump may break the API.
 
 ```python
 import slipx

@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 # include/slipx/version.hpp and is what reaches the run manifest and PyPI.
 # tools/version_check.py holds the two in agreement.
 project(slipx
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION "Vehicle dynamics for 1/10-scale autonomous racecars"
   LANGUAGES CXX)
 

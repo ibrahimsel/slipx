@@ -24,10 +24,15 @@ Quick start::
     model.step(state, slipx.DriveInput(steer_cmd=0.1), 1e-3, diagnostics)
     print(state.yaw_rate, diagnostics.alpha_front)
 
-What is here at P0: tiers L0 and L1, the fixed-step orchestrator, seeded random
-streams, run manifests and trajectory hashing. L2 (the tier at which different
-cars actually behave differently), sensors and the ROS 2 layer arrive in P1;
-asking for an unimplemented tier raises rather than silently giving you L1.
+What is here: tiers L0, L1 and L2, all three reachable from a car directory;
+the fixed-step orchestrator, seeded random streams, run manifests and
+trajectory hashing; and ``slipx.sinks``, which records a run and writes it to a
+file. L2 is the tier at which different cars actually behave differently: four
+contact patches, load transfer, MF-lite tyres, a differential, an ESC, a
+battery and a steering servo. L3 raises rather than silently giving you a
+simpler model, and so does any tier a build does not implement.
+
+Sensors and the ROS 2 layer arrive in P1.
 
 No parameter set shipped with SlipX has been validated against a real car. The
 honest phrasing for anything built on them is "physically structured and
