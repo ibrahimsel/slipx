@@ -1362,8 +1362,12 @@ def fig_servo_step():
 # Both curves are rollouts of `slipx_core`, one per tier, at the reference
 # car's own parameters.
 
+# Finely spaced through the crossing, because the figure reports where the
+# curve leaves the 1% band and a coarse grid would report the first sample
+# past it instead. The README quotes this number, so the sweep has to resolve
+# it rather than round it up to the next steer angle.
 _CROSSOVER_STEERS = (0.005, 0.01, 0.02, 0.03, 0.045, 0.06, 0.075, 0.09,
-                     0.105, 0.12, 0.135, 0.15)
+                     0.10, 0.105, 0.11, 0.115, 0.12, 0.135, 0.15)
 _CROSSOVER_SPEED = 5.0
 _SETTLE_STEPS = 6000        # six seconds at 1 kHz, many yaw time constants
 

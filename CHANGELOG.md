@@ -311,7 +311,8 @@ asserts the trajectory hash is unchanged by writing.
 - **New figure `cross-tier-crossover.svg`**, the released artefact of the L1
   versus L2 comparison, generated from the library and referenced from
   [article 3](docs/racing/03-vehicle-models.md). On an open differential the
-  two tiers agree on path radius to within 1% up to 0.88 g; on the reference
+  two tiers agree on path radius to within 1% up to 0.82 g and cross that band
+  by 0.85 g; on the reference
   car's spool they disagree by 15% from the first degree of steering, because
   a single-track model has no differential to represent. The README's
   "within 1% below 0.23 g" was measured before the tyre was corrected and has

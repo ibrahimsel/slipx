@@ -165,8 +165,9 @@ Two things in that picture are worth more than the table.
 
 **The agreement holds much further than people expect.** With an open
 differential the two models are within a tenth of a per cent of each other up
-to about 6.5 m/s<sup>2</sup>, and within one per cent up to **8.6
-m/s<sup>2</sup>, about 0.88 g**, on tyres good for roughly 1.1 g. Nearly all of
+to about 6.5 m/s<sup>2</sup>, and within one per cent up to **8.0
+m/s<sup>2</sup>, about 0.82 g**, crossing that band by 8.3 m/s<sup>2</sup>
+(0.85 g), on tyres good for roughly 1.1 g. Nearly all of
 the usable range is a range where the cheap model is the right model. Past it
 the double track's load transfer and falling tyre branch start to matter and
 the gap opens quickly, which is exactly the region a lap is won in.

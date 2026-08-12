@@ -133,16 +133,17 @@ needs `-ffp-contract=off`, no `-ffast-math`, no `-march=native`, a fixed
 reduction order and no multithreading inside the integrator.
 
 **Across builds, bit-identity is not promised.**
-`conformance/reference_hashes.tsv` is keyed by architecture, compiler and build
-type, and `tools/check_conformance.py` compares a run against the row matching
-its own build. A mismatch there is a bug; a build with no row is a build about
-which nothing was claimed.
+`conformance/reference_hashes.tsv` is keyed by architecture, compiler, C
+library and build type, and `tools/check_conformance.py` compares a run against
+the row matching its own build. A mismatch there is a bug; a build with no row
+is a build about which nothing was claimed.
 
 So `slipx-conformance` printing a different hash on your machine is expected,
 and published wheels carry no hash claim at all. The variable is libm, not the
 compiler: one wheel hashes differently on glibc 2.28 and 2.39 while agreeing to
 every printed digit, and every x86-64 reference row is identical across GCC 11,
-GCC 13 and Clang 18.
+GCC 13 and Clang 18. That is why the C library is in the key and why the
+manifest records it.
 
 ## Building from source
 
@@ -189,10 +190,12 @@ slipx_core       vehicle dynamics. The C++ standard library, nothing
 The directories for the planned pieces exist and are empty. Nothing there
 half-works.
 
-A car is a versioned directory: `car.yaml` as manifest, a URDF/xacro owning
-geometry, inertias and sensor mounts, then `dynamics.yaml`, `sensors.yaml`,
-`limits.yaml` and `provenance.yaml`. Copy `examples/cars/reference_1_10` to
-start one.
+A car is a versioned directory: `car.yaml` as manifest, then `dynamics.yaml`,
+`sensors.yaml`, `limits.yaml`, `provenance.yaml` and a `tyres/` directory of
+`(compound, surface)` pairs. `car.yaml` may also point at a URDF or xacro
+owning frames, link geometry and sensor mounts; it is optional today and
+becomes load-bearing when the ROS 2 layer needs a TF tree. Copy
+`examples/cars/reference_1_10` to start one.
 
 ## Not in scope
 
@@ -223,16 +226,20 @@ Verification runs in four layers.
   asserted bit for bit, monotonicity under property-based sampling.
 - **Cross-tier**: the tiers must agree in the low lateral acceleration limit.
   For the reference car on an open differential, L1 and L2 agree on path radius
-  to within 1% up to 0.88 g, and the crossover is printed on every test run and
-  [plotted from the library](https://github.com/ibrahimsel/slipx/blob/main/docs/racing/assets/cross-tier-crossover.svg).
+  to within 1% up to 0.82 g and part company by 0.85 g; the crossover is
+  printed on every test run,
+  [plotted from the library](https://github.com/ibrahimsel/slipx/blob/main/docs/racing/assets/cross-tier-crossover.svg)
+  and measured by
+  [an example](https://github.com/ibrahimsel/slipx/blob/main/examples/02_where_the_tiers_disagree.py).
   A locked rear axle disagrees from the first degree of steering instead, which
   is not a tyre effect: a single-track model has no differential to represent.
 - **Empirical**: missing. Until an outside contributor supplies a fitted
   parameter set with a validation report, the honest phrasing is *physically
   structured and identifiable*, not *validated*.
 
-The first three are in place: 240 C++ tests and 194 Python tests, including an
-allocation counter proving `step` never touches the allocator. Every shipped
+The first three are in place: 242 C++ tests and 195 Python tests, with two
+more modules that run only when the optional sink extras are installed,
+including an allocation counter proving `step` never touches the allocator. Every shipped
 parameter set carries a `measured`, `identified` or `provisional` label, and
 the tooling prints it rather than leaving it in the documentation.
 
@@ -255,14 +262,22 @@ Eigen, why a missing tier raises, why diagnostics are NaN, why reference hashes
 are keyed by build. Most of the tempting simplifications have a record
 explaining what they break.
 
+[`docs/reference`](https://github.com/ibrahimsel/slipx/tree/main/docs/reference)
+is the lookup material: sign conventions, every parameter with its unit and the
+tier it first affects, the state and diagnostics blocks, the Python API, and
+the MF-lite derivation with worked numbers. Three runnable programs are in
+[`examples`](https://github.com/ibrahimsel/slipx/tree/main/examples), and the
+test suite executes them rather than trusting them.
+
 The component diagram is in
 [`docs/architecture/slipx.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/architecture/slipx.md)
 and the release history in
 [`CHANGELOG.md`](https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md).
 
-The banner is an illustration, not output: `docs/assets/make_banner.py` carries
-its own model and predates the code it advertises. It will be regenerated from
-`slipx_core`.
+The banner is output, not an illustration: `docs/assets/make_banner.py` rolls
+the car out of `slipx_core` at the double-track tier, and it drifts because its
+rear tyre is a lower-grip compound than its front. Every figure in the tutorial
+series is generated the same way; none of them carries a model of its own.
 
 ## Licence
 
