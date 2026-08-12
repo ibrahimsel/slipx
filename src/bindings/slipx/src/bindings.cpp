@@ -533,6 +533,13 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("system_name", &RunManifest::system_name)
       .def_readonly("system_processor", &RunManifest::system_processor)
       .def_readonly("git_sha", &RunManifest::git_sha)
+      .def_readonly("libc_id", &RunManifest::libc_id,
+                    "The C library the run executed against, read at run "
+                    "time. The trajectory hash tracks libm, so a run that "
+                    "differs here was never entitled to agree.")
+      .def_readonly("libc_version", &RunManifest::libc_version,
+                    "Version as the library reports it, e.g. '2.39'. Empty on "
+                    "platforms that offer no runtime version.")
       .def_readonly("trajectory_hash", &RunManifest::trajectory_hash)
       .def_readonly("agent_trajectory_hashes",
                     &RunManifest::agent_trajectory_hashes)

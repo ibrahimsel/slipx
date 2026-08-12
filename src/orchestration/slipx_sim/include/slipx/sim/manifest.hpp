@@ -16,6 +16,7 @@
 //   git SHA                    the same source
 //   compiler ID and flags      the same rounding (NFR-02)
 //   platform and architecture  because NFR-03 does not promise across these
+//   the C library              because the hash tracks libm (ADR-0033)
 //
 // The JSON writer is deliberately hand-rolled and about forty lines. A JSON
 // dependency in slipx_sim would be harmless to CORE-01, but the manifest is
@@ -70,6 +71,15 @@ struct RunManifest {
   std::string system_processor;
   std::string git_sha;
 
+  // The C library the run was executed against, read at run time rather than
+  // captured at configure time: for a redistributed wheel the binary is fixed
+  // when it is built and the C library is not chosen until it is installed.
+  // libm is not correctly rounded and its results move between versions, so
+  // two runs that differ here were never entitled to agree (ADR-0033).
+  // libc_version is empty on platforms that offer no runtime version.
+  std::string libc_id;
+  std::string libc_version;
+
   // ----------------------------------------------------------- the result
   // Per-agent and whole-run trajectory hashes. The whole-run hash is what CI
   // compares; the per-agent hashes are what makes a failure diagnosable,
@@ -84,7 +94,8 @@ struct RunManifest {
 
   // Fills compiler_id, compiler_version, cxx_flags, build_type, system_name,
   // system_processor, git_sha and slipx_core_version from the generated build
-  // info. Called automatically by Simulation.
+  // info, and libc_id/libc_version by asking the C library at run time.
+  // Called automatically by Simulation.
   void capture_build_info();
 
   // Digest over every field EXCEPT the result hashes. Two runs whose

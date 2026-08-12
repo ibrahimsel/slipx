@@ -11,6 +11,7 @@ workflow runs the same conformance run against the same reference file.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -22,6 +23,21 @@ import slipx
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 REFERENCE_CAR = REPO_ROOT / "examples" / "cars" / "reference_1_10"
+
+
+def _check_conformance_module():
+    """Import tools/check_conformance.py by path.
+
+    It is a script rather than a package, and it is not installed with the
+    wheel, so the tests that need it skip when the checkout is not there.
+    """
+    path = REPO_ROOT / "tools" / "check_conformance.py"
+    if not path.exists():
+        pytest.skip(f"{path} not present; not running from a checkout")
+    spec = importlib.util.spec_from_file_location("_slipx_check_conformance", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _subprocess_env() -> dict[str, str]:
@@ -195,6 +211,88 @@ def test_the_manifest_records_the_build_it_ran_on() -> None:
     assert manifest.steps == 1000
     assert len(manifest.configuration_digest()) == 16
     assert "not guaranteed" in manifest.to_json()
+
+    # And the C library, because it is libm the hash tracks and libm is not
+    # chosen until the wheel is installed (ADR-0033).
+    assert manifest.libc_id
+    if sys.platform.startswith("linux") and manifest.libc_id == "glibc":
+        assert manifest.libc_version
+
+
+def test_the_reference_key_separates_two_c_libraries() -> None:
+    """A run on another glibc must miss the row rather than fail against it.
+
+    The measured case: one wheel, byte for byte the same, hashed differently on
+    glibc 2.28 and glibc 2.39. Before the C library entered the key, that run
+    matched a published row it was never entitled to match, and the checker
+    called it a determinism bug (ADR-0033).
+    """
+    check = _check_conformance_module()
+
+    build = {
+        "system_processor": "x86_64",
+        "compiler_id": "GNU",
+        "compiler_version": "13.3.0",
+        "build_type": "RelWithDebInfo",
+        "libc_id": "glibc",
+        "libc_version": "2.39",
+    }
+    assert check.libc_column(build) == "glibc-2.39"
+
+    reference = check.read_reference()
+    key_columns = check.COLUMNS[:-1]
+
+    def row_for(key):
+        return next(
+            (r for r in reference if all(r[c] == key[c] for c in key_columns)), None
+        )
+
+    recorded = check.key_of({"build": build}, "L1", "rk4")
+    assert row_for(recorded) is not None, "this build is one of the published ones"
+
+    older = check.key_of(
+        {"build": dict(build, libc_version="2.28")}, "L1", "rk4"
+    )
+    assert row_for(older) is None, "nothing was ever claimed about glibc 2.28"
+
+    # An id with no version stands alone rather than gaining a trailing dash:
+    # the Windows UCRT and musl offer no version to ask for, and an invented
+    # one would be worse than an absent one.
+    assert check.libc_column(dict(build, libc_id="musl", libc_version="")) == "musl"
+
+    # A manifest written before the field existed is not silently keyed as
+    # though it came from this machine.
+    assert check.libc_column({"compiler_id": "GNU"}) == "unrecorded"
+
+
+def test_the_c_library_version_is_asked_for_at_run_time() -> None:
+    """A source check, because no behavioural test on one machine can do it.
+
+    Replacing `gnu_get_libc_version()` with `__GLIBC__.__GLIBC_MINOR__` is a
+    mutation that survives the whole suite: the headers a build compiles
+    against and the library it runs against are the same here, so both spell
+    2.39 and every assertion still passes. It is wrong anyway, and wrong in
+    precisely the case the column exists for, which is a wheel built against
+    one glibc and installed against another. The macros would record the
+    build machine and the field would be a confident lie.
+
+    So this asserts the shape of the source rather than its behaviour. It is
+    the honest way to pin something a single machine cannot observe.
+    """
+    source = REPO_ROOT / "src" / "orchestration" / "slipx_sim" / "src" / "libc_identity.cpp"
+    if not source.exists():
+        pytest.skip(f"{source} not present; not running from a checkout")
+    # Comments stripped: the file's own comment names the macro in order to
+    # say it is not used, and a check that cannot tell those two apart would
+    # be a check that fires on its own documentation.
+    code = "\n".join(
+        line.split("//", 1)[0] for line in source.read_text(encoding="utf-8").splitlines()
+    )
+
+    assert "gnu_get_libc_version()" in code
+    # __GLIBC__ itself is fine and necessary: it is how the platform is
+    # detected. It is the MINOR that would be a version.
+    assert "__GLIBC_MINOR__" not in code
 
 
 def test_agents_are_added_without_an_upper_bound() -> None:

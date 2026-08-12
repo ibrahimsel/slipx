@@ -45,6 +45,7 @@ configure_file(
   @ONLY)
 
 add_library(slipx_sim
+  src/libc_identity.cpp
   src/manifest.cpp
   src/simulation.cpp
 )

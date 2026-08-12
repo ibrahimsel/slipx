@@ -44,7 +44,8 @@ Use [`template.md`](template.md) for a new record.
 | # | Decision | Status |
 |---|---|---|
 | [0007](0007-determinism-is-scoped-to-a-build.md) | Determinism is promised within one build and not across platforms | Accepted |
-| [0008](0008-reference-hashes-are-keyed-by-build.md) | Reference trajectory hashes are keyed by build, and the reference runners are pinned | Accepted |
+| [0008](0008-reference-hashes-are-keyed-by-build.md) | Reference trajectory hashes are keyed by build, and the reference runners are pinned | Superseded by 0033 |
+| [0033](0033-the-c-library-is-part-of-the-build-key.md) | The C library is part of the build a reference hash is keyed by | Accepted |
 
 ## Parameters and the schema
 

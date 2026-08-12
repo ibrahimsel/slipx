@@ -9,6 +9,7 @@
 
 #include "slipx/sim/build_info.hpp"
 #include "slipx/sim/hash.hpp"
+#include "slipx/sim/libc_identity.hpp"
 #include "slipx/version.hpp"
 
 namespace slipx {
@@ -59,6 +60,12 @@ void RunManifest::capture_build_info() {
   system_name = kBuildSystemName;
   system_processor = kBuildSystemProcessor;
   git_sha = kBuildGitSha;
+  // Not from build_info.hpp: that file is generated when CMake configures,
+  // and this value has to describe the process, not the machine that built
+  // it (ADR-0033).
+  const LibcIdentity libc = libc_identity();
+  libc_id = libc.id;
+  libc_version = libc.version;
 }
 
 std::string RunManifest::configuration_digest() const {
@@ -83,6 +90,8 @@ std::string RunManifest::configuration_digest() const {
   h.update(system_name);
   h.update(system_processor);
   h.update(git_sha);
+  h.update(libc_id);
+  h.update(libc_version);
   // Deliberately excludes steps and the trajectory hashes: the digest answers
   // "was this the same setup", and the trajectory hash answers "did it give
   // the same answer". Folding the result into the configuration digest would
@@ -133,16 +142,22 @@ std::string RunManifest::to_json() const {
   o << "    \"build_type\": " << quote(build_type) << ",\n";
   o << "    \"system_name\": " << quote(system_name) << ",\n";
   o << "    \"system_processor\": " << quote(system_processor) << ",\n";
-  o << "    \"git_sha\": " << quote(git_sha) << "\n";
+  o << "    \"git_sha\": " << quote(git_sha) << ",\n";
+  o << "    \"libc_id\": " << quote(libc_id) << ",\n";
+  o << "    \"libc_version\": " << quote(libc_version) << "\n";
   o << "  },\n";
 
-  // NFR-03, restated in every manifest rather than only in the documentation,
-  // because this file is what somebody reads when a result does not
-  // reproduce and they are deciding whether that is a bug or the promise.
+  // The scope of the promise, restated in every manifest rather than only in
+  // the documentation, because this file is what somebody reads when a result
+  // does not reproduce and they are deciding whether that is a bug or the
+  // promise working. "Same binary and same C library" rather than "same
+  // build": for a redistributed wheel those are different things, and the
+  // hash tracks libm (ADR-0033).
   o << "  \"determinism\": {\n";
-  o << "    \"within_build\": \"bit-identical\",\n";
+  o << "    \"within_build\": \"bit-identical for the same binary on the "
+       "same C library\",\n";
   o << "    \"across_platforms\": \"not guaranteed; conformance is to a "
-       "stated tolerance (NFR-03)\"\n";
+       "stated tolerance\"\n";
   o << "  },\n";
 
   o << "  \"trajectory_hash\": " << quote(trajectory_hash) << "\n";

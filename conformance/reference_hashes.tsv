@@ -4,11 +4,19 @@
 # READ THIS BEFORE ADDING A ROW OR CHANGING ONE.
 #
 # Each row is a published claim: on this architecture, with this compiler
-# major and this build type, the canonical step steer produces exactly this
-# 64-bit hash. Within one such build, a different hash is a determinism bug
-# (NFR-02). Across builds, a different hash is expected and is not a failure:
-# cross-platform bit-identity is explicitly NOT promised (NFR-03), because
-# libm is not correctly rounded and does not agree between platforms.
+# major, against this C library and with this build type, the canonical step
+# steer produces exactly this 64-bit hash. Within one such build, a different
+# hash is a determinism bug (NFR-02). Across builds, a different hash is
+# expected and is not a failure: cross-platform bit-identity is explicitly NOT
+# promised (NFR-03), because libm is not correctly rounded and does not agree
+# between platforms.
+#
+# The C library is in the key, and it is in the key because it is libm that
+# the hash tracks. sin, cos, atan and exp move between glibc versions, and one
+# unchanged wheel was measured producing two different hashes on glibc 2.28
+# and glibc 2.39. The version is written in full rather than as a major:
+# glibc's major has been 2 since 1997, and it is the minor releases that move
+# the numbers (ADR-0033).
 #
 # Changing an existing hash invalidates every result anybody has ever compared
 # against it. It is a release event, it belongs in the release notes, and it
@@ -67,23 +75,31 @@
 # with these. The three compiler rows were measured separately rather than
 # copied from one another.
 #
+# The eighteen rows were re-keyed on 2026-08-13, not re-measured into new
+# values: ADR-0033 put the C library in the key, and every row gained the
+# glibc 2.39 it was in fact recorded under, here and on the pinned
+# ubuntu-24.04 runners alike. No hash changed and nothing published became
+# incomparable. Before this, a run on a different glibc matched a row it was
+# never entitled to match and was reported as a determinism bug; it now gets
+# the honest "no reference row for this build" instead.
+#
 # Columns:
-#   system_processor  compiler_id  compiler_major  build_type  tier  integrator  hash
-x86_64	GNU	11	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
-x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	GNU	11	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
-x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
-x86_64	GNU	11	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
-x86_64	GNU	11	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
-x86_64	Clang	18	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
-x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	Clang	18	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
-x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
-x86_64	Clang	18	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
-x86_64	Clang	18	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
-x86_64	GNU	13	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
-x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	GNU	13	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
-x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
-x86_64	GNU	13	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
-x86_64	GNU	13	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
+#   system_processor  compiler_id  compiler_major  libc  build_type  tier  integrator  hash
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	GNU	11	glibc-2.39	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	Clang	18	glibc-2.39	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	GNU	13	glibc-2.39	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892

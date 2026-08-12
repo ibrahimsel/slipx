@@ -94,7 +94,19 @@ def main() -> int:
     canonical = slipx.make_conformance_run()
     canonical.run_for(5.0)
     digest = canonical.trajectory_hash()
+    manifest = canonical.manifest()
     print(f"\ncanonical conformance run: {digest}")
+    # The build this hash belongs to, printed whether or not anything is
+    # compared. The C library is on that line because it is libm the hash
+    # tracks: this same wheel produces a different hash on a different glibc,
+    # and that is the first thing to check before calling a hash wrong.
+    libc = manifest.libc_id + (
+        f" {manifest.libc_version}" if manifest.libc_version else ""
+    )
+    print(
+        f"  build: {manifest.system_processor} {manifest.compiler_id} "
+        f"{manifest.compiler_version} {manifest.build_type}, {libc}"
+    )
 
     if args.expect is None:
         print("\nno --expect given, so nothing was compared.")
@@ -103,11 +115,12 @@ def main() -> int:
     if digest != args.expect:
         print(
             f"\nEXIT GATE FAILED: expected {args.expect}, got {digest}.\n\n"
-            "If this is an architecture or compiler with no published "
-            "reference row, that is documented behaviour and not a bug "
-            "(NFR-03): cross-platform bit-identity is not promised. Check "
-            "conformance/reference_hashes.tsv for a row matching this build "
-            "before treating it as a determinism failure.",
+            "If this is an architecture, compiler or C library with no "
+            "published reference row, that is documented behaviour and not a "
+            "bug (NFR-03): cross-platform bit-identity is not promised. Check "
+            "conformance/reference_hashes.tsv for a row matching the build "
+            "printed above, C library included, before treating it as a "
+            f"determinism failure. This run was on {libc}.",
             file=sys.stderr,
         )
         return 1

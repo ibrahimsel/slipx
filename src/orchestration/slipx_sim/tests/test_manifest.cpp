@@ -17,6 +17,11 @@
 #include <sstream>
 #include <string>
 
+#if defined(__GLIBC__)
+#include <gnu/libc-version.h>
+#endif
+
+#include "slipx/sim/libc_identity.hpp"
 #include "slipx/sim/manifest.hpp"
 #include "slipx/sim/manoeuvres.hpp"
 #include "slipx/sim/simulation.hpp"
@@ -77,6 +82,17 @@ TEST(Manifest, RecordsEverythingNeededToReproduceTheRun) {
   EXPECT_FALSE(m.system_name.empty());
   EXPECT_FALSE(m.system_processor.empty());
   EXPECT_FALSE(m.git_sha.empty());
+
+  // And the C library, because the hash tracks libm rather than the compiler
+  // (ADR-0033). The id is never empty; the version is, on platforms that
+  // cannot be asked, so it is not asserted here.
+  EXPECT_FALSE(m.libc_id.empty());
+#if defined(__GLIBC__)
+  EXPECT_EQ(m.libc_id, "glibc");
+  EXPECT_FALSE(m.libc_version.empty())
+      << "glibc can be asked its version at run time, so an empty one means "
+         "the wrong thing was recorded";
+#endif
 
   // The flag set has to include the one flag the determinism claim rests on.
   EXPECT_TRUE(contains(m.cxx_flags, "-ffp-contract=off")) << m.cxx_flags;
@@ -152,6 +168,35 @@ TEST(Manifest, ConfigurationDigestNoticesASeedChange) {
   EXPECT_NE(a.configuration_digest(), b.configuration_digest());
 }
 
+// The measured case this exists for: the same binary, run against a different
+// C library, produced a different trajectory hash. Two such runs must be
+// distinguishable as different setups rather than as one setup that failed to
+// reproduce (ADR-0033).
+TEST(Manifest, ConfigurationDigestNoticesADifferentCLibrary) {
+  RunManifest a;
+  a.capture_build_info();
+  RunManifest b = a;
+  b.libc_version = a.libc_version + ".1";
+  EXPECT_NE(a.configuration_digest(), b.configuration_digest());
+
+  RunManifest c = a;
+  c.libc_id = "musl";
+  EXPECT_NE(a.configuration_digest(), c.configuration_digest());
+}
+
+TEST(LibcIdentity, IsAnsweredWithoutInventingAVersion) {
+  const slipx::sim::LibcIdentity libc = slipx::sim::libc_identity();
+  EXPECT_FALSE(libc.id.empty()) << "the id is half a lookup key";
+  EXPECT_EQ(libc.id.find(' '), std::string::npos)
+      << "the id becomes part of a tab-separated column and a shell argument";
+#if defined(__GLIBC__)
+  EXPECT_EQ(libc.id, "glibc");
+  // The runtime version, which is what the process is linked against. A
+  // build-time constant would describe the machine that compiled the wheel.
+  EXPECT_EQ(libc.version, std::string(gnu_get_libc_version()));
+#endif
+}
+
 TEST(Manifest, JsonIsWellFormedAndCarriesTheKeyFields) {
   const std::string json = two_car_run().manifest().to_json();
 
@@ -176,10 +221,20 @@ TEST(Manifest, JsonIsWellFormedAndCarriesTheKeyFields) {
   EXPECT_TRUE(contains(json, "\"alice\""));
   EXPECT_TRUE(contains(json, "\"bob\""));
   EXPECT_TRUE(contains(json, "\"git_sha\""));
+  EXPECT_TRUE(contains(json, "\"libc_id\""));
+  EXPECT_TRUE(contains(json, "\"libc_version\""));
 
-  // NFR-03 is restated in the artefact, not only in the documentation.
+  // The scope of the promise is restated in the artefact, not only in the
+  // documentation, and it names the C library: for a redistributed wheel the
+  // binary and the C library are chosen at different times, so "the same
+  // build" on its own promises more than is kept (ADR-0033).
   EXPECT_TRUE(contains(json, "across_platforms"));
   EXPECT_TRUE(contains(json, "not guaranteed"));
+  EXPECT_TRUE(contains(json, "same C library"));
+
+  // The manifest is published to people who cannot read the requirement spec,
+  // so it carries its reasoning rather than a reference they cannot follow.
+  EXPECT_FALSE(contains(json, "NFR-"));
 }
 
 // The step size must round-trip exactly, or the manifest cannot reproduce the

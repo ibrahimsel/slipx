@@ -1,9 +1,10 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-12. Published version: `0.1.0a1` (PyPI, tag `v0.1.0a1`,
+Last updated: 2026-08-13. Published version: `0.1.0a1` (PyPI, tag `v0.1.0a1`,
 commit `644cb12`). Current tree: L2 is complete (drivetrain, battery, servo and
 differentials), the sink layer writes MCAP, Rerun and SVG, and every figure is
-generated from `slipx_core`. All unreleased; M4 is the release.
+generated from `slipx_core`. All unreleased; M4 is the release, and is in
+progress.
 
 This file is the working plan from the current state to a `1.0.0` release of
 the `slipx` distribution. It is written to be executed and updated by agents
@@ -313,12 +314,12 @@ special-cased in the sink code.
 
 ## M4. Release 0.2.0
 
-Status: not-started. Size: small (days). Blocked by: M1, M2, M3.
+Status: in-progress. Size: small (days). Blocked by: M1, M2, M3.
 
 Goal: the first release where the double-track tier is complete, reachable
 from a car file and visible. Everything below is release engineering.
 
-- [ ] **M4.1** The libm ADR, before the next release: the reference-hash key
+- [x] **M4.1** The libm ADR, before the next release: the reference-hash key
   (architecture, compiler, build type, tier, integrator) has no C library
   column, and `"within_build": "bit-identical"` in the manifest is imprecise
   for a redistributed dynamically linked wheel, where libm varies by host
@@ -326,6 +327,12 @@ from a car file and visible. Everything below is release engineering.
   or the wording is an architectural change and wants an ADR superseding
   ADR-0008, not a quiet edit.
   Done when: the ADR is accepted and whatever it decides is implemented.
+  Decided 2026-08-13 by the user: key on it, recorded as ADR-0033 superseding
+  ADR-0008. The TSV gains a `libc` column, the manifest gains `libc_id` and
+  `libc_version` read at run time and folded into the configuration digest,
+  and `within_build` narrows to "the same binary on the same C library". The
+  eighteen rows were re-keyed to `glibc-2.39`, not re-measured: **no hash
+  moved**, re-verified under GCC 11, GCC 13 and Clang 18.
 - [ ] **M4.2** The per-minor-release documentation set: reference
   documentation, a written tyre-model derivation, and three runnable examples.
   Audit what exists (the racing series is a tutorial, not the derivation) and
@@ -633,6 +640,7 @@ working around any of these.
 | An unimplemented tier throws; never fall back to a simpler tier | ADR-0005 |
 | Diagnostics use NaN, never zero, for what a tier cannot represent | ADR-0006 |
 | Reference hashes are keyed by build; pinned runners | ADR-0008 |
+| The C library is part of that build key; the hash tracks libm | ADR-0033 |
 | No `if (scale == ...)` branching, ever | ADR-0012 |
 | Core and schema versions are independent and never compared | ADR-0015 |
 | A released wheel asserts nothing about its own trajectory hash | ADR-0020 |

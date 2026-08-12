@@ -211,6 +211,14 @@ jobs:
       # job checks that it has (tools/check_conformance.py --pin-only), because
       # once it was left behind and the failure surfaced here, a wheel build
       # later, looking like a determinism bug in something already correct.
+      #
+      # The comparison is valid only because the job pins ubuntu-24.04, which
+      # pins glibc. The hash tracks libm, and this same wheel produces a
+      # different hash on a different glibc: one wheel, two hashes, measured on
+      # 2.28 and 2.39 (ADR-0033). A runner image with another C library would
+      # fail here for a reason that has nothing to do with the wheel, so the
+      # published row this literal copies names glibc 2.39 and moving the image
+      # means recording a new row first.
       EXPECTED_HASH: 0d8f69a1e3b58038
 
   # ------------------------------------------------------------- the sinks

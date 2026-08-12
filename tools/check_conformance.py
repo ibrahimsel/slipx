@@ -11,8 +11,11 @@ therefore be wrong. It would pass on the machine it was recorded on and fail on
 every other, and the only way to make it pass everywhere would be to weaken the
 check to a tolerance, which is where nondeterminism hides.
 
-So the reference file is keyed by build. A run is compared against the row that
-matches its architecture, compiler and configuration, and:
+So the reference file is keyed by build, and "the build" includes the C
+library: the hash tracks libm, which is not correctly rounded and moves
+between glibc versions, and one unchanged wheel has been measured producing
+two hashes on glibc 2.28 and 2.39 (ADR-0033). A run is compared against the
+row that matches its architecture, compiler, C library and configuration, and:
 
   matching row, hashes agree      the determinism promise held
   matching row, hashes differ     NFR-02 is broken. This is a bug.
@@ -58,6 +61,7 @@ COLUMNS = [
     "system_processor",
     "compiler_id",
     "compiler_major",
+    "libc",
     "build_type",
     "tier",
     "integrator",
@@ -163,6 +167,28 @@ def run_case(binary: Path, tier: str, integrator: str) -> dict:
         return json.load(handle)
 
 
+def libc_column(build: dict) -> str:
+    """The `libc` column, composed from the manifest's two fields.
+
+    Full version, not a major, which is the opposite of the compiler rule
+    below and for the opposite reason: glibc's major has been 2 since 1997, so
+    a major-only key would be a column of constants, and glibc's MINOR
+    releases demonstrably move libm results. One wheel, byte for byte the
+    same, hashed differently on glibc 2.28 and 2.39 (ADR-0033).
+
+    The id alone where there is no version: Apple's libc, the Windows UCRT and
+    musl offer none, and an invented one would be worse than an absent one.
+    """
+    libc_id = build.get("libc_id", "")
+    if not libc_id:
+        # A manifest written before ADR-0033. It cannot be keyed, and guessing
+        # the C library of a run somebody else recorded is exactly the guess
+        # this column exists to stop.
+        return "unrecorded"
+    version = build.get("libc_version", "")
+    return f"{libc_id}-{version}" if version else libc_id
+
+
 def key_of(manifest: dict, tier: str, integrator: str) -> dict[str, str]:
     build = manifest["build"]
     # Compiler MAJOR only. A point release of GCC is not supposed to change
@@ -174,6 +200,7 @@ def key_of(manifest: dict, tier: str, integrator: str) -> dict[str, str]:
         "system_processor": build["system_processor"],
         "compiler_id": build["compiler_id"],
         "compiler_major": compiler_major,
+        "libc": libc_column(build),
         "build_type": build["build_type"],
         "tier": tier,
         "integrator": integrator,
@@ -258,7 +285,7 @@ def main() -> int:
             failures.append(
                 f"{label}: expected {row['hash']}, got {digest}\n"
                 f"      build: {key['system_processor']} {key['compiler_id']} "
-                f"{key['compiler_major']} {key['build_type']}\n"
+                f"{key['compiler_major']} {key['libc']} {key['build_type']}\n"
                 f"      flags: {manifest['build']['cxx_flags']}"
             )
             print(f"  {label:28s} {digest}  MISMATCH (expected {row['hash']})")
@@ -289,8 +316,9 @@ def main() -> int:
         print(
             f"\n{len(missing)} case(s) have no reference row for this build.\n"
             "That is not a failure: NFR-03 does not promise bit-identity "
-            "across platforms, compilers or flag sets, so a build nobody has "
-            "recorded is a build about which nothing was claimed.\n\n"
+            "across platforms, compilers, C libraries or flag sets, so a "
+            "build nobody has recorded is a build about which nothing was "
+            "claimed.\n\n"
             "To publish these as reference values, add to "
             f"{REFERENCE_FILE.relative_to(REPO_ROOT)}:\n"
         )

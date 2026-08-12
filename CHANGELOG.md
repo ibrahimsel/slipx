@@ -353,6 +353,38 @@ GCC 13 and Clang 18 and measured separately under each:
 | L0 / rk4 | `cf6aba9e280a24b9` | unchanged |
 | L0 / semi_implicit_euler | `4cb3269ec5ba7ac3` | unchanged |
 
+### The C library joins the build key, and no hash moves
+
+`conformance/reference_hashes.tsv` gains a `libc` column between
+`compiler_major` and `build_type`. **No hash changes.** The eighteen existing
+rows are re-keyed, not re-measured: each gains the `glibc-2.39` it was in fact
+recorded under, so nothing anybody has compared against becomes incomparable.
+
+The reason is a measured one. The trajectory hash tracks libm, not the
+compiler, and libm is not correctly rounded: one wheel, byte for byte the same
+binary, produced two different trajectory hashes on glibc 2.28 and glibc 2.39.
+Every column of the old key was identical across those two runs, so the run on
+2.28 matched a published row it was never entitled to match and
+`tools/check_conformance.py` reported it as a determinism bug in code that was
+behaving exactly as designed. It now gets the honest outcome instead: no
+reference row for this build, exit 0, and the row printed for whoever wants to
+publish it. Reasoning in
+[ADR-0033](docs/adr/0033-the-c-library-is-part-of-the-build-key.md), which
+supersedes ADR-0008.
+
+- **The run manifest gains `libc_id` and `libc_version`** in its `build` block,
+  read at run time rather than captured when CMake configures: for a
+  redistributed wheel the binary is fixed at build time and the C library is
+  not chosen until it is installed. Both feed the configuration digest, so two
+  runs on different C libraries are now different setups rather than one setup
+  that failed to reproduce. Exposed on `slipx.RunManifest`.
+- **The manifest's determinism note is narrower and truer.** `"within_build":
+  "bit-identical"` is now `"bit-identical for the same binary on the same C
+  library"`, and the strings no longer cite requirement IDs that a reader of
+  this repository cannot look up.
+- `tools/exit_gate.py` prints the build it ran on, C library included, and its
+  failure message says to check that line first.
+
 ## 0.1.0a1
 
 First publication. Pre-release: the version number is the one part of a release

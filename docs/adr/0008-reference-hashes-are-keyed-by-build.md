@@ -1,6 +1,8 @@
 # ADR-0008: Reference trajectory hashes are keyed by build, and the reference runners are pinned
 
-- **Status:** Accepted
+- **Status:** Superseded by
+  [ADR-0033](0033-the-c-library-is-part-of-the-build-key.md), which adds the
+  C library to the key. Everything else here still holds.
 - **Date recorded:** 2026-08-02 (decision taken during P0; the pinning was
   added after CI failed)
 - **Requirements:** NFR-02, NFR-03
