@@ -333,21 +333,36 @@ from a car file and visible. Everything below is release engineering.
   and `within_build` narrows to "the same binary on the same C library". The
   eighteen rows were re-keyed to `glibc-2.39`, not re-measured: **no hash
   moved**, re-verified under GCC 11, GCC 13 and Clang 18.
-- [ ] **M4.2** The per-minor-release documentation set: reference
+- [x] **M4.2** The per-minor-release documentation set: reference
   documentation, a written tyre-model derivation, and three runnable examples.
   Audit what exists (the racing series is a tutorial, not the derivation) and
   fill the gaps. Examples must be executed, not proofread.
   Done when: all three exist and the examples run from a clean venv install.
-- [ ] **M4.3** README audit: every claim replaced rather than appended
+  Done 2026-08-13: `docs/reference/` (conventions, `VehicleParams`, state and
+  diagnostics, the Python API) and `docs/reference/tyre-model.md`, the MF-lite
+  derivation with worked reference-car numbers. Three examples in `examples/`,
+  executed by `test_examples.py` in the tree and by hand from a clean venv
+  install of the wheel, run outside the checkout with `PYTHONPATH` cleared.
+- [x] **M4.3** README audit: every claim replaced rather than appended
   (tier table status, the "not yet built" SVG line, test counts, the
   tyre-file reachability claim). Both Python snippets executed as written.
   Absolute URLs only; the README is the PyPI long description.
   Done when: every claim in the README is currently true.
-- [ ] **M4.4** Version bump in the four coupled places (`pyproject.toml`,
+  Done 2026-08-13: the build key gained its C library column, the cross-tier
+  number was wrong by one sample of the figure's sweep (within 1% to 0.82 g,
+  crossing by 0.85 g, and the figure's steer grid was refined so the figure,
+  the CHANGELOG, article 3 and the README agree), test counts, the inverted
+  banner claim, the URDF the reference car does not carry, and links to
+  `docs/reference` and `examples`. Both snippets executed from a clean venv
+  install of the wheel, outside the checkout.
+- [x] **M4.4** Version bump in the four coupled places (`pyproject.toml`,
   `CMakeLists.txt`, `slipx/version.hpp` twice over, `slipx/version.py`);
   CMake carries the numeric part only. CHANGELOG cut for the release,
   including the hash-movement tables from M2.8 (and M3.1 if taken).
   Done when: `tools/version_check.py` passes.
+  Done 2026-08-13: `0.2.0` in all four places, CMake carrying `0.2.0` as the
+  numeric part; the CHANGELOG cut keeps all three hash-movement tables and
+  says at the top that every hash differs from `0.1.0a1`'s.
 - [ ] **M4.5** Release rehearsal then release: dispatch the workflow to
   TestPyPI, verify the render and a cold install; then tag, and dispatch to
   PyPI with publish enabled, from the tag (the workflow refuses otherwise).
@@ -356,6 +371,14 @@ from a car file and visible. Everything below is release engineering.
   a broken upload means the next number.
   Done when: `pip install slipx==<version>` works from a clean venv and the
   PyPI page renders correctly.
+  Ready 2026-08-13, awaiting the user: this is the one M4 task an agent cannot
+  do, because it dispatches workflows, tags and publishes. Rehearsed locally
+  as far as it goes: the wheel builds from this tree through
+  scikit-build-core, installs into a clean venv, and outside the checkout with
+  `PYTHONPATH` cleared the exit gate passes against the pinned
+  `0d8f69a1e3b58038` and `slipx-conformance` prints the same hash.
+  `tools/version_check.py --expect v0.2.0` passes, so the tag the workflow
+  wants is `v0.2.0`.
 
 ## M5. The rest of P1: sensing, track, ROS 2, reference stack
 
