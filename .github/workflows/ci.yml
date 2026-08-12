@@ -200,6 +200,54 @@ jobs:
       # would make the check circular.
       EXPECTED_HASH: f4da160a691289eb
 
+  # ------------------------------------------------------------- the sinks
+  #
+  # The optional path, run with the optional things installed (SINK-03).
+  #
+  # Every other job runs the suite with neither SDK present, which is the case
+  # that must keep working and is checked by default. That leaves the sinks
+  # themselves covered by skipped tests, and an optional path with no CI is an
+  # optional path that is broken: nothing would notice an SDK release that
+  # renamed a call until somebody with the extra installed hit it (ADR-0028).
+  sinks:
+    name: Sink extras (SINK-02, SINK-03)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies and both sink extras
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pybind11 pyyaml jsonschema pytest
+          python3 -m pip install mcap rerun-sdk
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DSLIPX_BUILD_PYTHON=ON -DSLIPX_WERROR=ON
+          cmake --build build -j"$(nproc)"
+
+      - name: Python tests, with the extras present
+        run: python3 -m pytest -q
+
+      # The check that matters most here and that the test suite cannot make
+      # about itself: with the SDKs installed and importable, importing slipx
+      # must still not import them (SINK-03).
+      - name: Importing slipx imports no encoder
+        env:
+          PYTHONPATH: src/bindings/slipx:src/core/slipx_schema
+        run: |
+          python3 -c "
+          import sys, slipx, slipx.sinks
+          bad = [m for m in ('mcap', 'rerun') if m in sys.modules]
+          print('imported:', bad)
+          sys.exit(1 if bad else 0)
+          "
+
   # ------------------------------------------------------------ determinism
   #
   # The job the leaderboard and replay claims rest on. It runs on a fixed

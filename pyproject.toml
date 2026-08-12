@@ -75,6 +75,21 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
+# The sink encoders (SINK-02, SINK-03, ADR-0028). Extras and never install
+# requirements: SlipX installs, imports and passes its tests with both absent,
+# and neither is imported when `slipx` is. A hard dependency here would have to
+# resolve on all twenty-five wheels of the ADR-0018 matrix and would contradict
+# the thesis of a library whose product is a core with no dependencies.
+#
+# Both are Apache-2.0, which is not a coincidence: NFR-01 rules out anything
+# else, and it is why Foxglove Studio (proprietary since the open-source
+# edition was discontinued) is a viewer somebody may install and never
+# something SlipX depends on. MCAP, the format and its libraries, is
+# unaffected by that and is the part worth adopting.
+mcap = ["mcap>=1.1"]
+rerun = ["rerun-sdk>=0.20"]
+sinks = ["slipx[mcap]", "slipx[rerun]"]
+
 [project.urls]
 Homepage = "https://github.com/ibrahimsel/slipx"
 Repository = "https://github.com/ibrahimsel/slipx"

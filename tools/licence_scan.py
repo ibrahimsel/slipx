@@ -65,6 +65,30 @@ DECLARED_DEPENDENCIES = {
     "tests": {"GoogleTest": "BSD-3-Clause", "pytest": "MIT"},
 }
 
+# Optional extras: installed only if somebody asks for them by name, never
+# imported at package import time, and never vendored into this tree
+# (SINK-03, ADR-0028). They are declared here anyway, and checked against
+# pyproject.toml below, because "optional" is about the install and not about
+# the licence. An extra is still a thing SlipX tells people to install, and a
+# copyleft one would be a copyleft dependency of the distribution in every way
+# that matters to somebody redistributing a build of it.
+#
+# Extras that only aggregate other extras are listed with no packages of their
+# own; their contents are checked through the extras they name.
+OPTIONAL_DEPENDENCIES = {
+    "dev": {"pytest": "MIT"},
+    "mcap": {"mcap": "Apache-2.0"},
+    "rerun": {"rerun-sdk": "Apache-2.0"},
+    "sinks": {},  # aggregate: slipx[mcap] + slipx[rerun]
+}
+
+# Licences an optional extra may carry. Stricter than "not copyleft" on
+# purpose: an extra whose licence is not one of these is a decision to take
+# deliberately and to record, not one to make by editing a list.
+PERMITTED_OPTIONAL_LICENCES = {
+    "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC",
+}
+
 
 def is_exempt(relative: str) -> bool:
     return any(pattern.search(relative) for pattern in EXEMPT_PATTERNS)
@@ -157,12 +181,71 @@ def check_core_has_no_dependencies() -> list[str]:
     return []
 
 
+def declared_extras() -> list[str]:
+    """The extra names pyproject.toml actually offers.
+
+    Read with a regex rather than a TOML parser for the same reason
+    version_check.py does: these tools run before anything is installed, and a
+    dependency in the tool that checks the dependencies is its own joke.
+    """
+    pyproject = REPO_ROOT / "pyproject.toml"
+    if not pyproject.exists():
+        return []
+
+    text = pyproject.read_text(encoding="utf-8")
+    match = re.search(
+        r"^\[project\.optional-dependencies\]\s*$(.*?)(?=^\[|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        return []
+    return re.findall(r"^([A-Za-z0-9_.-]+)\s*=", match.group(1), re.MULTILINE)
+
+
+def check_optional_extras() -> list[str]:
+    """Every extra pyproject offers is declared here, with a licence.
+
+    The failure this catches is an extra added to pyproject.toml and nowhere
+    else, which is how a dependency arrives without anybody having thought
+    about its licence. It is the same argument as DECLARED_DEPENDENCIES, moved
+    to the surface that grew when the sinks landed (ADR-0028).
+    """
+    problems = []
+    offered = declared_extras()
+
+    for extra in offered:
+        if extra not in OPTIONAL_DEPENDENCIES:
+            problems.append(
+                f"pyproject.toml offers the extra '{extra}', which is not "
+                f"declared in OPTIONAL_DEPENDENCIES in this script. Add it "
+                f"where somebody has to write down its licence (NFR-01)."
+            )
+    for extra in OPTIONAL_DEPENDENCIES:
+        if extra not in offered:
+            problems.append(
+                f"OPTIONAL_DEPENDENCIES declares the extra '{extra}', which "
+                f"pyproject.toml does not offer. One of the two is stale."
+            )
+
+    for extra, packages in OPTIONAL_DEPENDENCIES.items():
+        for package, licence in packages.items():
+            if licence not in PERMITTED_OPTIONAL_LICENCES:
+                problems.append(
+                    f"the extra '{extra}' carries {package} under {licence}, "
+                    f"which is not on the permitted list. An extra is still "
+                    f"something SlipX tells people to install (NFR-01)."
+                )
+    return problems
+
+
 def main() -> int:
     problems: list[str] = []
     problems += check_licence_file()
     problems += check_spdx_headers()
     problems += check_no_copyleft_text()
     problems += check_core_has_no_dependencies()
+    problems += check_optional_extras()
 
     if problems:
         print("Licence scan failed (NFR-01):\n", file=sys.stderr)
@@ -171,9 +254,11 @@ def main() -> int:
         return 1
 
     declared = sum(len(v) for v in DECLARED_DEPENDENCIES.values())
+    optional = sum(len(v) for v in OPTIONAL_DEPENDENCIES.values())
     print(
         f"Licence scan clean: Apache-2.0 throughout, {declared} declared "
-        f"dependencies, all permissive, none in slipx_core."
+        f"dependencies and {optional} optional ones, all permissive, none in "
+        f"slipx_core."
     )
     return 0
 

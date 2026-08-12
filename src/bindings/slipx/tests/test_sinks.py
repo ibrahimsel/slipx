@@ -306,6 +306,50 @@ def test_neither_sdk_is_imported_when_slipx_is():
     )
 
 
+def test_no_sink_opens_a_window():
+    """SINK-04, as a property of the source rather than of one run.
+
+    Rerun's SDK will happily spawn a viewer process, connect to a running one
+    or serve over a socket, and the MCAP tooling has a CLI that will open
+    things. A sink calls none of it: it writes a file and stops, so NFR-04
+    holds by construction rather than by care (ADR-0028).
+
+    A source scan rather than a behavioural test because the behaviour under
+    test is one that must never happen, and a test that only fails when
+    somebody has already opened a window is not a guard.
+    """
+    import io
+    import tokenize
+    from pathlib import Path
+
+    forbidden = (
+        "spawn", "connect", "connect_grpc", "serve", "serve_web",
+        "notebook_show", "show", "subprocess", "webbrowser", "socket",
+        "system", "startfile", "popen", "Popen",
+    )
+    directory = Path(sinks.__file__).parent
+
+    offences = []
+    for module in sorted(directory.glob("*.py")):
+        with module.open(encoding="utf-8") as handle:
+            names = {
+                token.string
+                for token in tokenize.generate_tokens(handle.readline)
+                if token.type == tokenize.NAME
+            }
+        # Names only: comments and docstrings are excluded by construction,
+        # which matters because this file and those docstrings both have to be
+        # able to say the word "spawn".
+        offences.extend(
+            f"{module.name}: {name}" for name in sorted(names & set(forbidden))
+        )
+
+    assert offences == [], (
+        f"a sink reaches for {offences}. A sink writes a file and never opens "
+        f"a window, even where the SDK offers one (SINK-04, NFR-04)."
+    )
+
+
 def _child_env():
     import os
     from pathlib import Path

@@ -12,5 +12,11 @@ all of which are permissively licensed:
   slipx_schema   PyYAML (MIT), jsonschema (MIT)
   slipx          pybind11 (BSD-3-Clause)
 
+The sink encoders are optional extras, installed only if asked for by name and
+imported only when a sink of that format is constructed (SINK-03):
+
+  slipx[mcap]    mcap (Apache-2.0)
+  slipx[rerun]   rerun-sdk (Apache-2.0)
+
 No copyleft dependency appears anywhere in this repository, and none may be
 added to slipx_core.
