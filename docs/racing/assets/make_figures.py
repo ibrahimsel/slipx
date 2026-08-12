@@ -585,6 +585,72 @@ def fig_friction_ellipse():
     f.save("friction-ellipse.svg")
 
 
+def fig_combined_slip():
+    """Clipping each axis against projecting onto the budget.
+
+    The geometry is asserted rather than eyeballed. A figure whose whole point
+    is that one construction lands on the boundary and the other does not is
+    worthless if the drawn point misses the curve, and three versions of the
+    racing line figure looked plausible and were wrong.
+    """
+    fy_max = MU_Y0 * FZ_NOM            # 9.44 N
+    fx_max = MU_X0 * FZ_NOM            # 9.87 N
+    fy_demand, fx_demand = 9.0, -8.0   # each legal on its own axis
+
+    u, v = fy_demand / fy_max, fx_demand / fx_max
+    radius = math.hypot(u, v)
+    assert abs(u) < 1.0 and abs(v) < 1.0, "the demand must clear both axes"
+    assert radius > 1.0, "the demand must lie outside the ellipse"
+    assert abs(math.hypot(u / radius, v / radius) - 1.0) < 1e-12
+
+    demand = math.hypot(fy_demand, fx_demand)
+    kept_y, kept_x = fy_demand / radius, -fx_demand / radius
+
+    f = Fig(640, 470, "Clipping each axis against projecting onto the budget")
+    f.head("Combined slip: two ways to run out of grip",
+           "Each demand is legal on its own axis. Together they are not.")
+
+    cx, cy, rx, ry = 270, 230, 150, 118
+
+    def at(un, vn):
+        return cx + rx * un, cy - ry * vn
+
+    f.add(f'<ellipse class="a1" cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry}"/>')
+    f.line(cx - rx - 40, cy, cx + rx + 40, cy, "axis")
+    f.line(cx, cy - ry - 36, cx, cy + ry + 40, "axis")
+    f.text(cx + rx + 46, cy + 22, FY, "ts")
+    f.text(cx + 12, cy - ry - 42, FX, "ts")
+    f.text(cx - 14, cy + ry + 30, "brake", "ts", "end")
+
+    dx, dy = at(u, v)
+    px, py = at(u / radius, v / radius)
+
+    # The per-axis limits the naive rule checks against, and passes.
+    f.line(dx, cy, dx, dy, "grid dot")
+    f.line(cx, dy, dx, dy, "grid dot")
+    f.text(dx + 6, cy - 10, f"{fy_demand:.1f} N of {fy_max:.1f}", "k2")
+    f.text(cx - 8, dy + 4, f"{-fx_demand:.1f} N of {fx_max:.1f}", "k2", "end")
+
+    # Green from the origin to the boundary, blue for the part beyond it. The
+    # two demands point the same way, so drawing both from the origin would
+    # draw one arrow on top of the other and hide the only thing in question,
+    # which is the overshoot.
+    f.line(cx, cy, px, py, "ok", arrow=True)
+    f.line(px, py, dx, dy, "a2 dash", arrow=True)
+    f.circle(dx, dy, 5, "a2f")
+    f.circle(px, py, 5, "okf")
+    f.text(dx + 14, dy + 10, "clipped per axis", "k2")
+    f.text(dx + 14, dy + 26, f"asks {demand:.1f} N of the patch", "ts")
+    f.text(cx, cy + ry + 56, "projected onto the boundary", "k3", "middle")
+    f.text(cx, cy + ry + 72, f"{kept_y:.1f} N and {kept_x:.1f} N, "
+                             f"in the direction asked for", "ts", "middle")
+
+    f.text(22, 448,
+           "Both components scale by the same factor, so the direction "
+           "survives and the magnitude does not.", "ts")
+    f.save("combined-slip.svg")
+
+
 # ================================================ 5. longitudinal transfer
 
 def fig_load_transfer_long():
@@ -965,7 +1031,8 @@ def main():
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
                fig_peak_location,
                fig_relaxation,
-               fig_friction_ellipse, fig_load_transfer_long,
+               fig_friction_ellipse, fig_combined_slip,
+               fig_load_transfer_long,
                fig_load_transfer_lat, fig_vehicle_models,
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
                fig_speed_profile):

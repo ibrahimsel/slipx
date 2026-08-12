@@ -37,6 +37,10 @@ order. The rest stand alone.
 | 2 | [Load transfer](02-load-transfer.md) | Why does the car's grip change while you drive it? |
 | 3 | [Vehicle models](03-vehicle-models.md) | Which model is allowed to answer which question? |
 | 4 | [Understeer and oversteer](04-understeer-and-oversteer.md) | What do people mean by "balance"? |
+| 9 | [Combined slip](09-combined-slip.md) | What happens when you brake and turn at once? |
+
+Article 9 follows straight on from article 1 and can be read there instead of
+here; it is numbered by when it was written, not by where it sits.
 
 **Part two: the racing**
 
@@ -65,8 +69,8 @@ happens while it is still settling, which is most of a lap.
 - [Glossary](glossary.md), for when a word turns up before its article does.
 
 **Planned, not yet written.** Listed so the shape of the series is visible and
-so nobody writes the same article twice: combined slip and the limits of a
-friction ellipse; differentials; motor, ESC and battery behaviour; actuator lag,
+so nobody writes the same article twice: differentials; motor, ESC and battery
+behaviour; actuator lag,
 which belongs beside article 8 and is a different mechanism with a different
 time constant;
 the autonomy pipeline; localisation and mapping; global and local planning; path

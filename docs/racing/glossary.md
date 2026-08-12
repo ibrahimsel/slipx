@@ -34,6 +34,11 @@ a small lateral force of its own. Ignored throughout this series and in most
 which it needs twice the Ackermann angle. A way of quoting how strongly a car
 understeers. See [understeer and oversteer](04-understeer-and-oversteer.md).
 
+**Combined slip**. A tyre running at a slip angle and a slip ratio at once, so
+that lateral and longitudinal force are drawn from the same friction budget.
+The rule for deciding what it delivers, and what that rule cannot tell you, is
+[combined slip](09-combined-slip.md).
+
 **Contact patch**. The area of tyre actually touching the road. About a
 thumbnail on a 1/10-scale car. Everything the car does happens through four of
 these.
@@ -56,7 +61,9 @@ reason full-size racing intuitions do not transfer directly.
 
 **Friction ellipse** (loosely, **friction circle**). The closed curve bounding
 the combined longitudinal and lateral force one tyre can make. Braking and
-cornering spend the same budget. See [tyres and grip](01-tyres-and-grip.md).
+cornering spend the same budget. See [tyres and grip](01-tyres-and-grip.md) for
+the shape and [combined slip](09-combined-slip.md) for what it does and does
+not tell you.
 
 **g-g diagram**. The friction ellipse at vehicle level: every combination of
 longitudinal and lateral acceleration the car can reach. See
