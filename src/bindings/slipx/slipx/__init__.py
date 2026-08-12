@@ -73,6 +73,12 @@ from .cars import (
 )
 from .version import __version__
 
+# Recording a run and emitting it (SINK-01 to SINK-05, ADR-0028). Standard
+# library only, and importing it imports no encoder: the MCAP and Rerun SDKs
+# are optional extras, reached through `sinks.sink_for` and never imported
+# because somebody typed `import slipx`.
+from . import sinks  # noqa: E402  (after version, which record_run reports)
+
 __all__ = [
     "AgentManifest",
     "AgentSpec",
@@ -102,6 +108,7 @@ __all__ = [
     "load_reference_car",
     "make_conformance_run",
     "reference_car_path",
+    "sinks",
     "step_steer",
     "to_vehicle_params",
 ]
