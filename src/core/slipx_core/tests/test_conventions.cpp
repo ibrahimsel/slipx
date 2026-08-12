@@ -115,10 +115,15 @@ INSTANTIATE_TEST_SUITE_P(AllTiers, Conventions,
 // straight ahead has a positive rear slip angle and a lateral force pointing
 // right, which is what pulls it back.
 TEST(ConventionsL1, PositiveSlipAngleGivesNegativeLateralForce) {
-  auto model = VehicleModel::create(Tier::L1_Bicycle, reference_params());
+  const VehicleParams p = reference_params();
+  auto model = VehicleModel::create(Tier::L1_Bicycle, p);
 
   VehicleState s = travelling(5.0);
-  s.vel_body.y = 0.5;  // sliding to the left
+  // Sliding to the left, gently. The magnitude assertion below is about the
+  // linear law, so the operating point has to stay inside L1's mu_clip; the
+  // sideslip that did so at the old, much softer cornering stiffness now
+  // saturates the axle and would test the clip instead (ADR-0032).
+  s.vel_body.y = 0.15;
 
   slipx::StepDiagnostics d;
   model->step(s, DriveInput{0.0, 0.0}, kDt, &d);
@@ -128,8 +133,16 @@ TEST(ConventionsL1, PositiveSlipAngleGivesNegativeLateralForce) {
   EXPECT_GT(d.alpha_front, 0.0);
   EXPECT_LT(d.fy_front, 0.0);
 
+  // The clip is a different mechanism and this case is not about it. Asserted
+  // rather than assumed, so a future parameter change cannot quietly turn the
+  // magnitude check below into a tautology about the clip.
+  ASSERT_LT(std::fabs(p.c_alpha_r * d.alpha_rear),
+            p.mu_clip * 0.5 * p.mass * slipx::kGravity)
+      << "the linear force must be inside mu_clip for this case to mean "
+         "anything";
+
   // Magnitude, not just sign: the linear region is Fy = -C_alpha * alpha.
-  EXPECT_NEAR(d.fy_rear, -reference_params().c_alpha_r * d.alpha_rear, 1e-9);
+  EXPECT_NEAR(d.fy_rear, -p.c_alpha_r * d.alpha_rear, 1e-9);
 }
 
 TEST(ConventionsL1, SteerAngleEntersTheFrontSlipAngleWithAMinusSign) {

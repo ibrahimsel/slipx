@@ -28,6 +28,20 @@ def reference_car() -> Path:
     return REFERENCE_CAR
 
 
+def derived_b(tyre_path: Path) -> float:
+    """The B the loader derives for a tyre file, computed from that file.
+
+    A test that wants a B agreeing with the linear block must not hard-code
+    the number: when the reference car's cornering stiffness moved (ADR-0032)
+    every literal became a value that quietly disagreed, and a test asserting
+    "no warning" turns into a test asserting nothing at all.
+    """
+    tyre = yaml.safe_load(tyre_path.read_text(encoding="utf-8"))
+    return tyre["linear"]["c_alpha"] / (
+        tyre["mf_lite"]["C"] * tyre["friction"]["mu_y0"] * tyre["nominal_load"]
+    )
+
+
 @pytest.fixture
 def car_factory(tmp_path: Path) -> Callable[..., Path]:
     """Copy the reference car and apply one edit to it.

@@ -250,7 +250,7 @@ split.
 
 ## M3. `slipx.viz`: the SVG sink
 
-Status: not-started. Size: medium (days to a week). Hash impact: none, unless
+Status: in-progress. Size: medium (days to a week). Hash impact: none, unless
 M3.1 decides to change the reference car (then **all rows move, once**).
 
 Goal: the run viewer as one more implementation of the sink protocol
@@ -258,7 +258,7 @@ Goal: the run viewer as one more implementation of the sink protocol
 only, no display server, no GPU, no window, written to a file. Not
 special-cased in the sink code.
 
-- [ ] **M3.1** **DECISION**, before regenerating any figure: the reference
+- [x] **M3.1** **DECISION**, before regenerating any figure: the reference
   car's provisional `c_alpha` describes a very soft tyre (peak near 24 degrees
   of slip angle where the tutorial figures show about 7). Regenerating figures
   from `slipx_core` makes the disagreement visible. Either change
@@ -268,6 +268,12 @@ special-cased in the sink code.
   inconsistency silently is.
   Done when: decided and recorded; if changed, the rerecord follows M2.8's
   discipline.
+  Decided 2026-08-12 by the user: change it. `c_alpha` is multiplied by 3.5
+  (420 front, 455 rear per axle; 210 per tyre in the car file), which puts the
+  tyre peak at 6.9 degrees where it was 24.3. Recorded as ADR-0032. The twelve
+  L1 and L2 rows were rerecorded under all three compilers; the six L0 rows do
+  not move and were re-measured to confirm it. `mu_y0`, the shape factors and
+  `c_kappa` are untouched.
 - [ ] **M3.2** The SVG writer as a `RunSink` implementation over the shared
   `Recording`: trajectory, per-wheel traces from diagnostics, SMIL animation.
   A file, never a window.

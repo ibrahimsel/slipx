@@ -1060,12 +1060,14 @@ TEST(InvariantsL2, ARaisedCoGLiftsAWheelAtALowerSpeed) {
     // acceleration is honestly lower than the old four-wheel split gave.
     p.differential = slipx::Differential::kSpool;
 
-    // A tall car at half a radian of steer lifts at around 2 m/s, so the
-    // sweep starts below that and steps finely: starting at 3 m/s puts every
-    // height at the first sample and the monotonicity means nothing.
+    // The sweep has to start below the lowest lift speed, or every height
+    // lands on the first sample and the monotonicity means nothing, and it
+    // has to reach past the highest. With the stiffer reference tyre
+    // (ADR-0032) the heights here lift between about 2.5 and 4 m/s, so the
+    // sweep runs from 1 m/s to just under 6.
     double lift_speed = 0.0;
     for (int step = 0; step < 250 && lift_speed == 0.0; ++step) {
-      const double v = 1.0 + 0.01 * step;
+      const double v = 1.0 + 0.02 * step;
       auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
       VehicleState s = travelling(v);
       StepDiagnostics d;

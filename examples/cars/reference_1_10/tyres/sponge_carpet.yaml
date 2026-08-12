@@ -24,13 +24,17 @@ linear:
   # Cornering stiffness per tyre at the nominal load, positive. The restoring
   # sign lives in the force law, Fy = -C_alpha * alpha (ISO 8855), not here.
   # Identifiable from the low-slip region of a skidpad.               [N/rad]
-  c_alpha: 60.0
+  c_alpha: 210.0
 
   # Longitudinal slip stiffness per tyre at the nominal load: the initial
   # slope of longitudinal force against slip ratio. Identifiable from encoder
   # slip ratio against IMU longitudinal acceleration in a straight-line run.
-  # Provisional at twice c_alpha, which is the usual ratio between the two
-  # slopes. Consumed from L2 (schema 0.2.0).            [N per unit slip]
+  # Provisional. It was set at twice c_alpha, the usual ratio between the two
+  # slopes, and ADR-0032 then raised c_alpha without following it here: the
+  # two are identified by different manoeuvres, so tying them together would
+  # couple parameters the measurement keeps apart. The ratio no longer holds
+  # and this number stands on its own.
+  # Consumed from L2 (schema 0.2.0).                     [N per unit slip]
   c_kappa: 120.0
 
 friction:

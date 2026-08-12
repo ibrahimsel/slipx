@@ -32,8 +32,8 @@ inline VehicleParams reference_params() {
   p.lf = 0.16;                  //                                       [m]
   p.lr = 0.16;                  //                                       [m]
   p.h_cog = 0.06;               //                                       [m]
-  p.c_alpha_f = 120.0;          //                                   [N/rad]
-  p.c_alpha_r = 130.0;          //                                   [N/rad]
+  p.c_alpha_f = 420.0;          //                                   [N/rad]
+  p.c_alpha_r = 455.0;          //                                   [N/rad]
   p.mu_clip = 1.1;              //                                       [-]
   return p;
 }

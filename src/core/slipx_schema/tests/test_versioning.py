@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import derived_b
 from slipx_schema import SCHEMA_VERSION, SchemaVersionError, Version, compatibility, load_car
 from slipx_schema import migrate as migrate_module
 
@@ -118,9 +119,9 @@ def test_a_0_1_0_car_directory_still_loads_by_migration(car_factory) -> None:
         line for line in text.splitlines() if "c_kappa" not in line
     ]
     text = "\n".join(lines) + "\n"
-    # The B a 0.1.0 file was required to state, consistent with the linear
-    # block so the derived-B check stays quiet.
-    text = text.replace("mf_lite:\n", "mf_lite:\n  B: 3.78\n")
+    # The B a 0.1.0 file was required to state, computed from this file's own
+    # linear block so the derived-B check stays quiet whatever that block says.
+    text = text.replace("mf_lite:\n", f"mf_lite:\n  B: {derived_b(tyre):.4f}\n")
     tyre.write_text(text, encoding="utf-8")
 
     car = load_car(path)

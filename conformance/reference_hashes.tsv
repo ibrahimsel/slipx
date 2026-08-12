@@ -42,6 +42,16 @@
 # are byte-identical to before, as they must be: no code either tier executes
 # changed. The three compiler rows were measured separately, not copied.
 #
+# The twelve L1 and L2 rows were rerecorded on 2026-08-12, a second time in
+# the same unreleased cycle, when ADR-0032 raised the reference car's
+# cornering stiffness by 3.5. The old value put the tyre's force peak at
+# 24 degrees of slip angle, which no car reaches, so the reference car could
+# not get to its own tyre peak and the MF-lite falling branch was dead code in
+# every published figure. The six L0 rows did NOT move and were re-measured
+# under all three compilers to confirm it: the kinematic tier has no tyre and
+# no cornering stiffness to change. That asymmetry is the evidence the change
+# was the one intended.
+#
 # Every row below was rerecorded on 2026-08-03 when CORE-07 added the
 # per-wheel lagged slip angle to VehicleState. The hash covers the state layout,
 # so four extra fields per step moved every row including L0's and L1's, neither
@@ -55,19 +65,19 @@
 #   system_processor  compiler_id  compiler_major  build_type  tier  integrator  hash
 x86_64	GNU	11	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	GNU	11	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	GNU	11	RelWithDebInfo	L1	rk4	f4da160a691289eb
-x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
-x86_64	GNU	11	RelWithDebInfo	L2	rk4	1e6c4659f6d3193a
-x86_64	GNU	11	RelWithDebInfo	L2	semi_implicit_euler	bbb29ca838cb97ba
+x86_64	GNU	11	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	GNU	11	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	GNU	11	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	GNU	11	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
 x86_64	Clang	18	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	Clang	18	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	Clang	18	RelWithDebInfo	L1	rk4	f4da160a691289eb
-x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
-x86_64	Clang	18	RelWithDebInfo	L2	rk4	1e6c4659f6d3193a
-x86_64	Clang	18	RelWithDebInfo	L2	semi_implicit_euler	bbb29ca838cb97ba
+x86_64	Clang	18	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	Clang	18	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	Clang	18	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	Clang	18	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892
 x86_64	GNU	13	RelWithDebInfo	L0	rk4	cf6aba9e280a24b9
 x86_64	GNU	13	RelWithDebInfo	L0	semi_implicit_euler	4cb3269ec5ba7ac3
-x86_64	GNU	13	RelWithDebInfo	L1	rk4	f4da160a691289eb
-x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	2e2fb5a549ad190c
-x86_64	GNU	13	RelWithDebInfo	L2	rk4	1e6c4659f6d3193a
-x86_64	GNU	13	RelWithDebInfo	L2	semi_implicit_euler	bbb29ca838cb97ba
+x86_64	GNU	13	RelWithDebInfo	L1	rk4	0d8f69a1e3b58038
+x86_64	GNU	13	RelWithDebInfo	L1	semi_implicit_euler	2649495a464deb0b
+x86_64	GNU	13	RelWithDebInfo	L2	rk4	1bbccc8a6af12ae0
+x86_64	GNU	13	RelWithDebInfo	L2	semi_implicit_euler	893d57a524b12892

@@ -70,8 +70,8 @@ def _l2_params():
     params.lf = 0.16
     params.lr = 0.16
     params.h_cog = 0.06
-    params.c_alpha_f = 120.0
-    params.c_alpha_r = 130.0
+    params.c_alpha_f = 420.0
+    params.c_alpha_r = 455.0
     params.mu_clip = 1.1
     return params
 

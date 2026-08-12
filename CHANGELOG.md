@@ -257,6 +257,38 @@ and measured separately under each:
 | L2 / rk4 | `5735026d574b9b59` | `1e6c4659f6d3193a` |
 | L2 / semi_implicit_euler | `81a36eefe4447697` | `bbb29ca838cb97ba` |
 
+### The reference tyre stops being made of sponge, and the L1 and L2 rows move again
+
+The reference car's cornering stiffness was 60 N/rad per tyre against a static
+per-tyre load of 8.6 N. With `mu_y0 = 1.1` that put the tyre's force peak at
+**24 degrees of slip angle**, which no car reaches, so the reference car could
+not get to its own tyre peak and MF-lite's falling branch was unreachable in
+every figure drawn from it. It is now 210 N/rad per tyre (420 and 455 N/rad on
+the front and rear axles, keeping the old ratio exactly), which puts the peak
+at **6.9 degrees**. Both the old and the new numbers are `provisional`;
+the difference is that the new one is plausible. Reasoning, including why
+`mu_y0` and `c_kappa` were left alone, in
+[ADR-0032](docs/adr/0032-the-reference-tyre-peaks-where-a-tyre-peaks.md).
+
+This is the **second** hash movement in this unreleased cycle. The two are
+independent and both are listed, because a release note that merges them would
+be describing a change nobody made. Nothing has been published since
+`0.1.0a1`, whose rows were already incomparable with either.
+
+All twelve L1 and L2 rows move. **The six L0 rows do not**, and were
+re-measured under all three compilers to confirm it: the kinematic tier has no
+tyre. Old and new values for x86-64 `RelWithDebInfo`, identical across GCC 11,
+GCC 13 and Clang 18 and measured separately under each:
+
+| Case | Before | Now |
+|---|---|---|
+| L1 / rk4 | `f4da160a691289eb` | `0d8f69a1e3b58038` |
+| L1 / semi_implicit_euler | `2e2fb5a549ad190c` | `2649495a464deb0b` |
+| L2 / rk4 | `1e6c4659f6d3193a` | `1bbccc8a6af12ae0` |
+| L2 / semi_implicit_euler | `bbb29ca838cb97ba` | `893d57a524b12892` |
+| L0 / rk4 | `cf6aba9e280a24b9` | unchanged |
+| L0 / semi_implicit_euler | `4cb3269ec5ba7ac3` | unchanged |
+
 ## 0.1.0a1
 
 First publication. Pre-release: the version number is the one part of a release

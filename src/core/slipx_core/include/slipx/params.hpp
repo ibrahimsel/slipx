@@ -79,8 +79,16 @@ struct VehicleParams {
   //
   // Sign: positive. The restoring sign lives in the force law, Fy = -C * alpha
   // (see conventions.hpp), not in the parameter.
-  double c_alpha_f = 120.0;  // front axle cornering stiffness     [N/rad]
-  double c_alpha_r = 130.0;  // rear axle cornering stiffness      [N/rad]
+  //
+  // Normalised by the static per-tyre load these are about 24 and 26 per
+  // radian, which is where a small soft tyre plausibly sits; a full-size
+  // passenger tyre is 14 to 21 and a racing slick is higher. Together with
+  // mu_y0 and the MF-lite shape factors they put the tyre's peak near 7
+  // degrees of slip angle, which is where a peak belongs. They were 120 and
+  // 130 until ADR-0032, which describes what was wrong with that and why
+  // fixing it moved every published hash.
+  double c_alpha_f = 420.0;  // front axle cornering stiffness     [N/rad]
+  double c_alpha_r = 455.0;  // rear axle cornering stiffness      [N/rad]
 
   // Peak friction, used at L1 only to clip the linear tyre so a step steer
   // does not produce an unbounded lateral force. It is a clip, not a Magic
@@ -121,10 +129,14 @@ struct VehicleParams {
   // L2 from a 0.1.0 tyre file rather than defaulting it; schema 0.2.0 adds the
   // field. See ADR-0025.
   //
-  // Provisional, and soft, consistent with the rest of this struct: it is
-  // twice the per-tyre cornering stiffness above, which is the usual ratio,
-  // and the cornering stiffness itself already describes a softer tyre than a
-  // full-size one.
+  // Provisional. It was set at twice the per-tyre cornering stiffness above,
+  // which is the usual ratio between the two slopes, and ADR-0032 then raised
+  // the cornering stiffness without following it here: the two are identified
+  // by different manoeuvres (a skidpad and a straight-line acceleration run),
+  // so moving one because the other moved would couple two parameters the
+  // measurement keeps separate (ADR-0009). The ratio was a plausibility
+  // argument rather than a law, and it no longer holds; this number stands on
+  // its own until something measures it.
   double c_kappa = 120.0;    //                            [N per unit slip]
 
 

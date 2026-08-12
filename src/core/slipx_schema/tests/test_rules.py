@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from conftest import derived_b
 from slipx_schema import (
     LENGTH_MAX_M,
     LENGTH_MIN_M,
@@ -196,10 +199,10 @@ def test_a_tyre_whose_stiffness_and_friction_disagree_is_warned_about(
     # at 60 degrees, the two numbers are not describing the same tyre.
     path = car_factory()
     tyre = path / "tyres" / "sponge_carpet.yaml"
-    tyre.write_text(
-        tyre.read_text(encoding="utf-8").replace("c_alpha: 60.0", "c_alpha: 8.0"),
-        encoding="utf-8",
-    )
+    text = tyre.read_text(encoding="utf-8")
+    softened = re.sub(r"^  c_alpha: .*$", "  c_alpha: 8.0", text, flags=re.M)
+    assert softened != text, "the c_alpha line moved; this edit did nothing"
+    tyre.write_text(softened, encoding="utf-8")
     car = load_car(path)
     assert any("linear region" in w for w in car.warnings)
 
@@ -324,8 +327,9 @@ def test_a_stated_b_that_disagrees_with_the_derived_value_is_warned_about(
 def test_a_stated_b_that_agrees_with_the_derived_value_is_quiet(car_factory) -> None:
     path = car_factory()
     tyre = path / "tyres" / "sponge_carpet.yaml"
+    agreeing = f"mf_lite:\n  B: {derived_b(tyre):.4f}\n"
     tyre.write_text(
-        tyre.read_text(encoding="utf-8").replace("mf_lite:\n", "mf_lite:\n  B: 3.78\n"),
+        tyre.read_text(encoding="utf-8").replace("mf_lite:\n", agreeing),
         encoding="utf-8",
     )
     car = load_car(path)
