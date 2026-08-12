@@ -23,19 +23,36 @@ The last case is the honest one for a contributor on a machine nobody has run
 this on before, and --require-row is what the reference CI runners use so that
 a missing row on THEM is a failure rather than a shrug.
 
+It also checks, before touching a build at all, that the hash the wheel job
+pins literally still matches the published row. See check_pin below.
+
 Run:  python3 tools/check_conformance.py [--build-dir build] [--require-row]
+      python3 tools/check_conformance.py --pin-only    (no build needed)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REFERENCE_FILE = REPO_ROOT / "conformance" / "reference_hashes.tsv"
+
+# The wheel job pins the published L1/rk4 hash as a literal rather than
+# reading this file, deliberately: it is asserting that an independently built
+# artefact agrees with a published number, and a job that read the number out
+# of the tree it built from would agree with itself. The cost of that second
+# copy is that it can be left behind when the row moves, which is exactly what
+# happened when ADR-0032 moved twelve rows and the workflow kept the old
+# value. The copy stays; this check is what stops it going stale silently.
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+PIN_PATTERN = re.compile(r"^\s*EXPECTED_HASH:\s*([0-9a-f]{16})\s*$", re.MULTILINE)
+PINNED_PROCESSOR = "x86_64"
+PINNED_CASE = ("L1", "rk4")
 
 COLUMNS = [
     "system_processor",
@@ -71,6 +88,57 @@ def read_reference() -> list[dict[str, str]]:
             )
         rows.append(dict(zip(COLUMNS, fields)))
     return rows
+
+
+def check_pin(reference: list[dict[str, str]]) -> list[str]:
+    """Check the wheel job's literal hash against the published row.
+
+    Repository-only: it reads two files and builds nothing, so it can run in
+    the policy job and fail in seconds rather than after a wheel is built.
+    """
+    problems: list[str] = []
+    if not CI_WORKFLOW.exists():
+        return [f"{CI_WORKFLOW} not found"]
+
+    pins = PIN_PATTERN.findall(CI_WORKFLOW.read_text(encoding="utf-8"))
+    if len(pins) != 1:
+        return [
+            f"expected exactly one EXPECTED_HASH pin in "
+            f"{CI_WORKFLOW.relative_to(REPO_ROOT)}, found {len(pins)}"
+        ]
+    pin = pins[0]
+
+    tier, integrator = PINNED_CASE
+    rows = [
+        r for r in reference
+        if r["system_processor"] == PINNED_PROCESSOR
+        and r["tier"] == tier and r["integrator"] == integrator
+    ]
+    if not rows:
+        return [
+            f"no {PINNED_PROCESSOR} {tier}/{integrator} row to pin against in "
+            f"{REFERENCE_FILE.relative_to(REPO_ROOT)}"
+        ]
+
+    published = {r["hash"] for r in rows}
+    if len(published) > 1:
+        # NFR-03 allows this and the reference file is shaped to express it.
+        # A single literal in the workflow cannot be, so the wheel job would
+        # have to name the build it pins rather than assume there is one hash.
+        return [
+            f"the {PINNED_PROCESSOR} {tier}/{integrator} rows no longer agree "
+            f"({', '.join(sorted(published))}), so a single pin in the wheel "
+            f"job is ambiguous about which build it means"
+        ]
+
+    expected = published.pop()
+    if pin != expected:
+        problems.append(
+            f"{CI_WORKFLOW.relative_to(REPO_ROOT)} pins EXPECTED_HASH="
+            f"{pin}, but the published {PINNED_PROCESSOR} {tier}/{integrator} "
+            f"hash is {expected}"
+        )
+    return problems
 
 
 def run_case(binary: Path, tier: str, integrator: str) -> dict:
@@ -131,7 +199,33 @@ def main() -> int:
         help="append rows for cases this build has no reference for. Only ever "
              "run deliberately: a reference hash is a published claim.",
     )
+    parser.add_argument(
+        "--pin-only",
+        action="store_true",
+        help="check only that the wheel job's literal hash matches the "
+             "published row. Reads two files and needs no build, so the policy "
+             "job can run it.",
+    )
     args = parser.parse_args()
+
+    reference = read_reference()
+
+    pin_problems = check_pin(reference)
+    if pin_problems:
+        print("PIN CHECK FAILED.\n", file=sys.stderr)
+        for problem in pin_problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nThe wheel job compares an installed wheel against a hash "
+            "written literally in the workflow. When a reference row moves, "
+            "that literal moves with it, in the same commit: the reference "
+            "file, the CHANGELOG table and the workflow pin are one change.",
+            file=sys.stderr,
+        )
+        return 1
+    print("workflow pin matches the published L1/rk4 hash.")
+    if args.pin_only:
+        return 0
 
     binary = (
         REPO_ROOT / args.build_dir / "src" / "orchestration" / "slipx_sim"
@@ -142,7 +236,6 @@ def main() -> int:
         print("build it with: cmake --build build", file=sys.stderr)
         return 2
 
-    reference = read_reference()
     failures: list[str] = []
     missing: list[str] = []
     matched = 0

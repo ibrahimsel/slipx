@@ -16,6 +16,12 @@
 # change, a change to the conformance scenario, or a change to the state
 # layout the hash covers. "The test was failing" is not a reason.
 #
+# The L1/rk4 hash is written down twice. The wheel job in .github/workflows/
+# ci.yml pins it as a literal, on purpose: it checks an independently built
+# wheel against a published number, and reading that number out of this file
+# would have the job agree with itself. So a changed L1/rk4 row moves the pin
+# in the same commit. tools/check_conformance.py --pin-only checks it did.
+#
 # The conformance scenario is defined once, in
 # src/orchestration/slipx_sim/include/slipx/sim/manoeuvres.hpp. It uses the
 # VehicleParams struct defaults, which are PROVISIONAL and describe no

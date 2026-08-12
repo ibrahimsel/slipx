@@ -63,6 +63,14 @@ jobs:
       - name: Version agreement (NFR-09)
         run: python3 tools/version_check.py
 
+      # Here for the same reason as the version check: the wheel job's pinned
+      # hash is a second copy of a published number, and the failure it catches
+      # is a reference row moved in the TSV and the CHANGELOG but not here.
+      # That failure costs a wheel build to discover in the job that uses it,
+      # and two file reads to discover in this one.
+      - name: The wheel job's pinned hash is the published one
+        run: python3 tools/check_conformance.py --pin-only
+
   # ------------------------------------------------------------- core only
   core-only:
     name: slipx_core alone (CORE-01)
@@ -198,7 +206,12 @@ jobs:
       # independently built artefact agrees with the published number, and
       # reading the number from the repository the artefact was built from
       # would make the check circular.
-      EXPECTED_HASH: f4da160a691289eb
+      #
+      # This literal moves in the same commit as the row it copies. The policy
+      # job checks that it has (tools/check_conformance.py --pin-only), because
+      # once it was left behind and the failure surfaced here, a wheel build
+      # later, looking like a determinism bug in something already correct.
+      EXPECTED_HASH: 0d8f69a1e3b58038
 
   # ------------------------------------------------------------- the sinks
   #
@@ -317,29 +330,37 @@ jobs:
   # matches x86-64, that is worth knowing and is still not promised; if it
   # differs, the trajectory comparison below says by how much, and that number
   # is what the tolerance should be set from.
+  #
+  # Native aarch64 hardware, not emulation. This ran under qemu until the
+  # host's qemu rotated with the runner image and cc1plus began taking SIGSEGV
+  # at startup on an arbitrary translation unit each run, including files that
+  # had not changed since the job was last green. That is a failure of the
+  # emulator and it says nothing about aarch64, which is the one thing this job
+  # exists to say something about. It is also the better evidence: the hash
+  # difference this job measures comes from libm, and libm on real hardware is
+  # what an aarch64 user actually runs.
   cross-arch:
     name: aarch64 agreement (NFR-03)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: ubuntu22.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y cmake g++ git python3
-          run: |
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-                                -DSLIPX_BUILD_TESTS=OFF
-            cmake --build build -j"$(nproc)"
-            echo "--- aarch64 conformance ---"
-            build/src/orchestration/slipx_sim/slipx_conformance
-            echo
-            echo "Compare the trajectory hash and the final state above with"
-            echo "the x86-64 reference. NFR-03 promises agreement to a stated"
-            echo "tolerance, not bit-identity; a differing hash here is the"
-            echo "documented behaviour and not a bug."
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                              -DSLIPX_BUILD_TESTS=OFF
+          cmake --build build -j"$(nproc)"
+
+      - name: Conformance, and what it is evidence of
+        run: |
+          echo "--- aarch64 conformance ---"
+          build/src/orchestration/slipx_sim/slipx_conformance
+          echo
+          echo "Compare the trajectory hash and the final state above with"
+          echo "the x86-64 reference. NFR-03 promises agreement to a stated"
+          echo "tolerance, not bit-identity; a differing hash here is the"
+          echo "documented behaviour and not a bug."
