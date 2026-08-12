@@ -85,7 +85,7 @@ Status: in-progress. Size: small (hours). Hash impact: none.
   deliberately.
   Done when: `git status` is clean of `uv.lock` one way or the other.
   Decided 2026-08-12 by the user: committed.
-- [ ] **M0.3** Fix the stale `Tier` enum docstrings in
+- [x] **M0.3** Fix the stale `Tier` enum docstrings in
   `src/bindings/slipx/src/bindings.cpp` (around line 108): `L2_DoubleTrack` is
   still documented as "Not implemented yet", wrong since 2026-08-03. This is
   what `help(slipx.Tier)` prints. Do not cite requirement IDs in the new text

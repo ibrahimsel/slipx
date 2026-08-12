@@ -105,9 +105,15 @@ PYBIND11_MODULE(_slipx, m) {
              "6 states. Sideslip, yaw dynamics, linear tyres clipped at the "
              "friction limit. No saturation shape, so no spin.")
       .value("L2_DoubleTrack", Tier::L2_DoubleTrack,
-             "Not implemented yet (CORE-02, P1). Requesting it raises rather "
-             "than silently substituting L1.")
-      .value("L3_Extended", Tier::L3_Extended, "Not implemented yet (P4).");
+             "10 states. Double-track: four contact patches with per-corner "
+             "vertical loads, MF-lite tyres with a real peak and falling "
+             "branch, combined slip, tyre relaxation, quasi-static load "
+             "transfer. Minimal, and the gaps are deliberate: no "
+             "differential (equal drive split), no ESC, no battery, no "
+             "steering servo, parallel steer rather than Ackermann.")
+      .value("L3_Extended", Tier::L3_Extended,
+             "Not implemented. Requesting it raises rather than silently "
+             "substituting a lower tier.");
 
   py::enum_<Integrator>(m, "Integrator")
       .value("RK4", Integrator::kRK4, "Fourth order, four evaluations. Default.")
