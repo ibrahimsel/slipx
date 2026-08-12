@@ -257,6 +257,38 @@ and measured separately under each:
 | L2 / rk4 | `5735026d574b9b59` | `1e6c4659f6d3193a` |
 | L2 / semi_implicit_euler | `81a36eefe4447697` | `bbb29ca838cb97ba` |
 
+### An SVG sink, with no dependency at all
+
+- **New format `svg`**, registered in the same table as the other two and
+  special-cased nowhere: `sinks.write(run, "step_steer", format="svg")`.
+  `sinks.formats()` now returns `("mcap", "rerun", "svg")`.
+- **No extra, and no import outside the standard library.** A test parses the
+  module's own source and asserts its absolute imports are exactly `math`,
+  `pathlib`, `typing` and `__future__`, so the property is checked rather than
+  intended.
+- One self-contained animated document: the trajectory as a path, a marker
+  animated along it from the recorded position and yaw, and one time-series
+  panel per quantity the tier actually produced, each with a moving cursor.
+  SMIL, so there is no script in the file and nothing to fetch.
+- **The provenance label and the trajectory hash are drawn into the image**,
+  the hash a second time on its own line in a monospace face, because a
+  rendered run gets pasted into a slide with everything around it discarded.
+- **Nothing is drawn that the run did not record.** No track, and no car body:
+  an outline needs a length and a width, and the recording carries a digest of
+  the parameters rather than the parameters. What moves along the path is a
+  marker sized in screen pixels. A test asserts the drawn-element inventory
+  against the recording's own column names.
+- **A quantity the tier cannot represent is absent, never a plotted zero.** A
+  panel whose columns are all NaN is not drawn and the document is shorter:
+  ten panels at L2, five at L1, four at L0. A NaN inside a column breaks the
+  trace rather than bridging it.
+- **Byte-identical run to run**, which the SDK-backed sinks cannot promise.
+- Theme-aware through an embedded `prefers-color-scheme` stylesheet and an
+  opaque background card, so one render is legible on a light and a dark page.
+
+No reference hash moves: encoding a run does not perturb it, and a test
+asserts the trajectory hash is unchanged by writing.
+
 ### The reference tyre stops being made of sponge, and the L1 and L2 rows move again
 
 The reference car's cornering stiffness was 60 N/rad per tyre against a static

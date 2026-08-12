@@ -30,6 +30,14 @@ imported at the top of this file.
     pip install "slipx[rerun]"       # the optional one
     pip install "slipx[sinks]"       # both
 
+The SVG sink needs nothing installed at all: it is the standard library and a
+string. It writes one self-contained animated document with the provenance
+label and the trajectory hash drawn into the picture, which makes it the sink
+for a run that is going to be looked at by somebody rather than loaded by
+something.
+
+    sinks.write(run, "step_steer", format="svg")   # step_steer.svg
+
 No sink opens a window (SINK-04) and no sink writes anything the run did not
 contain (SINK-05). Both rules are documented on :class:`RunSink`, and the
 second one reduces to "NaN is absent" because
@@ -65,6 +73,7 @@ DEFAULT_FORMAT = "mcap"
 _FORMATS: Dict[str, Tuple[str, str]] = {
     "mcap": (".mcap_sink", "McapSink"),
     "rerun": (".rerun_sink", "RerunSink"),
+    "svg": (".svg_sink", "SvgSink"),
 }
 
 

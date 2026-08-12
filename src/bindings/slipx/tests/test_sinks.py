@@ -283,7 +283,10 @@ def test_two_recordings_of_the_same_run_agree_column_for_column(
 
 
 def test_the_format_table_is_the_only_place_a_format_is_named():
-    assert sinks.formats() == ("mcap", "rerun")
+    # Exact, not a membership check: adding a format should be a deliberate
+    # edit to this line, because a format is a published output and arriving
+    # by accident is how a half-finished one ships.
+    assert sinks.formats() == ("mcap", "rerun", "svg")
     assert sinks.DEFAULT_FORMAT == "mcap"
 
 

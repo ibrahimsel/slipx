@@ -197,14 +197,16 @@ start one.
 ## Not in scope
 
 No photorealistic rendering, no camera model: SlipX is LiDAR-first and runs on
-CPU. That rules out a sensor, not a picture. Rendering a finished run to a
-self-contained SVG, provenance label and trajectory hash drawn into the image,
-is in scope and not yet built.
+CPU. That rules out a sensor, not a picture. A finished run renders to a
+self-contained animated SVG, provenance label and trajectory hash drawn into
+the image, with no dependency beyond the standard library and nothing drawn
+that the run did not record: no track, no car body.
 
 No interactive viewer. SlipX owns the encoder rather than the viewer, so a run
 is emitted as MCAP and scrubbing a timeline is served by a tool built for it. A
 Rerun sink is available too; both encoders are optional extras rather than
-install requirements.
+install requirements. The SVG sink needs no extra at all, and writes a file
+rather than opening a window, like every sink here.
 
 No full-scale road vehicles, traffic or urban scenarios. No autonomy stack; the
 reference controllers exist to validate the sim, not to win with. No

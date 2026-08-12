@@ -274,25 +274,25 @@ special-cased in the sink code.
   L1 and L2 rows were rerecorded under all three compilers; the six L0 rows do
   not move and were re-measured to confirm it. `mu_y0`, the shape factors and
   `c_kappa` are untouched.
-- [ ] **M3.2** The SVG writer as a `RunSink` implementation over the shared
+- [x] **M3.2** The SVG writer as a `RunSink` implementation over the shared
   `Recording`: trajectory, per-wheel traces from diagnostics, SMIL animation.
   A file, never a window.
   Done when: it registers like the MCAP and Rerun sinks, byte-identical
   output run to run, and imports nothing outside the standard library.
-- [ ] **M3.3** Draw the provenance label and the trajectory hash **into** the
+- [x] **M3.3** Draw the provenance label and the trajectory hash **into** the
   image, not beside it; a rendered run gets pasted into slides and must carry
   its own label.
   Done when: a test parses the SVG and finds both.
-- [ ] **M3.4** Draw nothing that is not in the recorded state, diagnostics or
+- [x] **M3.4** Draw nothing that is not in the recorded state, diagnostics or
   manifest. In particular no track geometry until `slipx_scene` exists; a
   drawn kerb asserts a track that does not exist.
   Done when: a review of the drawn elements against the recording columns is
   asserted in a test (element inventory versus recorded fields).
-- [ ] **M3.5** The NaN rule, same as every sink: a quantity the tier cannot
+- [x] **M3.5** The NaN rule, same as every sink: a quantity the tier cannot
   represent arrives absent (no line, no legend entry), never plotted as zero.
   Done when: the sink has the same absence test the MCAP and Rerun sinks
   carry, run at L0/L1 where per-wheel fields are NaN.
-- [ ] **M3.6** Theme awareness: embed a `prefers-color-scheme` stylesheet and
+- [x] **M3.6** Theme awareness: embed a `prefers-color-scheme` stylesheet and
   a background card, the same pattern `docs/racing/assets/make_figures.py`
   uses, so the file is legible on light and dark pages from one render.
   Done when: both themes render legibly in headless Chrome screenshots.
