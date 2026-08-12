@@ -36,6 +36,7 @@ Use [`template.md`](template.md) for a new record.
 | [0022](0022-load-transfer-is-quasi-static.md) | L2 load transfer is quasi-static and introduces no suspension parameter | Accepted |
 | [0026](0026-relaxation-lags-the-slip-angle-not-the-force.md) | Tyre relaxation lags the slip angle, not the lateral force | Accepted |
 | [0027](0027-l2-closes-its-algebraic-loops-without-iterating.md) | L2 closes its algebraic loops without iterating and without a wheel rotational state | Accepted |
+| [0028](0028-runs-are-emitted-to-sinks-viewers-are-external.md) | Runs are emitted to sinks, and interactive viewers stay external | Accepted |
 
 ## Determinism
 
