@@ -76,6 +76,44 @@ no tier consumes them yet.
 - New reference rows for L2 under both integrators. They are additions, so no
   previously published number became incomparable by their arrival.
 
+### Emitting a run
+
+- **New subpackage `slipx.sinks`** (SINK-01 to SINK-05). A finished run is
+  recorded once into a `Recording` and handed to a sink, and a sink writes one
+  file. `slipx.sinks.write(recording, path)` is the whole API;
+  `record_run(sim, duration=..., stride=...)` builds the recording. SlipX owns
+  the encoder and not the viewer, and the reasoning, the rejected alternatives
+  and the licence and archival arguments are in
+  [ADR-0028](docs/adr/0028-runs-are-emitted-to-sinks-viewers-are-external.md).
+
+- **MCAP is the default sink** and needs the `slipx[mcap]` extra. JSON messages
+  under a JSON Schema per channel, two channels per agent, the provenance label
+  and the whole run manifest as metadata records.
+
+- **A Rerun sink** is available under the `slipx[rerun]` extra: one scalar time
+  series per recorded column, under an entity tree that mirrors the state
+  layout.
+
+- **Both are extras and never install requirements.** SlipX installs, imports
+  and passes its tests with both absent, and neither SDK is imported when
+  `slipx` is. `slipx[sinks]` installs both.
+
+- **A quantity a tier cannot represent arrives absent, never as zero.** MCAP
+  leaves the key out of the JSON object; the Rerun sink does not send the
+  column. `record_run` is where that is decided, once, for every format: the
+  zeros `VehicleState` parks in fields an unimplemented tier does not integrate
+  become NaN on the way out, because the reason they are zeros is that the
+  state is hashed and that reason does not extend to a plot
+  ([ADR-0006](docs/adr/0006-diagnostics-report-nan-not-zero.md)).
+
+- **No sink opens a window**, even where the SDK offers to. `tools/licence_scan.py`
+  now cross-checks the extras `pyproject.toml` offers against a table carrying
+  their licences, and CI gains a job that installs both and runs the suite with
+  them present.
+
+No reference hash moves: nothing here touches a numerical path, and recording a
+run does not perturb it.
+
 ### Every reference hash moves
 
 **All twelve rows of `conformance/reference_hashes.tsv` are rerecorded.**
