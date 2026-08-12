@@ -306,6 +306,128 @@ def test_neither_sdk_is_imported_when_slipx_is():
     )
 
 
+# ------------------------------------------- what a sink plans, without a sink
+#
+# The Rerun sink decides what to send in a pure function with no SDK in it, so
+# the SINK-05 filtering can be tested on a machine that has no rerun-sdk
+# installed. The file-level version of the same assertion is in
+# test_sink_rerun.py and skips without the extra; this one never does, because
+# the filtering is the part most worth protecting.
+
+
+def test_the_rerun_plan_leaves_out_what_the_tier_cannot_represent(l1_recording):
+    from slipx.sinks.rerun_sink import column_plan
+
+    entities = {entity for entity, _, _ in column_plan(l1_recording,
+                                                       l1_recording.agents[0])}
+
+    assert "/car/state/pos/x" in entities
+    assert "/car/diagnostics/alpha_front" in entities
+    for wheel in sinks.WHEELS:
+        assert f"/car/state/Fz/{wheel}" not in entities
+        assert f"/car/diagnostics/kappa/{wheel}" not in entities
+    assert "/car/state/soc" not in entities
+
+
+def test_the_rerun_plan_carries_every_contact_patch_at_l2(l2_recording):
+    from slipx.sinks.rerun_sink import column_plan
+
+    entities = {entity for entity, _, _ in column_plan(l2_recording,
+                                                       l2_recording.agents[0])}
+
+    for wheel in sinks.WHEELS:
+        assert f"/car/state/Fz/{wheel}" in entities
+        assert f"/car/diagnostics/kappa/{wheel}" in entities
+
+
+def test_the_rerun_plan_drops_absent_frames_and_keeps_their_neighbours():
+    """A column can be absent for part of a run, not only for all of it.
+
+    A wheel that lifts has no friction budget to invert a slip ratio from, and
+    the diagnostic is NaN for exactly as long as it is off the ground. Sending
+    those frames as zero would put the wheel back on the road; sending the
+    values without dropping the matching times would slide the whole trace.
+    """
+    from slipx.sinks.rerun_sink import column_plan
+
+    nan = float("nan")
+    agent = sinks.AgentRecord(
+        name="car",
+        index=0,
+        tier="L2_DoubleTrack",
+        provenance="provisional",
+        params_digest="d",
+        seed=1,
+        trajectory_hash="h",
+        state={"pos.x": (0.0, nan, 2.0, 3.0)},
+        diagnostics={"ay": (nan, nan, nan, nan)},
+        flags={"steer_saturated": (False, True, False, False)},
+    )
+    recording = sinks.Recording(
+        times=(0.1, 0.2, 0.3, 0.4),
+        dt=0.1,
+        stride=1,
+        agents=(agent,),
+        trajectory_hash="h",
+        manifest_json="{}",
+        core_version="0",
+        schema_version="0",
+        integrator="rk4",
+        git_sha="0",
+        slipx_version="0",
+    )
+
+    plan = {entity: (times, values)
+            for entity, times, values in column_plan(recording, agent)}
+
+    assert plan["/car/state/pos/x"] == ((0.1, 0.3, 0.4), (0.0, 2.0, 3.0))
+    assert "/car/diagnostics/ay" not in plan  # nothing left, so nothing sent
+    assert plan["/car/diagnostics/steer_saturated"] == (
+        (0.1, 0.2, 0.3, 0.4), (0.0, 1.0, 0.0, 0.0)
+    )
+
+
+def test_the_provenance_document_says_what_the_numbers_are_worth(l2_recording):
+    from slipx.sinks.rerun_sink import _provenance_document
+
+    text = _provenance_document(l2_recording)
+
+    assert "provisional" in text
+    assert l2_recording.trajectory_hash in text
+    assert "validated" in text  # the claim discipline sentence, NFR-08
+    assert l2_recording.manifest_json in text
+    assert "L2_DoubleTrack" in text
+
+
+@pytest.mark.parametrize(
+    "format,modules,extra",
+    [
+        ("mcap", ("mcap", "mcap.writer"), "slipx[mcap]"),
+        ("rerun", ("rerun",), "slipx[rerun]"),
+    ],
+)
+def test_a_sink_whose_extra_is_absent_says_which_extra(
+    format, modules, extra, monkeypatch
+):
+    """The ordinary outcome, and it has to read like one.
+
+    Both SDK-backed sinks are optional (SINK-03), so asking for one that is not
+    installed is not a defect and must not surface as an ImportError from three
+    frames down naming a module the user never heard of.
+    """
+    # The submodule too: once an extra is installed and imported,
+    # `from mcap.writer import ...` is satisfied out of sys.modules and never
+    # looks at the parent package.
+    for module in modules:
+        monkeypatch.setitem(sys.modules, module, None)
+
+    with pytest.raises(sinks.SinkUnavailable) as raised:
+        sinks.sink_for(format)
+
+    assert extra in str(raised.value)
+    assert isinstance(raised.value, ImportError)
+
+
 def test_no_sink_opens_a_window():
     """SINK-04, as a property of the source rather than of one run.
 
