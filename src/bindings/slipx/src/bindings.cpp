@@ -45,6 +45,7 @@
 #include "slipx/sim/manoeuvres.hpp"
 #include "slipx/sim/rng.hpp"
 #include "slipx/sim/simulation.hpp"
+#include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "slipx/version.hpp"
 
@@ -171,6 +172,79 @@ PYBIND11_MODULE(_slipx, m) {
                      "Magic Formula shape factor C, above 1 [-]")
       .def_readwrite("curvature_e", &slipx::TyreCoefficients::curvature_e,
                      "Magic Formula curvature factor E, at most 1 [-]");
+
+  // The tyre model itself, evaluable pointwise. A vehicle model answers "what
+  // did this car do"; these answer "what does this tyre do", which is the
+  // question a tyre plot, a fitted parameter check and a hand calculation all
+  // ask. Without them the only way to see a tyre curve is to drive a car
+  // across it and read the diagnostics back, and every figure of a tyre curve
+  // ends up drawn from a second model that agrees with this one by hand.
+  py::class_<slipx::MfLite>(
+      m, "MfLite",
+      "A built MF-lite tyre: the coefficients with the stiffness factor B "
+      "derived and the reference load fixed.\n\n"
+      "Build one with slipx.make_mf_lite(); B is never taken from a file.")
+      .def(py::init<>())
+      .def_readwrite("b", &slipx::MfLite::b,
+                     "stiffness factor, derived from cornering stiffness [-]")
+      .def_readwrite("c", &slipx::MfLite::c, "shape factor [-]")
+      .def_readwrite("e", &slipx::MfLite::e, "curvature factor [-]")
+      .def_readwrite("mu_y0", &slipx::MfLite::mu_y0,
+                     "peak lateral friction at fz_nom [-]")
+      .def_readwrite("mu_x0", &slipx::MfLite::mu_x0,
+                     "peak longitudinal friction at fz_nom [-]")
+      .def_readwrite("k_mu", &slipx::MfLite::k_mu,
+                     "load sensitivity exponent [-]")
+      .def_readwrite("fz_nom", &slipx::MfLite::fz_nom,
+                     "the static per-tyre load the coefficients are stated "
+                     "at [N]");
+
+  py::class_<slipx::CombinedForce>(
+      m, "CombinedForce",
+      "A tyre force pair after the friction budget has been spent.")
+      .def_readonly("fx", &slipx::CombinedForce::fx,
+                    "longitudinal, positive forward [N]")
+      .def_readonly("fy", &slipx::CombinedForce::fy,
+                    "lateral, positive left, ISO 8855 [N]")
+      .def_readonly("saturated", &slipx::CombinedForce::saturated,
+                    "the demand exceeded the ellipse and was scaled back");
+
+  m.def("make_mf_lite", &slipx::make_mf_lite, py::arg("coefficients"),
+        py::arg("c_alpha"), py::arg("fz_nom"),
+        "Build a tyre. c_alpha is the cornering stiffness of ONE tyre at "
+        "fz_nom [N/rad]; a VehicleParams axle value is twice this. fz_nom is "
+        "the static vertical load on that one tyre [N].\n\n"
+        "The stiffness factor B is derived here and is never read from a "
+        "parameter set, so MF-lite reproduces the linear tyre exactly at "
+        "small slip.");
+
+  m.def("mf_lite_fy", &slipx::mf_lite_fy, py::arg("tyre"), py::arg("alpha"),
+        py::arg("fz"),
+        "Pure-slip lateral force [N] at slip angle alpha [rad] and vertical "
+        "load fz [N]. ISO 8855: a positive slip angle gives a negative "
+        "lateral force.");
+
+  m.def("peak_lateral_force", &slipx::peak_lateral_force, py::arg("tyre"),
+        py::arg("fz"),
+        "Peak lateral force magnitude [N] at a vertical load [N]. Falls "
+        "short of mu_y0 * fz above the nominal load, which is load "
+        "sensitivity.");
+
+  m.def("peak_longitudinal_force", &slipx::peak_longitudinal_force,
+        py::arg("tyre"), py::arg("fz"),
+        "Peak longitudinal force magnitude [N] at a vertical load [N].");
+
+  m.def("cornering_stiffness_at_load", &slipx::cornering_stiffness_at_load,
+        py::arg("tyre"), py::arg("fz"),
+        "Cornering stiffness [N/rad] at a vertical load [N], positive: the "
+        "slope of -Fy against alpha at the origin. The quantity a skidpad "
+        "measures.");
+
+  m.def("friction_ellipse", &slipx::friction_ellipse, py::arg("fx"),
+        py::arg("fy"), py::arg("fx_max"), py::arg("fy_max"),
+        "Spend one contact patch's budget on two demands. Returns the pair "
+        "scaled back onto the ellipse when the demand exceeds it, and "
+        "unchanged when it does not.");
 
   py::class_<VehicleParams>(
       m, "VehicleParams",

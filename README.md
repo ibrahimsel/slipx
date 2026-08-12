@@ -222,8 +222,11 @@ Verification runs in four layers.
 - **Invariant**: energy and momentum conservation, left/right mirror symmetry
   asserted bit for bit, monotonicity under property-based sampling.
 - **Cross-tier**: the tiers must agree in the low lateral acceleration limit.
-  For the reference car, L1 and L2 agree on path radius to within 1% below
-  0.23 g, and the crossover is printed on every test run.
+  For the reference car on an open differential, L1 and L2 agree on path radius
+  to within 1% up to 0.88 g, and the crossover is printed on every test run and
+  [plotted from the library](https://github.com/ibrahimsel/slipx/blob/main/docs/racing/assets/cross-tier-crossover.svg).
+  A locked rear axle disagrees from the first degree of steering instead, which
+  is not a tyre effect: a single-track model has no differential to represent.
 - **Empirical**: missing. Until an outside contributor supplies a fitted
   parameter set with a validation report, the honest phrasing is *physically
   structured and identifiable*, not *validated*.

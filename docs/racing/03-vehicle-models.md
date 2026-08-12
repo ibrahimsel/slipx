@@ -152,6 +152,35 @@ just more confident.
 | Why did it spin at the exit and not the entry? | double track, MF tyres |
 | How much does the car slow over a twenty-lap run? | thermal model |
 
+### Where the rungs actually part company
+
+The table is a rule of thumb, and the honest version of it is a measurement.
+Take one car, hold a steering angle and a speed until it settles, and ask a
+dynamic bicycle and a double track for the path radius. Then do it again,
+harder.
+
+![Where the single-track and double-track tiers stop agreeing](assets/cross-tier-crossover.svg)
+
+Two things in that picture are worth more than the table.
+
+**The agreement holds much further than people expect.** With an open
+differential the two models are within a tenth of a per cent of each other up
+to about 6.5 m/s<sup>2</sup>, and within one per cent up to **8.6
+m/s<sup>2</sup>, about 0.88 g**, on tyres good for roughly 1.1 g. Nearly all of
+the usable range is a range where the cheap model is the right model. Past it
+the double track's load transfer and falling tyre branch start to matter and
+the gap opens quickly, which is exactly the region a lap is won in.
+
+**Some disagreements do not wait for the limit.** The second curve is the same
+car with a locked rear axle instead of an open differential, and it disagrees
+by fifteen per cent at a lateral acceleration where the tyres have barely woken
+up. That is not a tyre effect and it does not shrink at low speed: a
+single-track model has one wheel per axle, so it cannot represent a
+differential at all, and the difference is there from the first degree of
+steering. A rung is not simply "less accurate near the limit". It is missing
+specific mechanisms, and the ones it is missing decide where the disagreement
+lives.
+
 Two working rules.
 
 **Use the cheapest model that contains the mechanism you are asking about.** A

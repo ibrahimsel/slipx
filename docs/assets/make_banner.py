@@ -3,14 +3,23 @@
 # SPDX-License-Identifier: Apache-2.0
 """Render the animated README banner: a 1/10-scale car drifting on a skidpad.
 
-This script does not use SlipX. It was written before the library existed, to
-see what the project would look like, and it carries its own single-track model
-and its own Magic Formula tyre in `tyre_fy` and `step` below. The motion is not
-keyframed, but neither is it evidence about `slipx_core`: the drift it shows
-needs a tyre with a falling branch, which the shipped tiers do not have.
+Every frame is a rollout of `slipx_core` at the double-track tier, through the
+Python bindings. There is no model in this file: the positions, the slip
+angles, the axle forces and the vertical loads drawn on the panel all come out
+of a `VehicleState` and a `StepDiagnostics`, and the only thing written here is
+the controller that holds the skidpad, which is a controller and not physics.
 
-Replace it with a rollout from `slipx_core` once the double-track tier and
-MF-lite land, and delete the local model when you do. Run:
+This used to carry its own single-track model and its own Magic Formula,
+written before the library existed. It was replaced when MF-lite and the
+double-track tier landed, because a banner advertising a physics library ought
+to be output from it.
+
+The car drifts because its rear tyre is a lower-grip compound than its front,
+which is a parameter choice the tier supports and not a special case in the
+drawing. The parameters are the reference car's and are PROVISIONAL: this is a
+picture of the library running, not a measurement of a vehicle.
+
+Needs Pillow and a built `slipx`. Run from the repository root:
 
     python3 docs/assets/make_banner.py
 
@@ -22,58 +31,69 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
+try:
+    import slipx
+except ImportError as exc:  # pragma: no cover - an install problem, not a bug
+    raise SystemExit(
+        "make_banner.py rolls the banner out of slipx_core, so `import slipx` "
+        "has to work. Build the extension in place with `make build`, and run "
+        "this from the repository root."
+    ) from exc
+
 # ----------------------------------------------------------------- parameters
+#
+# The reference car, with two deliberate edits. Neither is a fudge for the
+# drawing: both are ordinary parameter choices the tier already supports.
 
-M = 3.6  # mass                                    [kg]
-IZ = 0.047  # yaw inertia                          [kg m^2]
-LF, LR = 0.157, 0.168  # CoG to axle               [m]
-HCG = 0.055  # CoG height                          [m]
-G = 9.81
+G = 9.80665                        # slipx::kGravity
 
-MU_F, MU_R = 1.32, 0.86  # peak friction per axle   [-]
-B_TYRE, C_TYRE = 9.0, 1.45  # MF shape factors     [-]
+R_PAD = 2.85                       # skidpad radius                      [m]
+V_REF = 6.0                        # target speed                      [m/s]
+DT = 1.0 / 1000.0                  # physics step                        [s]
 
-R_PAD = 2.85  # skidpad radius                     [m]
-V_REF = 6.0  # target speed                        [m/s]
-DT = 1.0 / 1000.0  # physics step (SIM-01 default) [s]
+
+def _params():
+    p = slipx.load_reference_car().params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+    # A grippier front compound than rear. A car with matched tyres and a
+    # neutral balance holds the skidpad without ever reaching the rear's
+    # limit, which makes for a correct and completely undramatic picture.
+    # Different compounds at the two ends is what the schema's per-axle tyre
+    # reference exists for.
+    p.tyre_front.mu_y0 = 1.30
+    p.tyre_rear.mu_y0 = 0.86
+
+    # Enough motor to hold the speed through the drift. The provisional ESC
+    # is sized for a car that is not spending most of its rear grip sideways.
+    p.torque_per_amp = 0.05
+    return p
+
+
+PARAMS = _params()
+M = PARAMS.mass
+LF, LR = PARAMS.lf, PARAMS.lr
 
 # ------------------------------------------------------------------- dynamics
+#
+# There is none here. `slipx_core` is the model; what follows only unpacks it
+# into the tuple the drawing code has always used.
 
 
-def tyre_fy(alpha, fz, mu):
-    """Reduced Magic Formula lateral force. Positive alpha -> positive force."""
-    return mu * fz * math.sin(C_TYRE * math.atan(B_TYRE * alpha))
+def _unpack(state):
+    return (state.vel_body.x, state.vel_body.y, state.rates.z, state.yaw,
+            state.pos.x, state.pos.y)
 
 
-def step(s, delta, fx):
-    """Single-track step with quasi-static longitudinal load transfer (CORE-05)."""
-    vx, vy, r, yaw, x, y = s
-    vx = max(vx, 0.5)
+def _diagnostics(d):
+    """The panel's fields, named as the drawing has always named them.
 
-    ax_est = fx / M
-    fz_f = M * G * LR / (LF + LR) - M * ax_est * HCG / (LF + LR)
-    fz_r = M * G * LF / (LF + LR) + M * ax_est * HCG / (LF + LR)
-    fz_f, fz_r = max(fz_f, 0.1), max(fz_r, 0.1)
-
-    alpha_f = delta - math.atan2(vy + LF * r, vx)
-    alpha_r = -math.atan2(vy - LR * r, vx)
-    fy_f = tyre_fy(alpha_f, fz_f, MU_F)
-    fy_r = tyre_fy(alpha_r, fz_r, MU_R)
-
-    ax = (fx - fy_f * math.sin(delta)) / M + vy * r
-    ay = (fy_f * math.cos(delta) + fy_r) / M - vx * r
-    dr = (LF * fy_f * math.cos(delta) - LR * fy_r) / IZ
-
-    vx += ax * DT
-    vy += ay * DT
-    r += dr * DT
-    yaw += r * DT
-    x += (vx * math.cos(yaw) - vy * math.sin(yaw)) * DT
-    y += (vx * math.sin(yaw) + vy * math.cos(yaw)) * DT
-
-    diag = dict(alpha_f=alpha_f, alpha_r=alpha_r, fy_f=fy_f, fy_r=fy_r,
-                fz_f=fz_f, fz_r=fz_r, ay=(fy_f * math.cos(delta) + fy_r) / M)
-    return (vx, vy, r, yaw, x, y), diag
+    Copied out rather than held by reference: `StepDiagnostics` handed back
+    from a step is overwritten by the next one, and a frame list full of
+    aliases to the last frame is a trap this project has paid for once.
+    """
+    return dict(alpha_f=d.alpha_front, alpha_r=d.alpha_rear,
+                fy_f=d.fy_front, fy_r=d.fy_rear,
+                fz_f=d.fz_front, fz_r=d.fz_rear, ay=d.ay)
 
 
 def drive(s):
@@ -86,26 +106,38 @@ def drive(s):
     delta = 1.15 * heading_err + 0.75 * (radius - R_PAD) / R_PAD
     delta = max(-0.38, min(0.38, delta))  # servo travel limit
     v_target = V_REF * (1.0 + 0.05 * math.sin(2.0 * theta))
-    fx = 5.5 * M * (v_target - vx)
-    return delta, fx
+    # A commanded acceleration, which is what DriveInput carries: the ESC and
+    # the tyres decide between them how much of it arrives.
+    return delta, 5.5 * (v_target - vx)
 
 
 def simulate(n_frames):
     """Warm up onto the limit cycle, then sample one revolution."""
-    s = (V_REF, 0.0, V_REF / R_PAD, math.pi / 2, R_PAD, 0.0)
-    for _ in range(int(12.0 / DT)):
-        d, fx = drive(s)
-        s, _ = step(s, d, fx)
+    model = slipx.VehicleModel.create(slipx.Tier.L2_DoubleTrack, PARAMS)
 
-    theta0 = math.atan2(s[5], s[4])
-    frames, unwrapped, prev = [], 0.0, theta0
+    state = slipx.VehicleState()
+    state.vel_body.x = V_REF
+    state.rates.z = V_REF / R_PAD
+    state.yaw = math.pi / 2
+    state.pos.x = R_PAD
+    diagnostics = slipx.StepDiagnostics()
+
+    def advance():
+        delta, accel = drive(_unpack(state))
+        model.step(state, slipx.DriveInput(delta, accel), DT, diagnostics)
+
+    for _ in range(int(12.0 / DT)):
+        advance()
+
+    frames, unwrapped = [], 0.0
+    prev = math.atan2(state.pos.y, state.pos.x)
     while unwrapped < 2 * math.pi:
-        d, fx = drive(s)
-        s, diag = step(s, d, fx)
-        th = math.atan2(s[5], s[4])
+        advance()
+        th = math.atan2(state.pos.y, state.pos.x)
         unwrapped += math.atan2(math.sin(th - prev), math.cos(th - prev))
         prev = th
-        frames.append((s, d, diag, unwrapped))
+        frames.append((_unpack(state), state.steer, _diagnostics(diagnostics),
+                       unwrapped))
 
     out = []
     for i in range(n_frames):
@@ -242,7 +274,7 @@ def draw_panel(states, i):
     # lateral tyre force at each axle, scaled by the friction limit
     for lx, fy in ((LF, diag["fy_f"]), (-LR, diag["fy_r"])):
         ax_, ay_ = x + lx * cs, y + lx * sn
-        mag = fy / (MU_F * M * G) * 0.85
+        mag = fy / (PARAMS.tyre_front.mu_y0 * M * G) * 0.85
         arrow(d, *w2s(ax_, ay_), *w2s(ax_ - hy * mag, ay_ + hx * mag), ROSE, 2, 7)
 
     mask = Image.new("L", (PW * SS, PH * SS), 0)

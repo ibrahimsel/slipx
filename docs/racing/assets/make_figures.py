@@ -5,9 +5,12 @@
 
     python3 docs/racing/assets/make_figures.py
 
-Writes one SVG per figure into this directory. No dependencies beyond the
-standard library, deliberately: a diagram nobody can regenerate is a diagram
-that goes stale the first time a number in it is questioned.
+Writes one SVG per figure into this directory. The only dependency is SlipX
+itself, which is the point: every plotted curve is evaluated by `slipx_core`
+through the Python bindings rather than by a second tyre model living here. A
+diagram nobody can regenerate goes stale the first time a number in it is
+questioned; a diagram regenerated from a model that is not the library's goes
+wrong more quietly than that.
 
 Figures carry labels, not paragraphs. Anything that needs a sentence belongs in
 the article beside the figure, where it can be edited, translated and searched.
@@ -20,24 +23,33 @@ picture is labelled, and there is no model behind them to be right or wrong.
 The left panel of differential-speeds is one too: it is a pair of concentric
 arcs and nothing else.
 
-PLOTS (tyre-curve, load-sensitivity, peak-location, friction-ellipse,
-gg-diagram, speed-profile, differential-speeds' right panel, torque-speed,
-servo-step) are computed from the formulae written out below, at
-parameter values chosen to be plausible for a 1/10-scale car. They are
-ILLUSTRATIVE. They
-are not output from `slipx_core`, and no parameter set in this file has been
-measured against a vehicle (NFR-08). This is the same caveat that
-`docs/assets/make_banner.py` carries and for the same reason: at the time of
-writing, the tier that owns a Magic Formula tyre is not built yet.
+PLOTS are computed rather than drawn. The tyre plots (tyre-curve,
+load-sensitivity, peak-location, friction-ellipse, combined-slip, gg-diagram,
+speed-profile, cross-tier-crossover) come out of `slipx_core` at the
+parameters of the reference car in `examples/cars/reference_1_10`. The
+drivetrain and actuator plots (differential-speeds' right panel, torque-speed,
+servo-step) are closed-form expressions written out below at plausible values,
+because the quantities they show are not tyre curves and the tier does not
+expose them pointwise.
 
-When the double-track tier lands, the plotted figures should be regenerated
-from `slipx_core` through the Python bindings and the local formulae here
-deleted. That is a real task, not an aspiration: a tutorial whose tyre curve
-disagrees with the library it ships beside teaches the wrong thing twice.
+Either way the numbers are ILLUSTRATIVE: no parameter set SlipX ships has been
+measured against a vehicle, and a figure being consistent with the library is
+not a figure being right about a car.
 """
 
 import math
 import os
+import sys
+
+try:
+    import slipx
+except ImportError as exc:  # pragma: no cover - an install problem, not a bug
+    raise SystemExit(
+        "make_figures.py evaluates every plotted curve with slipx_core "
+        "through the Python bindings, so `import slipx` has to work. Build "
+        "the extension in place with `make build`, and run this script from "
+        "the repository root."
+    ) from exc
 
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -259,41 +271,73 @@ class Axes:
 
 # ------------------------------------------------------------ the tyre model
 #
-# Illustrative parameters for one tyre of a 3.5 kg 1/10-scale car at rest, so
-# the vertical load below is a quarter of its weight. See the module docstring:
-# these numbers are plausible and unmeasured.
+# There is no tyre model in this file. Every curve below is evaluated by
+# `slipx_core` through the Python bindings, at the parameters of the reference
+# car that ships in the repository, so a figure here and a run of the library
+# cannot disagree. They used to: this file carried its own Magic Formula with
+# its own coefficients, and when the reference car's cornering stiffness was
+# corrected (ADR-0032) the two described tyres that peaked twenty degrees
+# apart.
+#
+# The reference car's parameters are PROVISIONAL and describe no measured
+# vehicle. That caveat is unchanged and is the one thing about these figures
+# that has not moved: they are now consistent as well as illustrative, which is
+# not the same as being measured.
 
-FZ_NOM = 3.5 * 9.80665 / 4.0      # nominal vertical load per tyre       [N]
-MU_Y0 = 1.10                      # peak lateral friction at that load   [-]
-MU_X0 = 1.15                      # peak longitudinal friction           [-]
-K_MU = 0.15                       # load sensitivity exponent            [-]
-MF_B, MF_C, MF_E = 13.0, 1.50, -0.20   # Magic Formula shape factors     [-]
-G = 9.80665
+G = 9.80665                       # slipx::kGravity
+
+_CAR = slipx.load_reference_car()
+_PARAMS = _CAR.params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+#: Static vertical load on one tyre, from the car's own mass and its 50/50
+#: weight distribution. This is the load MF-lite states its coefficients at.
+FZ_NOM = _PARAMS.mass * G / 4.0
+
+#: The front tyre, built the way the tier builds it: the stiffness factor B
+#: derived from the cornering stiffness and this load, never read from a file.
+TYRE = slipx.make_mf_lite(_PARAMS.tyre_front, _PARAMS.c_alpha_f / 2.0, FZ_NOM)
+
+MU_Y0 = TYRE.mu_y0                # peak lateral friction at FZ_NOM      [-]
+MU_X0 = TYRE.mu_x0                # peak longitudinal friction           [-]
+K_MU = TYRE.k_mu                  # load sensitivity exponent            [-]
 
 
 def mu_y(fz):
     """Load-sensitive peak friction: mu falls as the tyre is loaded."""
-    return MU_Y0 * (fz / FZ_NOM) ** (-K_MU)
+    return slipx.peak_lateral_force(TYRE, fz) / fz
 
 
 def fy_mf(alpha, fz=FZ_NOM):
-    """Lateral force from the reduced Magic Formula, ISO 8855 sign.
+    """Lateral force from MF-lite, ISO 8855 sign, straight from the library.
 
-    Fy = -mu(Fz) Fz sin(C atan(B a - E (B a - atan(B a))))
-
-    The leading minus is the ISO convention: a positive slip angle means the
-    tyre is running to the left of where it points, and the force it makes
-    opposes that, so it is negative. Under SAE the slip angle carries the
-    other sign and the same curve is written without the minus.
+    A positive slip angle means the tyre is running to the left of where it
+    points, and the force it makes opposes that, so it is negative. Under SAE
+    the slip angle carries the other sign and the same curve is written
+    without the minus.
     """
-    ba = MF_B * alpha
-    inner = ba - MF_E * (ba - math.atan(ba))
-    return -mu_y(fz) * fz * math.sin(MF_C * math.atan(inner))
+    return slipx.mf_lite_fy(TYRE, alpha, fz)
 
 
 def c_alpha(fz=FZ_NOM):
     """Cornering stiffness: the slope of the curve at the origin, positive."""
-    return MF_B * MF_C * mu_y(fz) * fz
+    return slipx.cornering_stiffness_at_load(TYRE, fz)
+
+
+def tyre_shaped(shape_c, curvature_e):
+    """The same tyre with different shape factors, built by the library.
+
+    Used only by the figure about where a peak lands, which needs a family of
+    curves that share a cornering stiffness and a peak force and differ in
+    nothing else. Deriving B here rather than in the figure keeps that
+    derivation in one place, and it is the library's.
+    """
+    coefficients = slipx.TyreCoefficients()
+    coefficients.mu_y0 = MU_Y0
+    coefficients.mu_x0 = MU_X0
+    coefficients.k_mu = K_MU
+    coefficients.shape_c = shape_c
+    coefficients.curvature_e = curvature_e
+    return slipx.make_mf_lite(coefficients, c_alpha(), FZ_NOM)
 
 
 def frange(lo, hi, n):
@@ -445,7 +489,7 @@ def fig_peak_location():
            "Same cornering stiffness, same peak force. Only C and E differ.")
 
     ca = c_alpha()                       # shared, as a skidpad would give it
-    peak_force = MU_Y0 * FZ_NOM          # shared, as a limit run would give it
+    peak_force = slipx.peak_lateral_force(TYRE, FZ_NOM)
     alpha_lin = peak_force / ca          # the linear tyre's crossing point
 
     ax = Axes(f, 66, 92, 500, 250, (0, 30), (0, 11.4))
@@ -468,12 +512,13 @@ def fig_peak_location():
     row_y = [3.5, 2.4, 1.3]
 
     for (shape_c, curve_e, cls, dot, txt), ly in zip(cases, row_y):
-        b = ca / (shape_c * peak_force)
-        ys = []
-        for d in degs:
-            ba = b * math.radians(d)
-            inner = ba - curve_e * (ba - math.atan(ba))
-            ys.append(peak_force * math.sin(shape_c * math.atan(inner)))
+        # A real tyre each time, built by the library from the shared
+        # cornering stiffness. B is derived there and not here, which is what
+        # makes "same slope, same peak" a property of the construction rather
+        # than of this loop.
+        variant = tyre_shaped(shape_c, curve_e)
+        ys = [abs(slipx.mf_lite_fy(variant, math.radians(d), FZ_NOM))
+              for d in degs]
         ax.curve(degs, ys, cls)
 
         i = max(range(len(ys)), key=lambda j: ys[j])
@@ -596,9 +641,12 @@ def fig_combined_slip():
     worthless if the drawn point misses the curve, and three versions of the
     racing line figure looked plausible and were wrong.
     """
-    fy_max = MU_Y0 * FZ_NOM            # 9.44 N
-    fx_max = MU_X0 * FZ_NOM            # 9.87 N
-    fy_demand, fx_demand = 9.0, -8.0   # each legal on its own axis
+    fy_max = slipx.peak_lateral_force(TYRE, FZ_NOM)
+    fx_max = slipx.peak_longitudinal_force(TYRE, FZ_NOM)
+    # Each legal on its own axis, with room to spare on both: the figure's
+    # claim is that two individually-fine demands are jointly impossible, and
+    # a demand sitting at 96% of one axis muddles that with "nearly too much".
+    fy_demand, fx_demand = 8.0, -7.0
 
     u, v = fy_demand / fy_max, fx_demand / fx_max
     radius = math.hypot(u, v)
@@ -606,8 +654,14 @@ def fig_combined_slip():
     assert radius > 1.0, "the demand must lie outside the ellipse"
     assert abs(math.hypot(u / radius, v / radius) - 1.0) < 1e-12
 
+    # The kept pair is the library's, not this file's: the figure claims a
+    # specific thing about what SlipX does when a demand leaves the ellipse,
+    # so it had better be what SlipX does.
+    kept = slipx.friction_ellipse(fx_demand, fy_demand, fx_max, fy_max)
+    assert kept.saturated
+    assert abs(kept.fy - fy_demand / radius) < 1e-12
     demand = math.hypot(fy_demand, fx_demand)
-    kept_y, kept_x = fy_demand / radius, -fx_demand / radius
+    kept_y, kept_x = kept.fy, -kept.fx
 
     f = Fig(640, 470, "Clipping each axis against projecting onto the budget")
     f.head("Combined slip: two ways to run out of grip",
@@ -1300,6 +1354,114 @@ def fig_servo_step():
     f.save("servo-step.svg")
 
 
+
+# ============================================== 15. the cross-tier crossover
+
+# The released artefact of SRS 7: how far up the lateral-acceleration range the
+# single-track and double-track tiers agree, measured rather than asserted.
+# Both curves are rollouts of `slipx_core`, one per tier, at the reference
+# car's own parameters.
+
+_CROSSOVER_STEERS = (0.005, 0.01, 0.02, 0.03, 0.045, 0.06, 0.075, 0.09,
+                     0.105, 0.12, 0.135, 0.15)
+_CROSSOVER_SPEED = 5.0
+_SETTLE_STEPS = 6000        # six seconds at 1 kHz, many yaw time constants
+
+
+def _settled(params, tier, steer):
+    """Hold a steer angle and a speed until the transient has died.
+
+    Returns the settled path radius and lateral acceleration, which is the
+    pair a skidpad measures and the pair the two tiers are compared on.
+    """
+    model = slipx.VehicleModel.create(tier, params)
+    state = slipx.VehicleState()
+    state.vel_body.x = _CROSSOVER_SPEED
+    diagnostics = slipx.StepDiagnostics()
+    for _ in range(_SETTLE_STEPS):
+        model.step(state,
+                   slipx.DriveInput(steer,
+                                    slipx.hold_speed(state, _CROSSOVER_SPEED)),
+                   0.001, diagnostics)
+    return state.speed() / abs(state.rates.z), abs(diagnostics.ay)
+
+
+def fig_cross_tier_crossover():
+    """Where the single-track model stops being allowed to answer.
+
+    Two differentials, because the reference car ships with a spool and the
+    struct defaults are open, and the difference between them dwarfs the
+    tyre effect this figure is otherwise about. Drawing only the shipped car
+    would attribute a drivetrain disagreement to the tyre model.
+    """
+    open_params = _CAR.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    open_params.differential = slipx.Differential.Open
+    spool_params = _CAR.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    assert spool_params.differential == slipx.Differential.Spool, (
+        "the reference car is expected to ship a locked rear axle"
+    )
+
+    rows = []
+    for steer in _CROSSOVER_STEERS:
+        r1, _ = _settled(open_params, slipx.Tier.L1_Bicycle, steer)
+        r_open, ay = _settled(open_params, slipx.Tier.L2_DoubleTrack, steer)
+        r_spool, _ = _settled(spool_params, slipx.Tier.L2_DoubleTrack, steer)
+        rows.append((ay, r1, r_open, r_spool,
+                     100.0 * abs(r_open - r1) / r1,
+                     100.0 * abs(r_spool - r1) / r1))
+
+    ays = [row[0] for row in rows]
+    assert ays == sorted(ays), "the sweep must be monotone in lateral g"
+
+    f = Fig(880, 400, "Where the single-track and double-track tiers stop "
+                      "agreeing")
+    f.head("How far up the range one model can answer for the other",
+           "Steady-state skidpad at 5 m/s, both tiers, reference car "
+           "parameters (provisional)")
+
+    # --- left: the radius each tier settles at ---------------------------
+    a = Axes(f, 70, 100, 330, 230, (0.0, 11.0), (0.0, 9.0))
+    a.frame([2, 4, 6, 8, 10], [2, 4, 6, 8])
+    f.text(235, 366, "lateral acceleration   [m/s&#178;]", "ts",
+           "middle")
+    f.text(70, 88, "settled path radius   [m]", "ts")
+
+    a.clipped(ays, [row[1] for row in rows], "mut dash")
+    a.clipped(ays, [row[2] for row in rows], "a1")
+    a.clipped(ays, [row[3] for row in rows], "a2")
+    f.text(a.px(6.6), a.py(4.9), "L1, and L2 with an open diff", "ts")
+    f.text(a.px(4.4), a.py(7.4), "L2, spool", "k2")
+
+    # --- right: the disagreement, which is the actual claim --------------
+    b = Axes(f, 545, 100, 300, 230, (0.0, 11.0), (0.0, 30.0))
+    b.frame([2, 4, 6, 8, 10], [5, 10, 15, 20, 25, 30])
+    f.text(695, 366, "lateral acceleration   [m/s&#178;]", "ts",
+           "middle")
+    f.text(545, 88, "disagreement in path radius   [%]", "ts")
+
+    b.clipped(ays, [row[5] for row in rows], "a2")
+    b.clipped(ays, [row[4] for row in rows], "a1")
+
+    f.line(b.px(0), b.py(1.0), b.px(11.0), b.py(1.0), "mut thin dash")
+    f.text(b.px(10.7), b.py(2.0), "1%", "ts", "end")
+
+    # The crossing: the first sampled point above one per cent, reported
+    # rather than assumed, because it moves whenever the tyre does.
+    crossing = next((row[0] for row in rows if row[4] > 1.0), None)
+    assert crossing is not None, "the sweep never leaves the agreement band"
+    f.circle(*b.pt(crossing, 1.0), 4.5, "a1f")
+    f.line(*b.pt(crossing, 1.6), *b.pt(crossing - 1.6, 4.4), "mut thin")
+    f.text(b.px(0.4), b.py(9.6),
+           f"open diff: past {crossing:.1f} m/s&#178; ({crossing / G:.2f} g)",
+           "k1")
+    f.text(b.px(0.4), b.py(7.2), "L1 stops answering for L2", "k1")
+
+    f.text(b.px(0.4), b.py(27.4), "spool: L1 cannot represent a", "k2")
+    f.text(b.px(0.4), b.py(25.0), "locked axle at all, so it", "k2")
+    f.text(b.px(0.4), b.py(22.6), "disagrees from the start", "k2")
+
+    f.save("cross-tier-crossover.svg")
+
 def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
@@ -1310,7 +1472,8 @@ def main():
                fig_load_transfer_lat, fig_vehicle_models,
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
                fig_speed_profile,
-               fig_differential_speeds, fig_torque_speed, fig_servo_step):
+               fig_differential_speeds, fig_torque_speed, fig_servo_step,
+               fig_cross_tier_crossover):
         fn()
     print("done")
 

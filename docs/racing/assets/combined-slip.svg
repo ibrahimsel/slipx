@@ -55,17 +55,17 @@
 <text class="ts" x="466.00" y="252.00">F<tspan class="sb" dy="3">y</tspan></text>
 <text class="ts" x="282.00" y="70.00">F<tspan class="sb" dy="3">x</tspan></text>
 <text class="ts" x="256.00" y="378.00" text-anchor="end">brake</text>
-<line class="grid dot" x1="413.03" y1="230.00" x2="413.03" y2="325.66"/>
-<line class="grid dot" x1="270.00" y1="325.66" x2="413.03" y2="325.66"/>
-<text class="k2" x="419.03" y="220.00">9.0 N of 9.4</text>
-<text class="k2" x="262.00" y="329.66" text-anchor="end">8.0 N of 9.9</text>
-<line class="ok" x1="270.00" y1="230.00" x2="384.28" y2="306.44" marker-end="url(#ah)"/>
-<line class="a2 dash" x1="384.28" y1="306.44" x2="413.03" y2="325.66" marker-end="url(#ah)"/>
-<circle class="a2f" cx="413.03" cy="325.66" r="5.00"/>
-<circle class="okf" cx="384.28" cy="306.44" r="5.00"/>
-<text class="k2" x="427.03" y="335.66">clipped per axis</text>
-<text class="ts" x="427.03" y="351.66">asks 12.0 N of the patch</text>
+<line class="grid dot" x1="397.13" y1="230.00" x2="397.13" y2="321.68"/>
+<line class="grid dot" x1="270.00" y1="321.68" x2="397.13" y2="321.68"/>
+<text class="k2" x="403.13" y="220.00">8.0 N of 9.4</text>
+<text class="k2" x="262.00" y="325.68" text-anchor="end">7.0 N of 9.0</text>
+<line class="ok" x1="270.00" y1="230.00" x2="380.57" y2="309.74" marker-end="url(#ah)"/>
+<line class="a2 dash" x1="380.57" y1="309.74" x2="397.13" y2="321.68" marker-end="url(#ah)"/>
+<circle class="a2f" cx="397.13" cy="321.68" r="5.00"/>
+<circle class="okf" cx="380.57" cy="309.74" r="5.00"/>
+<text class="k2" x="411.13" y="331.68">clipped per axis</text>
+<text class="ts" x="411.13" y="347.68">asks 10.6 N of the patch</text>
 <text class="k3" x="270.00" y="404.00" text-anchor="middle">projected onto the boundary</text>
-<text class="ts" x="270.00" y="420.00" text-anchor="middle">7.2 N and 6.4 N, in the direction asked for</text>
+<text class="ts" x="270.00" y="420.00" text-anchor="middle">7.0 N and 6.1 N, in the direction asked for</text>
 <text class="ts" x="22.00" y="448.00">Both components scale by the same factor, so the direction survives and the magnitude does not.</text>
 </svg>

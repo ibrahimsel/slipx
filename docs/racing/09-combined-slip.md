@@ -61,24 +61,24 @@ rest, carrying a quarter of its weight:
 ```
 Fz     = 3.5 * 9.81 / 4 = 8.58 N
 mu_y   = 1.10           ->  lateral limit      9.44 N
-mu_x   = 1.15           ->  longitudinal limit 9.87 N
+mu_x   = 1.05           ->  longitudinal limit 9.01 N
 ```
 
-Now ask it for 9.0 N of cornering force and 8.0 N of braking force at the same
-time. Check each against its own limit and both pass: 9.0 is less than 9.44,
-and 8.0 is less than 9.87. The per-axis rule hands back exactly what was asked
-for.
+Now ask it for 8.0 N of cornering force and 7.0 N of braking force at the same
+time. Check each against its own limit and both pass, with room to spare: 8.0
+is less than 9.44, and 7.0 is less than 9.01. The per-axis rule hands back
+exactly what was asked for.
 
-The magnitude of what it handed back is `sqrt(9.0^2 + 8.0^2) = 12.0 N`, from a
-contact patch that cannot make more than about 9.9 N in any direction. Measured
-against the boundary in the direction the demand points, the pair is 25% outside
-it. The model has invented a quarter of the grip it just reported, and it did so
-without a single value exceeding a limit.
+The magnitude of what it handed back is `sqrt(8.0^2 + 7.0^2) = 10.6 N`, from a
+contact patch that cannot make more than about 9.4 N in any direction. Measured
+against the boundary in the direction the demand points, the pair is 15%
+outside it. The model has invented a seventh of the grip it just reported, and
+it did so without a single value coming close to a limit.
 
-At vehicle level that request is a car cornering at 10.3 m/s<sup>2</sup> while
-braking at 9.1 m/s<sup>2</sup>: about 1.05 g sideways and 0.93 g backwards, from
-tyres good for roughly 1.1 g. Each figure on its own is plausible. Together they
-are fiction.
+At vehicle level that request is a car cornering at 9.1 m/s<sup>2</sup> while
+braking at 8.0 m/s<sup>2</sup>: about 0.93 g sideways and 0.82 g backwards,
+from tyres good for roughly 1.1 g. Each figure on its own is plausible.
+Together they are fiction.
 
 The failure is worst exactly where a lap is won. On the axes the two rules
 agree, because a pure-cornering or pure-braking demand is limited by its own
@@ -105,15 +105,15 @@ boundary.
 For the demand above:
 
 ```
-rho    = sqrt( (9.0/9.44)^2 + (8.0/9.87)^2 ) = sqrt(0.909 + 0.657) = 1.252
-Fy     = 9.0 / 1.252 = 7.2 N
-Fx     = 8.0 / 1.252 = 6.4 N
+rho    = sqrt( (8.0/9.44)^2 + (7.0/9.01)^2 ) = sqrt(0.718 + 0.604) = 1.150
+Fy     = 8.0 / 1.150 = 7.0 N
+Fx     = 7.0 / 1.150 = 6.1 N
 ```
 
 ![Clipping each axis against projecting onto the budget](assets/combined-slip.svg)
 
-The tyre delivers 7.2 N of cornering force and 6.4 N of braking force, and the
-driver who asked for 9.0 and 8.0 gets about 80% of each. Both fall short, in
+The tyre delivers 7.0 N of cornering force and 6.1 N of braking force, and the
+driver who asked for 8.0 and 7.0 gets about 87% of each. Both fall short, in
 proportion.
 
 That proportionality is a modelling choice and worth naming rather than

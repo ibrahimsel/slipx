@@ -91,16 +91,16 @@ K = (m / L) (l_r / C_f - l_f / C_r)
 
 So plot `delta` against `ay`, fit a straight line, and its slope is `K`. Here is
 the problem, with numbers. Take a 3.5 kg car, wheelbase 0.32 m, centre of
-gravity in the middle, front and rear axle cornering stiffnesses of 120 and
-130 N/rad:
+gravity in the middle, front and rear axle cornering stiffnesses of 420 and
+455 N/rad:
 
 ```
-K = (3.5 / 0.32) (0.16/120 - 0.16/130) = 1.12e-3 rad per m/s^2
+K = (3.5 / 0.32) (0.16/420 - 0.16/455) = 3.21e-4 rad per m/s^2
 ```
 
 On a 3 m skidpad the Ackermann angle is `0.32 / 3 = 0.107 rad`, about 6.1
 degrees. At 5 m/s<sup>2</sup> of lateral acceleration the tyre contribution is
-`1.12e-3 * 5 = 5.6e-3 rad`, about 0.32 degrees. **You are looking for a 5%
+`3.21e-4 * 5 = 1.6e-3 rad`, about 0.09 degrees. **You are looking for a 1.5%
 change in a small angle.** If what you are recording is the steering *command*
 rather than the steering *angle*, servo nonlinearity and slop in the linkage are
 comfortably larger than the effect you are trying to measure, and your fit will
@@ -208,7 +208,7 @@ coefficient, not on the load.
 All three curves in the figure have the same tangent at the origin and reach the
 same height. For a plausible tyre the multiple is between about 1.5 and 3, which
 is the first two curves. The third is the trap: `C = 1.43` with `E = 0.87` is a
-perfectly ordinary looking pair, and it produces a tyre whose peak is at 24
+perfectly ordinary looking pair, and it produces a tyre whose peak is at 21
 degrees of slip angle. That car never lets go. It just gets vaguer.
 
 Two lessons follow.

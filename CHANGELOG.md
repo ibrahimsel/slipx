@@ -289,6 +289,38 @@ and measured separately under each:
 No reference hash moves: encoding a run does not perturb it, and a test
 asserts the trajectory hash is unchanged by writing.
 
+### The tyre model is reachable from Python, and the figures come out of it
+
+- **New bindings**: `slipx.MfLite`, `slipx.TyreCoefficients`,
+  `slipx.CombinedForce`, `make_mf_lite`, `mf_lite_fy`, `peak_lateral_force`,
+  `peak_longitudinal_force`, `cornering_stiffness_at_load` and
+  `friction_ellipse`. A vehicle model answers what a car did; these answer
+  what a tyre does, which is what a tyre plot and a check of a fitted set both
+  need. `B` is derived at construction and is never read from a parameter set,
+  exactly as in the core.
+- **The tutorial series' figures are generated from `slipx_core`.**
+  `docs/racing/assets/make_figures.py` no longer carries its own Magic
+  Formula: every tyre curve in the series is evaluated by the library at the
+  reference car's parameters. The two had drifted, and the drift is what
+  ADR-0032 found.
+- **The README banner is a rollout of the double-track tier.**
+  `docs/assets/make_banner.py` no longer carries its own single-track model
+  either. The car drifts because its rear tyre is a lower-grip compound than
+  its front, which is a parameter choice rather than a special case in the
+  drawing.
+- **New figure `cross-tier-crossover.svg`**, the released artefact of the L1
+  versus L2 comparison, generated from the library and referenced from
+  [article 3](docs/racing/03-vehicle-models.md). On an open differential the
+  two tiers agree on path radius to within 1% up to 0.88 g; on the reference
+  car's spool they disagree by 15% from the first degree of steering, because
+  a single-track model has no differential to represent. The README's
+  "within 1% below 0.23 g" was measured before the tyre was corrected and has
+  been replaced.
+- Three tutorial articles moved worked numbers with the tyre: the skidpad
+  understeer-gradient example in article 7, its peak-location figure reading,
+  and article 9's combined-slip arithmetic, which also picks up the reference
+  car's `mu_x0` of 1.05 in place of a value the script had invented.
+
 ### The reference tyre stops being made of sponge, and the L1 and L2 rows move again
 
 The reference car's cornering stiffness was 60 N/rad per tyre against a static
