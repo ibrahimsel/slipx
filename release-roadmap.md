@@ -363,7 +363,7 @@ from a car file and visible. Everything below is release engineering.
   Done 2026-08-13: `0.2.0` in all four places, CMake carrying `0.2.0` as the
   numeric part; the CHANGELOG cut keeps all three hash-movement tables and
   says at the top that every hash differs from `0.1.0a1`'s.
-- [ ] **M4.5** Release rehearsal then release: dispatch the workflow to
+- [x] **M4.5** Release rehearsal then release: dispatch the workflow to
   TestPyPI, verify the render and a cold install; then tag, and dispatch to
   PyPI with publish enabled, from the tag (the workflow refuses otherwise).
   Trusted Publishing, no tokens. Expect the full wheel matrix (five platforms,
