@@ -10,7 +10,7 @@
 # on a competition car, which is the whole point of the list; none of them has
 # been.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 
 compound: sponge
 surface: carpet
@@ -26,6 +26,13 @@ linear:
   # Identifiable from the low-slip region of a skidpad.               [N/rad]
   c_alpha: 60.0
 
+  # Longitudinal slip stiffness per tyre at the nominal load: the initial
+  # slope of longitudinal force against slip ratio. Identifiable from encoder
+  # slip ratio against IMU longitudinal acceleration in a straight-line run.
+  # Provisional at twice c_alpha, which is the usual ratio between the two
+  # slopes. Consumed from L2 (schema 0.2.0).            [N per unit slip]
+  c_kappa: 120.0
+
 friction:
   # Peak lateral and longitudinal friction at the nominal load. Sponge on
   # carpet grips well; above 1 is normal for this combination and would be
@@ -39,13 +46,18 @@ friction:
   # Consumed from L2 (CORE-06).                                           [-]
   k_mu: 0.15
 
-# Reduced Magic Formula shape factors (CORE-06, L2, P1). With c_alpha and
-# mu_y0 above, these put the peak at roughly 9 degrees of slip, which is where
-# a sponge tyre of this size on carpet plausibly peaks.
+# Reduced Magic Formula shape factors, consumed from L2. B is deliberately
+# absent: the model derives it from c_alpha and the static load so that the
+# curve reproduces the linear tyre exactly at small slip, and a stated B would
+# either agree (redundant) or disagree (ignored, and warned about).
+#
+# C and E together set where the peak sits relative to the slip angle at which
+# the linear tyre saturates: this pair puts it at about 2.7 times, inside the
+# 1.5 to 3 a real tyre shows. The pair is easy to get wrong in a way every
+# individual bound accepts, so the loader checks the multiple.
 mf_lite:
-  B: 9.0
-  C: 1.45
-  E: 0.90
+  C: 1.68
+  E: 0.42
 
 relaxation:
   # The distance the tyre must roll for lateral force to reach 63% of its
@@ -54,7 +66,7 @@ relaxation:
   sigma: 0.045
 
 provenance:
-  schema_version: "0.1.0"
+  schema_version: "0.2.0"
   label: provisional
   source: >-
     No tyre. Values chosen so that the implied saturation slip angle and the

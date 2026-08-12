@@ -10,7 +10,7 @@
 #
 # PROVISIONAL. See provenance.yaml.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 
 steering:
   # Road wheel travel, symmetric magnitude. About 23 degrees, which is typical

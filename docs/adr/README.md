@@ -56,6 +56,7 @@ Use [`template.md`](template.md) for a new record.
 | [0013](0013-provenance-labels-are-printed.md) | Every parameter set carries a provenance label and the tooling prints it | Accepted |
 | [0023](0023-mf-lite-derives-b-from-cornering-stiffness.md) | MF-lite derives the stiffness factor `B` rather than reading it | Accepted |
 | [0025](0025-c-kappa-enters-the-core-ahead-of-the-schema.md) | The longitudinal slip stiffness enters the core ahead of the schema | Accepted |
+| [0030](0030-schema-0-2-0-adds-c-kappa-and-the-actuator-fields.md) | Schema 0.2.0 adds `c_kappa` and the actuator fields in one bump | Accepted |
 
 ## Licence, packaging and release
 

@@ -19,11 +19,13 @@ nothing else, so it goes inside a stack you already run. And every tyre
 parameter is identifiable from a manoeuvre driven in a car park with the
 sensors already on a competition car, so there is nothing to guess.
 
-**Early days.** Three of the four tiers are built. The double-track tier is the
-minimal one, and it cannot be built from a tyre file at schema 0.1.0, which has
-no field for longitudinal slip stiffness. The extended tier raises rather than
-handing back a simpler model. No parameter set here has been fitted to a real
-vehicle, and the tooling says so every time it loads one.
+**Early days.** Three of the four tiers are built, and a car directory
+parameterises all three: schema 0.2.0 added the longitudinal slip stiffness
+the double-track tier was refusing to guess. The double-track tier is the
+minimal one, with no drivetrain or actuator models yet. The extended tier
+raises rather than handing back a simpler model. No parameter set here has
+been fitted to a real vehicle, and the tooling says so every time it loads
+one.
 
 ## Quickstart
 
@@ -104,9 +106,10 @@ slip. Every parameter earns its place by being identifiable:
 | Symbol | Meaning | Identifiable from |
 |---|---|---|
 | `C_alpha0` | Cornering stiffness at nominal load | Skidpad, low-slip region |
+| `C_kappa` | Longitudinal slip stiffness | Encoder slip ratio against IMU acceleration |
 | `mu_y0`, `mu_x0` | Peak lateral / longitudinal friction | Circle-to-slip, straight-line accel |
 | `k_mu` | Load sensitivity exponent | Skidpad at two ballast configurations |
-| `B`, `C`, `E` | MF shape factors | Full slip sweep |
+| `C`, `E` | MF shape factors; `B` is derived, never asked for | Full slip sweep |
 | `sigma` | Relaxation length | Step steer transient |
 
 Full Pacejka is not the goal. A parameter nobody can identify is worse than one
@@ -220,7 +223,7 @@ Verification runs in four layers.
   parameter set with a validation report, the honest phrasing is *physically
   structured and identifiable*, not *validated*.
 
-The first three are in place: 221 C++ tests and 164 Python tests, including an
+The first three are in place: 221 C++ tests and 176 Python tests, including an
 allocation counter proving `step` never touches the allocator. Every shipped
 parameter set carries a `measured`, `identified` or `provisional` label, and
 the tooling prints it rather than leaving it in the documentation.

@@ -9,7 +9,7 @@
 # latencies are plausible for the hardware named, and none of them has been
 # measured; when slipx_sense lands, these are numbers to replace, not to trust.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 
 sensors:
   - name: scan

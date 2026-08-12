@@ -259,6 +259,111 @@ def test_different_tyres_front_and_rear_are_supported_and_reported(car_factory) 
     assert any("takes the lower" in note for note in car.notes)
 
 
+def test_a_c_e_pair_below_the_peak_threshold_is_quiet(car_factory) -> None:
+    # C = 1.5 with E = 0.6 puts the peak at about 3.8 times the linear
+    # saturation angle, under the threshold of 4. Unusual but not warned:
+    # the band a real tyre occupies is 1.5 to 3, and the rule leaves
+    # headroom above it before objecting (ADR-0030).
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        tyre.read_text(encoding="utf-8")
+        .replace("C: 1.68", "C: 1.5")
+        .replace("E: 0.42", "E: 0.6"),
+        encoding="utf-8",
+    )
+    car = load_car(path)
+    assert not any("peak" in w for w in car.warnings)
+
+
+def test_a_c_e_pair_with_a_peak_no_car_reaches_is_warned_about(car_factory) -> None:
+    # C = 1.45 with E = 0.65 puts the peak at about 4.4 times the linear
+    # saturation angle, just over the threshold. Every individual bound in
+    # the schema accepts the pair; only the pair is wrong.
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        tyre.read_text(encoding="utf-8")
+        .replace("C: 1.68", "C: 1.45")
+        .replace("E: 0.42", "E: 0.65"),
+        encoding="utf-8",
+    )
+    car = load_car(path)
+    assert any("peak" in w and "slip sweep" in w for w in car.warnings)
+
+
+def test_the_peak_multiple_is_the_number_tyre_hpp_documents() -> None:
+    # The C++ header states 2.7 for the reference pair and "above 20" for the
+    # legal-but-pathological one; the two statements must be the same
+    # function, or the warning and the model disagree about the same tyre.
+    from slipx_schema.rules import mf_lite_peak_multiple
+
+    assert mf_lite_peak_multiple(1.68, 0.42) == pytest.approx(2.7, abs=0.1)
+    assert mf_lite_peak_multiple(1.05, 0.87) > 20.0
+    # E at exactly 1 with a low C has no finite peak at all, and legal values
+    # can say that; the function reports it rather than looping.
+    assert mf_lite_peak_multiple(1.05, 1.0) == float("inf")
+
+
+def test_a_stated_b_that_disagrees_with_the_derived_value_is_warned_about(
+    car_factory,
+) -> None:
+    # B is derived from the linear block and never consumed (ADR-0023). A
+    # stated B that disagrees would be silently ignored, which is exactly the
+    # in-effect-but-ignored parameter the rules exist to surface.
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        tyre.read_text(encoding="utf-8").replace("mf_lite:\n", "mf_lite:\n  B: 9.0\n"),
+        encoding="utf-8",
+    )
+    car = load_car(path)
+    assert any("B = 9.0" in w and "never consumed" in w for w in car.warnings)
+
+
+def test_a_stated_b_that_agrees_with_the_derived_value_is_quiet(car_factory) -> None:
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        tyre.read_text(encoding="utf-8").replace("mf_lite:\n", "mf_lite:\n  B: 3.78\n"),
+        encoding="utf-8",
+    )
+    car = load_car(path)
+    assert not any("mf_lite.B" in w for w in car.warnings)
+
+
+def test_a_stated_b_without_a_nominal_load_cannot_be_checked_and_says_so(
+    car_factory,
+) -> None:
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    text = tyre.read_text(encoding="utf-8")
+    text = "\n".join(
+        line for line in text.splitlines() if not line.startswith("nominal_load:")
+    ) + "\n"
+    text = text.replace("mf_lite:\n", "mf_lite:\n  B: 9.0\n")
+    tyre.write_text(text, encoding="utf-8")
+    car = load_car(path)
+    assert any("cannot be checked" in w for w in car.warnings)
+
+
+def test_c_kappa_bounds_are_enforced_on_both_sides(car_factory) -> None:
+    # Both sides, because a mutation dropping only the upper bound escaped
+    # the negative-value test: the bound reflects what encoder slip ratio
+    # against IMU acceleration can plausibly identify on a 1/10 tyre.
+    for bad in ("-5.0", "6000.0"):
+        path = car_factory()
+        tyre = path / "tyres" / "sponge_carpet.yaml"
+        tyre.write_text(
+            tyre.read_text(encoding="utf-8").replace(
+                "c_kappa: 120.0", f"c_kappa: {bad}"
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValidationError, match="c_kappa"):
+            load_car(path)
+
+
 def test_a_tyre_file_must_carry_its_own_provenance(car_factory) -> None:
     path = car_factory()
     tyre = path / "tyres" / "sponge_carpet.yaml"

@@ -19,6 +19,7 @@ The division between an error and a warning is deliberate and consistent:
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Tuple
 
 from .errors import FieldError, Warning_
@@ -264,6 +265,48 @@ def check_inertia(
     return errors, warnings
 
 
+# The slip angle at which MF-lite peaks, as a multiple of the slip angle at
+# which the LINEAR tyre would have reached the same peak force. The multiple
+# depends on C and E alone: not on B, not on the friction coefficient and not
+# on the load, which is what makes it checkable here, where B does not exist
+# yet. A real tyre sits between about 1.5 and 3; the warning threshold leaves
+# headroom above that band before objecting (ADR-0030).
+#
+# Derivation: with B derived so the origin slope is the cornering stiffness
+# (ADR-0023), the linear reference angle is at B * alpha = 1 / C, and the curve
+# sin(C * atan(phi)) peaks where phi(u) = (1 - E) * u + E * atan(u) equals
+# tan(pi / (2 C)), with u = B * alpha. The multiple is then C * u.
+PEAK_MULTIPLE_WARN_ABOVE = 4.0
+
+
+def mf_lite_peak_multiple(shape_c: float, curvature_e: float) -> float:
+    """Where the peak sits relative to the linear saturation angle. [-]
+
+    Returns ``inf`` when the pair puts the peak at no finite slip angle, which
+    legal values can do (E at 1 with C low enough). Solved by bisection with a
+    fixed iteration count; phi is strictly increasing for E <= 1, so the root
+    is unique.
+    """
+    target = math.tan(math.pi / (2.0 * shape_c))
+
+    def phi(u: float) -> float:
+        return (1.0 - curvature_e) * u + curvature_e * math.atan(u)
+
+    hi = 1.0
+    while phi(hi) < target:
+        hi *= 2.0
+        if hi > 1e12:
+            return math.inf
+    lo = 0.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if phi(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return shape_c * 0.5 * (lo + hi)
+
+
 def check_tyre_plausibility(tyre: Dict[str, Any], file: str) -> List[Warning_]:
     """Plausibility for a tyre file (ID-06 in spirit, at load time).
 
@@ -314,5 +357,75 @@ def check_tyre_plausibility(tyre: Dict[str, Any], file: str) -> List[Warning_]:
                     requirement="SCH-04",
                 )
             )
+
+    # The C/E pair jointly decide how far past the linear saturation angle the
+    # tyre's true peak sits, and the two schema bounds cannot see the pair.
+    # Legal values give a multiple above 20, a curve so flat its peak is at a
+    # slip angle no car reaches; warn rather than refuse, because the curve
+    # exists, it is just probably not the tyre its author meant (ADR-0030).
+    mf_lite = tyre.get("mf_lite", {})
+    shape_c = mf_lite.get("C")
+    curvature_e = mf_lite.get("E")
+    if all(isinstance(v, (int, float)) for v in (shape_c, curvature_e)):
+        multiple = mf_lite_peak_multiple(float(shape_c), float(curvature_e))
+        if multiple > PEAK_MULTIPLE_WARN_ABOVE:
+            warnings.append(
+                Warning_(
+                    path="mf_lite.E",
+                    message=(
+                        f"C = {shape_c} and E = {curvature_e} put the tyre's "
+                        f"peak at {multiple:.1f} times the slip angle at which "
+                        f"the linear tyre saturates. A real tyre sits between "
+                        f"about 1.5 and 3 times; this curve barely lets go, "
+                        f"and a fit that matches the low-slip data can still "
+                        f"produce it. Check C and E against a full slip sweep"
+                    ),
+                    file=file,
+                    requirement="SCH-04",
+                )
+            )
+
+    # B is derived from cornering stiffness and never consumed (ADR-0023), so
+    # a stated B that disagrees with the derived value is a parameter its
+    # author believed was in effect. Said out loud rather than ignored.
+    stated_b = mf_lite.get("B")
+    if isinstance(stated_b, (int, float)):
+        can_derive = all(
+            isinstance(v, (int, float)) for v in (c_alpha, nominal_load, mu_y0)
+        ) and isinstance(shape_c, (int, float))
+        if not can_derive:
+            warnings.append(
+                Warning_(
+                    path="mf_lite.B",
+                    message=(
+                        "B is stated but cannot be checked without "
+                        "nominal_load. B is derived from cornering stiffness "
+                        "and the static load and is never consumed from this "
+                        "file (ADR-0023); a stated B with no nominal_load "
+                        "asserts nothing verifiable"
+                    ),
+                    file=file,
+                    requirement="SCH-04",
+                )
+            )
+        else:
+            derived_b = c_alpha / (shape_c * mu_y0 * nominal_load)
+            if abs(stated_b - derived_b) > 0.05 * derived_b:
+                warnings.append(
+                    Warning_(
+                        path="mf_lite.B",
+                        message=(
+                            f"B = {stated_b} disagrees with the value the "
+                            f"model derives and uses, "
+                            f"c_alpha / (C * mu_y0 * nominal_load) = "
+                            f"{derived_b:.3f}. B is never consumed from this "
+                            f"file (ADR-0023), so the stated value would be "
+                            f"silently ignored; either remove it or "
+                            f"reconcile it with the linear block"
+                        ),
+                        file=file,
+                        requirement="SCH-04",
+                    )
+                )
 
     return warnings

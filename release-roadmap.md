@@ -108,15 +108,15 @@ Status: done. Size: small (hours). Hash impact: none.
 
 ## M1. Schema 0.2.0: the longitudinal slip stiffness
 
-Status: not-started. Size: small (days). Hash impact: **none** (no numerical
-path changes).
+Status: done. Size: small (days). Hash impact: **none** (no numerical
+path changes; verified against the recorded rows).
 
 Goal: L2 becomes reachable from a car file. Today the loader
 (`Car.params_for_tier`) deliberately raises for L2, naming the missing
 longitudinal slip stiffness `c_kappa` and schema 0.2.0 (ADR-0025). This
 milestone makes that error message come true.
 
-- [ ] **M1.1** Audit what M2 (ESC, battery, servo, differential) will need
+- [x] **M1.1** Audit what M2 (ESC, battery, servo, differential) will need
   from the schema before cutting 0.2.0, so the minor bump happens once.
   `dynamics.yaml` was designed to carry drivetrain, ESC and servo sections;
   verify the 0.1.0 schema actually has every field M2's `VehicleParams`
@@ -125,7 +125,7 @@ milestone makes that error message come true.
   fill must either exist in the schema or produce a refusal that names it.
   Done when: a written list (in the M1 commit message or an ADR) of every
   field 0.2.0 adds, cross-checked against M2's parameter needs.
-- [ ] **M1.2** Add `c_kappa` to `tyre.schema.json` as schema 0.2.0, with the
+- [x] **M1.2** Add `c_kappa` to `tyre.schema.json` as schema 0.2.0, with the
   0.1.0 to 0.2.0 migration. The migration cannot invent a value: a migrated
   0.1.0 file still has no `c_kappa`, still loads for L0 and L1, and still gets
   the naming refusal for L2. Bounds should reflect what is identifiable from
@@ -133,12 +133,12 @@ milestone makes that error message come true.
   Done when: schema version gating, migration and validation tests cover both
   file versions; `tools/version_check.py` reports schema 0.2.0 and still
   compares it to nothing.
-- [ ] **M1.3** `Car.params_for_tier` fills `c_kappa` from a 0.2.0 tyre file
+- [x] **M1.3** `Car.params_for_tier` fills `c_kappa` from a 0.2.0 tyre file
   and stops refusing L2; the refusal path stays, verbatim in spirit, for files
   that lack the field.
   Done when: pytest covers both paths; building L2 from
   `load_reference_car()` works once M1.6 lands.
-- [ ] **M1.4** **DECISION**: the `C`/`E` consistency rule. `C` and `E` are
+- [x] **M1.4** **DECISION**: the `C`/`E` consistency rule. `C` and `E` are
   bounded independently in the schema but jointly decide how far out the tyre
   peak sits relative to the linear-tyre reference angle; legal 0.1.0 values
   can put the peak at a slip angle no car reaches (multiple of about 21, where
@@ -148,7 +148,11 @@ milestone makes that error message come true.
   C++ tests either way.
   Done when: decided, recorded, and if a rule is added it has tests either
   side of the threshold.
-- [ ] **M1.5** Make `mf_lite.B` derived-and-checked at the loader, as
+  Decided 2026-08-12: a warning above a peak-slip multiple of 4, in
+  `rules.check_tyre_plausibility`, with tests either side (about 3.8 quiet,
+  about 4.4 warns); recorded in ADR-0030. The C++ tests already pin the
+  reference pair inside 1.5 to 3.
+- [x] **M1.5** Make `mf_lite.B` derived-and-checked at the loader, as
   ADR-0023 promised: `B` is computed from cornering stiffness in
   `make_mf_lite` and never consumed from the file, so a file whose `B`
   disagrees with the derived value must be reported, not silently ignored.
@@ -156,12 +160,12 @@ milestone makes that error message come true.
   missing.
   Done when: a tyre file with an inconsistent `B` produces a named warning or
   error, with a test.
-- [ ] **M1.6** Give the reference car's tyre file a `c_kappa` value,
+- [x] **M1.6** Give the reference car's tyre file a `c_kappa` value,
   labelled `provisional` like everything else it carries, and keep the loader
   printing the label.
   Done when: `load_reference_car().params_for_tier(Tier.L2_DoubleTrack)`
   returns params and `summary()` still leads with PROVISIONAL.
-- [ ] **M1.7** Update the README (the "Early days" paragraph and anywhere
+- [x] **M1.7** Update the README (the "Early days" paragraph and anywhere
   else claiming L2 cannot be built from a tyre file) and the CHANGELOG.
   Done when: no stale claim remains; README snippets still run as written.
 

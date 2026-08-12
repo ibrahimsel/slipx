@@ -72,7 +72,7 @@ def test_tyre_files_are_version_gated_too(car_factory) -> None:
     path = car_factory()
     tyre = path / "tyres" / "sponge_carpet.yaml"
     text = tyre.read_text(encoding="utf-8").replace(
-        'schema_version: "0.1.0"', 'schema_version: "7.0.0"', 1
+        'schema_version: "0.2.0"', 'schema_version: "7.0.0"', 1
     )
     tyre.write_text(text, encoding="utf-8")
     with pytest.raises(SchemaVersionError, match="7.0.0"):
@@ -82,11 +82,52 @@ def test_tyre_files_are_version_gated_too(car_factory) -> None:
 # --------------------------------------------------------------- migrations
 
 
-def test_no_migrations_are_needed_at_the_first_release() -> None:
-    # 0.1.0 is the first schema, so there is nothing to migrate FROM. The
-    # mechanism is tested below with a synthetic one; this asserts the real
-    # registry is empty rather than accidentally populated.
-    assert migrate_module.available() == []
+def test_the_0_1_0_to_0_2_0_migration_exists_for_every_kind() -> None:
+    # 0.2.0 added only optional fields (ADR-0030), so each step is the
+    # identity; it is still registered explicitly per kind, because a gap in
+    # the chain is a loud release bug and an implicit identity would hide a
+    # real one.
+    assert migrate_module.available() == [
+        (kind, 1)
+        for kind in sorted(
+            ("car", "dynamics", "limits", "sensors", "provenance", "tyre")
+        )
+    ]
+
+
+def test_a_0_1_0_car_directory_still_loads_by_migration(car_factory) -> None:
+    # A car directory written against schema 0.1.0, byte for byte: every file
+    # declares 0.1.0, the tyre file has no c_kappa and carries the B that
+    # 0.1.0 required. It must keep loading for the tiers it always served,
+    # and the migration must not invent the field it lacks.
+    path = car_factory()
+    for name in (
+        "car.yaml", "dynamics.yaml", "limits.yaml", "provenance.yaml",
+        "sensors.yaml", "tyres/sponge_carpet.yaml",
+    ):
+        target = path / name
+        target.write_text(
+            target.read_text(encoding="utf-8").replace(
+                'schema_version: "0.2.0"', 'schema_version: "0.1.0"'
+            ),
+            encoding="utf-8",
+        )
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    text = tyre.read_text(encoding="utf-8")
+    lines = [
+        line for line in text.splitlines() if "c_kappa" not in line
+    ]
+    text = "\n".join(lines) + "\n"
+    # The B a 0.1.0 file was required to state, consistent with the linear
+    # block so the derived-B check stays quiet.
+    text = text.replace("mf_lite:\n", "mf_lite:\n  B: 3.78\n")
+    tyre.write_text(text, encoding="utf-8")
+
+    car = load_car(path)
+    assert car.schema_version == "0.2.0"  # migrated forward
+    assert car.tyre_front.c_kappa is None  # not invented
+    assert car.params.c_kappa is None
+    assert car.warnings == []
 
 
 def test_the_migration_chain_runs_stepwise(monkeypatch: pytest.MonkeyPatch) -> None:

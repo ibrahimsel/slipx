@@ -53,9 +53,11 @@ def to_vehicle_params(parameters) -> VehicleParams:
     inputs are still named; doing it here would put a calculation in the one
     place nothing tests.
 
-    ``v_eps`` is the single field that may be absent from a car file. When it
-    is, the core's own default stands, and ``Car.notes`` already recorded that
-    (SCH-02 forbids silent defaulting, not defaulting).
+    ``v_eps`` is the single field that may be absent from a car file with the
+    core's default standing in. When it is, ``Car.notes`` already recorded
+    that (SCH-02 forbids silent defaulting, not defaulting). ``c_kappa`` may
+    also be absent, but it never defaults: it is consumed only through
+    :meth:`Car.params_for_tier`, which refuses L2 by name without it.
     """
     params = VehicleParams()
     params.mass = parameters.mass
@@ -152,18 +154,19 @@ class Car:
         """Parameters for one tier, refusing rather than defaulting.
 
         ``params`` carries everything L0 and L1 need and is what most callers
-        want. L2 additionally needs the MF-lite block and a longitudinal slip
-        stiffness, and ``tyre.schema.json`` at schema 0.1.0 carries the first
-        and not the second (ADR-0025).
+        want. L2 additionally needs the MF-lite block, the load sensitivity,
+        the relaxation length and the longitudinal slip stiffness
+        ``linear.c_kappa``; schema 0.2.0 carries all of them (ADR-0030).
 
-        This raises rather than filling ``c_kappa`` from the core's default.
-        Silent defaulting is what SCH-02 forbids, and a parameter nobody
-        identified is exactly the failure ADR-0009 exists to prevent. A refusal
-        produces nothing; a default would produce a trajectory that looks
-        right, is labelled L2, and rests on a number that came from nowhere.
+        A tyre file that lacks any of those, which every file written at
+        schema 0.1.0 does for ``c_kappa``, produces a refusal naming each
+        absent field. Silent defaulting is forbidden, and a parameter nobody
+        identified is exactly the failure ADR-0009 exists to prevent: a
+        default would produce a trajectory that looks right, is labelled L2,
+        and rests on a number that came from nowhere.
 
-        This is NOT the ADR-0005 failure of substituting a simpler tier: no
-        model is returned at all.
+        This is NOT the ADR-0005 failure of substituting a simpler tier: on
+        refusal no model is returned at all.
         """
         from . import Tier  # local, to keep the module import graph flat
 
@@ -175,9 +178,9 @@ class Car:
         rear = self.spec.tyre_rear
 
         missing = []
-        for label, tyre, target, c_alpha_axle in (
-            ("front", front, params.tyre_front, params.c_alpha_f),
-            ("rear", rear, params.tyre_rear, params.c_alpha_r),
+        for label, tyre, target in (
+            ("front", front, params.tyre_front),
+            ("rear", rear, params.tyre_rear),
         ):
             if tyre.mf_lite is None:
                 missing.append(f"{label} tyre mf_lite block")
@@ -192,21 +195,26 @@ class Car:
                 missing.append(f"{label} tyre relaxation.sigma")
             else:
                 target.relax_length = float(tyre.sigma)
+            if tyre.c_kappa is None:
+                missing.append(f"{label} tyre linear.c_kappa")
             target.mu_y0 = float(tyre.mu_y0)
             target.mu_x0 = float(tyre.mu_x0)
 
-        # There is no field for the longitudinal slip stiffness at schema
-        # 0.1.0. It is identifiable in a car park, so it is not missing on
-        # principle; nobody wrote the field. Schema 0.2.0 adds it.
-        missing.append("longitudinal slip stiffness (c_kappa)")
+        if not missing:
+            # Reduced to one whole-car value at load, with a note when the
+            # two files disagreed; see the loader.
+            params.c_kappa = float(self.spec.params.c_kappa)
+            return params
 
         raise ValueError(
             "this car cannot parameterise tier L2: "
             + ", ".join(missing)
-            + ". tyre.schema.json 0.1.0 has no field for the longitudinal slip "
-            "stiffness; schema 0.2.0 adds it. Nothing here is defaulted, "
-            "because a parameter nobody identified is worse than one that does "
-            "not exist (ADR-0025, ADR-0009). L0 and L1 are unaffected and are "
+            + " missing. Nothing here is defaulted, because a parameter "
+            "nobody identified is worse than one that does not exist "
+            "(ADR-0025, ADR-0009). A tyre file written at schema 0.1.0 has "
+            "no linear.c_kappa field; schema 0.2.0 adds it, and migration "
+            "cannot invent the value, so the file needs the measurement and "
+            "not just the version bump. L0 and L1 are unaffected and are "
             "available through .params."
         )
 

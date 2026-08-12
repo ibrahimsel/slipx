@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.1.0/tyre.schema.json",
+  "$id": "https://slipx.dev/schema/0.2.0/tyre.schema.json",
   "title": "SlipX tyre parameter set",
-  "description": "One (compound, surface) pair. Referenced from dynamics.yaml, never embedded in it (SCH-05).\n\nThe parameter list is the whole thesis of the project in one file: every entry is identifiable from a manoeuvre drivable in a car park with the sensors already on a competition car. Full Pacejka 5.2 is not the target, because a parameter nobody can identify is worse than one that does not exist: it gets guessed and then trusted.\n\nAt schema 0.1.0 only the linear block is consumed, by L1. The mf_lite block is accepted and validated now so that identified sets can be contributed before L2 lands in P1, and is ignored by tiers that cannot use it.",
+  "description": "One (compound, surface) pair. Referenced from dynamics.yaml, never embedded in it (SCH-05).\n\nThe parameter list is the whole thesis of the project in one file: every entry is identifiable from a manoeuvre drivable in a car park with the sensors already on a competition car. Full Pacejka 5.2 is not the target, because a parameter nobody can identify is worse than one that does not exist: it gets guessed and then trusted.\n\nThe linear block is consumed from L1; the friction, mf_lite and relaxation blocks are consumed from L2 and are ignored by tiers that cannot use them.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "compound", "surface", "linear", "friction", "provenance"],
@@ -39,6 +39,12 @@
           "type": "number",
           "exclusiveMinimum": 0.0,
           "maximum": 2000.0
+        },
+        "c_kappa": {
+          "description": "Longitudinal slip stiffness per tyre at the nominal load, positive: the initial slope of longitudinal force against slip ratio. [N per unit slip] Identifiable from encoder slip ratio against IMU longitudinal acceleration in a straight-line run. Consumed from L2; a file without it loads for L0 and L1 and is refused, by name, for L2 (ADR-0025).",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "maximum": 5000.0
         }
       }
     },
@@ -64,13 +70,13 @@
     },
 
     "mf_lite": {
-      "description": "Reduced Magic Formula shape factors (CORE-06, L2, P1). Fy = mu * Fz * sin(C * atan(B * alpha - E * (B * alpha - atan(B * alpha)))). Identifiable from a full slip sweep.",
+      "description": "Reduced Magic Formula shape factors (CORE-06, L2). Fy = mu * Fz * sin(C * atan(B * alpha - E * (B * alpha - atan(B * alpha)))). C and E are identifiable from a full slip sweep. B is DERIVED from cornering stiffness and the static load and is never consumed from this file (ADR-0023); when stated anyway it is cross-checked against the derived value and a disagreement is a named warning.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["B", "C", "E"],
+      "required": ["C", "E"],
       "properties": {
         "B": {
-          "description": "Stiffness factor. [-]",
+          "description": "Stiffness factor. [-] Optional and never consumed: the model derives B = c_alpha / (C * mu_y0 * Fz) so that MF-lite reproduces the linear tyre exactly at small slip (ADR-0023).",
           "type": "number", "exclusiveMinimum": 0.0, "maximum": 40.0
         },
         "C": {

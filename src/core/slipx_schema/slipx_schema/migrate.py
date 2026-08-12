@@ -3,15 +3,18 @@
 
 """Migrations between known minor versions (SCH-01).
 
-At 0.1.0 there is nothing to migrate: there has been no earlier release. The
-mechanism ships anyway, and is tested against a synthetic migration, because
-the alternative is writing it under pressure the first time a real schema
-change lands and a registry full of contributed files needs to survive it.
-
 A migration is a pure function from one document to the next. It must set
 ``schema_version`` to the version it produces, and it must fail loudly rather
 than dropping a field it does not understand: a migration that quietly
 discards data is worse than one that refuses to run.
+
+A migration must also never invent a value. 0.2.0 added fields (``c_kappa``,
+the ``esc`` block, the pack voltage endpoints), every one of them optional at
+the schema level for exactly this reason: a migrated 0.1.0 file gains nothing
+it did not carry, and a tier that needs an absent field refuses by name
+(ADR-0030). So the 0.1.0 to 0.2.0 step is the identity for every kind, and it
+is registered explicitly rather than special-cased, because a gap in the chain
+is treated as a release bug and an implicit identity would hide real gaps.
 """
 
 from __future__ import annotations
@@ -74,3 +77,17 @@ def migrate(kind: str, document: Document, version: Version) -> Document:
 def available() -> list[tuple[str, int]]:
     """Registered migrations, for diagnostics and tests."""
     return sorted(_MIGRATIONS.keys())
+
+
+# ------------------------------------------------------------- 0.1.0 -> 0.2.0
+#
+# 0.2.0 only added optional fields, so nothing moves and nothing is invented.
+# See the module docstring, and ADR-0030 for what was added and why it is all
+# optional.
+
+def _identity(document: Document) -> Document:
+    return dict(document)
+
+
+for _kind in ("car", "dynamics", "limits", "sensors", "provenance", "tyre"):
+    register(_kind, 1)(_identity)

@@ -4,7 +4,7 @@
 #
 # PROVISIONAL. See provenance.yaml.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 
 # Total mass as raced: chassis, battery, electronics, bodyshell.       [kg]
 mass: 3.5

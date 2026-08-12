@@ -63,8 +63,12 @@ class Tyre:
     provenance: Provenance
     nominal_load: Optional[float] = None  #                      [N]
     k_mu: Optional[float] = None  #                              [-]
-    mf_lite: Optional[Dict[str, float]] = None  # B, C, E, L2/P1
-    sigma: Optional[float] = None  # relaxation length, L2/P1    [m]
+    mf_lite: Optional[Dict[str, float]] = None  # C, E (B derived), L2
+    sigma: Optional[float] = None  # relaxation length, L2       [m]
+    # Longitudinal slip stiffness per tyre, schema 0.2.0. None on a migrated
+    # 0.1.0 file, and the loader refuses L2 by name rather than defaulting it
+    # (ADR-0025, ADR-0030).
+    c_kappa: Optional[float] = None  #             [N per unit slip]
 
     @property
     def reference(self) -> str:
@@ -105,6 +109,12 @@ class VehicleParameters:
     # numerical mitigation rather than a property of the car; when it is
     # absent, Car.notes says so out loud.
     v_eps: Optional[float] = None
+    # The whole-car longitudinal slip stiffness, per tyre. None when either
+    # tyre file lacks the field, in which case L2 is refused by name rather
+    # than defaulted. The core carries ONE value because the manoeuvre that
+    # identifies it cannot separate the axles; when the two tyre files
+    # disagree the loader takes the mean and Car.notes says so.
+    c_kappa: Optional[float] = None
 
     @property
     def wheelbase(self) -> float:

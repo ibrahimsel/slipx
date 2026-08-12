@@ -174,6 +174,7 @@ def _resolve_tyre(
         nominal_load=document.get("nominal_load"),
         mf_lite=document.get("mf_lite"),
         sigma=document.get("relaxation", {}).get("sigma"),
+        c_kappa=document["linear"].get("c_kappa"),
         provenance=_provenance_from(document["provenance"]),
     )
 
@@ -329,6 +330,23 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
             "and it is recorded in the run manifest either way"
         )
 
+    # The core carries ONE longitudinal slip stiffness, because the run that
+    # identifies it is a straight-line acceleration and cannot separate the
+    # axles. Two tyre files claiming different values are reduced to the mean,
+    # out loud; either file lacking the field leaves None, and the L2 refusal
+    # downstream names the file (ADR-0025, ADR-0030).
+    c_kappa: Optional[float] = None
+    if tyre_front.c_kappa is not None and tyre_rear.c_kappa is not None:
+        c_kappa = 0.5 * (float(tyre_front.c_kappa) + float(tyre_rear.c_kappa))
+        if tyre_front.c_kappa != tyre_rear.c_kappa:
+            notes.append(
+                f"front and rear tyres claim different longitudinal slip "
+                f"stiffness ({tyre_front.c_kappa} and {tyre_rear.c_kappa} N "
+                f"per unit slip); the core carries one value, because the "
+                f"manoeuvre that identifies it cannot separate the axles, so "
+                f"the mean {c_kappa} is used"
+            )
+
     labels = [provenance.label, tyre_front.provenance.label, tyre_rear.provenance.label]
     effective_label = _weakest_label(labels)
     if effective_label != provenance.label:
@@ -360,6 +378,7 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
         roll_resist=float(dynamics["resistance"]["roll_resist"]),
         provenance_label=effective_label,
         v_eps=float(v_eps) if v_eps is not None else None,
+        c_kappa=c_kappa,
     )
 
     return Car(

@@ -6,8 +6,9 @@ written in agreement; the release workflow refuses a tag that disagrees with
 the tree.
 
 Two numbers are versioned here and they move independently. The distribution
-and `slipx_core` share one; `slipx_schema` has its own. They are equal today by
-coincidence, and a release that bumps one does not touch the other.
+and `slipx_core` share one; `slipx_schema` has its own. They moved apart at
+schema 0.2.0, which shipped without a core release, and a release that bumps
+one does not touch the other.
 
 **A changed reference hash is a release event.** If a version changes any row
 in `conformance/reference_hashes.tsv`, it is recorded here with the reason,
@@ -144,6 +145,41 @@ This is a change to the state layout the hash covers, which
 [ADR-0008](docs/adr/0008-reference-hashes-are-keyed-by-build.md) lists as a
 legitimate reason for a hash to move. It was taken once, deliberately, rather
 than accumulated across the rest of the tier.
+
+### Schema 0.2.0: L2 is reachable from a car file
+
+- **`slipx_schema` moves to 0.2.0**, one bump covering both this milestone
+  and the coming drivetrain slice; the audit and the field list are
+  [ADR-0030](docs/adr/0030-schema-0-2-0-adds-c-kappa-and-the-actuator-fields.md).
+  `tyre.schema.json` gains `linear.c_kappa`, the longitudinal slip stiffness
+  per tyre. `limits.schema.json` gains an `esc` block (`torque_stall`,
+  `omega_free`, `torque_per_amp`, `efficiency`) and the pack voltage
+  endpoints `pack_v_full` and `pack_v_empty`, consumed when the drivetrain
+  slice lands. The 0.1.0 to 0.2.0 migration is the identity for every kind:
+  every new field is optional, so a migrated file gains nothing it did not
+  carry.
+- **`Car.params_for_tier(Tier.L2_DoubleTrack)` returns parameters** when the
+  tyre files carry `c_kappa`, so L2 is reachable from a car file. The
+  ADR-0025 refusal stays for files that lack the field, naming each gap and
+  saying why migrating the version cannot supply the measurement.
+- `mf_lite.B` is optional and never consumed, which
+  [ADR-0023](docs/adr/0023-mf-lite-derives-b-from-cornering-stiffness.md)
+  already said and the schema now agrees with. A stated `B` is cross-checked
+  against the derived value; a disagreement is a named warning.
+- New plausibility warning on the `C`/`E` pair: each bound can pass alone
+  while the pair puts the tyre's peak at a slip angle no car reaches, so the
+  loader checks where the pair puts the peak and warns above 4 times the
+  linear saturation angle.
+- The reference tyre file carries `c_kappa: 120.0`, provisional like
+  everything else in it. Its `mf_lite` block now matches the core's default
+  shape (`C` 1.68, `E` 0.42, peak at about 2.7 times the linear saturation
+  angle) and drops `B`: the previous pair put the peak at 8.8 times, and its
+  stated `B` disagreed with the value the model derives, both of which the
+  new warnings would have flagged on every load.
+
+No reference hash moves: nothing here touches a numerical path, and
+`tools/check_conformance.py` was verified unchanged against the recorded
+rows.
 
 ## 0.1.0a1
 

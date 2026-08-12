@@ -4,7 +4,7 @@
 # exists so that fact travels with the parameters instead of being lost the
 # first time somebody copies dynamics.yaml into their own project.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 
 label: provisional
 

@@ -56,11 +56,11 @@ def car_factory(tmp_path: Path) -> Callable[..., Path]:
 def _l2_params():
     """The reference numbers, filled in by hand rather than loaded.
 
-    The car loader refuses L2 on purpose: schema 0.1.0 has no field for the
-    longitudinal slip stiffness, and defaulting it silently is what ADR-0025
-    forbids. A test that wants an L2 run therefore builds the struct, which is
-    the core's boundary and always was. These are the same provisional numbers
-    the C++ test support header uses.
+    Deliberately not load_reference_car(): the sink tests are about recording
+    and encoding, and coupling them to the schema layer would make a schema
+    failure read as a sink failure. The struct is the core's boundary and
+    always was. These are the same provisional numbers the C++ test support
+    header uses.
     """
     import slipx
 

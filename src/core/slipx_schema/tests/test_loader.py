@@ -36,6 +36,81 @@ def test_reference_car_loads_and_is_internally_consistent(reference_car: Path) -
     assert car.warnings == []
 
 
+def test_c_kappa_crosses_from_the_tyre_file_to_the_parameters(
+    reference_car: Path,
+) -> None:
+    # Schema 0.2.0. Per tyre in the file, one whole-car value in the
+    # parameters, because the manoeuvre that identifies it cannot separate
+    # the axles.
+    car = load_car(reference_car)
+    assert car.tyre_front.c_kappa == 120.0
+    assert car.tyre_rear.c_kappa == 120.0
+    assert car.params.c_kappa == 120.0
+    assert not any("slip stiffness" in note for note in car.notes)
+
+
+def test_differing_c_kappa_values_are_reduced_to_the_mean_out_loud(
+    car_factory,
+) -> None:
+    path = car_factory()
+    rubber = path / "tyres" / "rubber_carpet.yaml"
+    rubber.write_text(
+        (path / "tyres" / "sponge_carpet.yaml")
+        .read_text(encoding="utf-8")
+        .replace("compound: sponge", "compound: rubber")
+        .replace("c_kappa: 120.0", "c_kappa: 140.0"),
+        encoding="utf-8",
+    )
+
+    import yaml
+
+    dynamics_path = path / "dynamics.yaml"
+    document = yaml.safe_load(dynamics_path.read_text(encoding="utf-8"))
+    document["tyres"]["rear"]["compound"] = "rubber"
+    dynamics_path.write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
+
+    car = load_car(path)
+    assert car.params.c_kappa == 130.0
+    assert any("mean" in note and "slip stiffness" in note for note in car.notes)
+
+
+def test_one_tyre_without_c_kappa_leaves_the_whole_car_without_it(
+    car_factory,
+) -> None:
+    # No half measures: a whole-car value fabricated from one axle would be a
+    # default wearing a disguise. None here is what makes the L2 refusal
+    # downstream name the right file.
+    path = car_factory()
+    rubber = path / "tyres" / "rubber_carpet.yaml"
+    rubber.write_text(
+        "\n".join(
+            line
+            for line in (path / "tyres" / "sponge_carpet.yaml")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if "c_kappa" not in line
+        ).replace("compound: sponge", "compound: rubber")
+        + "\n",
+        encoding="utf-8",
+    )
+
+    import yaml
+
+    dynamics_path = path / "dynamics.yaml"
+    document = yaml.safe_load(dynamics_path.read_text(encoding="utf-8"))
+    document["tyres"]["rear"]["compound"] = "rubber"
+    dynamics_path.write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
+
+    car = load_car(path)
+    assert car.tyre_front.c_kappa == 120.0
+    assert car.tyre_rear.c_kappa is None
+    assert car.params.c_kappa is None
+
+
 def test_reference_car_is_labelled_provisional(reference_car: Path) -> None:
     # NFR-08. No parameter set in SlipX has been validated against a real car,
     # and the shipped one must say so in the object, not only in the prose.

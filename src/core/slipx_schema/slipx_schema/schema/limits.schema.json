@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.1.0/limits.schema.json",
+  "$id": "https://slipx.dev/schema/0.2.0/limits.schema.json",
   "title": "SlipX actuator and electrical limits",
-  "description": "limits.yaml: what the car cannot exceed. Kept separate from dynamics.yaml because limits are a property of the hardware fitted, and swapping a servo or a battery changes this file and nothing else.\n\nSeveral fields below are accepted and validated but not yet consumed: the ESC and servo models are CORE-08 and CORE-10 and arrive with L2 in P1. They are in the schema now so that a car directory written today is still valid then, and so that a team measuring their car has somewhere to put the numbers.",
+  "description": "limits.yaml: what the car cannot exceed, and the actuator hardware fitted. Kept separate from dynamics.yaml because these are a property of the hardware, and swapping a servo, an ESC or a battery changes this file and nothing else.\n\nThe steering, esc and electrical blocks are consumed from L2 (CORE-08 to CORE-10); below that the drivetrain block is the whole actuator model. Every block is optional at the schema level because a migration cannot invent values; a tier that needs an absent field refuses by name rather than defaulting (ADR-0030).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "steering", "drivetrain"],
@@ -64,6 +64,30 @@
       }
     },
 
+    "esc": {
+      "description": "The ESC and motor torque-speed curve (CORE-08), stated at the WHEELS and at pack_nominal_v so that no gear ratio or motor constant is a parameter. Both curve numbers scale linearly with actual pack voltage in the model. Identifiable from one full-throttle straight-line run: the force-speed line gives torque_stall and omega_free, its low-speed plateau is the current limit, and ESC telemetry gives the amperes alongside (ADR-0030).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "torque_stall": {
+          "description": "Total drive torque at the wheels at zero wheel speed, full throttle, at pack_nominal_v, BEFORE the current limit: the zero-speed intercept of the measured force-speed line, times the wheel radius. [N m]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 50.0
+        },
+        "omega_free": {
+          "description": "Wheel speed at which drive torque reaches zero, at pack_nominal_v. [rad/s]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 5000.0
+        },
+        "torque_per_amp": {
+          "description": "Wheel torque per ampere of motor current. [N m/A] What turns current_max and regen_current_max into torque caps the physics can apply.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 2.0
+        },
+        "efficiency": {
+          "description": "Mechanical power at the wheels over electrical power at the battery terminals, for the battery current draw. [-]",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0
+        }
+      }
+    },
+
     "electrical": {
       "description": "Consumed from L2 (CORE-08, CORE-09). Battery sag is what makes the last lap slower than the first, and a car tuned without it is tuned for a battery state that lasts thirty seconds.",
       "type": "object",
@@ -71,6 +95,14 @@
       "properties": {
         "pack_nominal_v": {
           "description": "Nominal pack voltage. [V] 11.1 for a 3S lithium polymer.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 60.0
+        },
+        "pack_v_full": {
+          "description": "Open-circuit voltage at state of charge 1. [V] 12.6 for a 3S lithium polymer.",
+          "type": "number", "exclusiveMinimum": 0.0, "maximum": 60.0
+        },
+        "pack_v_empty": {
+          "description": "Open-circuit voltage at state of charge 0, the floor the pack must not be discharged below. [V] About 9.9 for a 3S lithium polymer.",
           "type": "number", "exclusiveMinimum": 0.0, "maximum": 60.0
         },
         "pack_capacity_ah": {

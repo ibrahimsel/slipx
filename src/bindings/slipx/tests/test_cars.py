@@ -132,23 +132,89 @@ def test_the_two_reference_car_locations_are_the_same_car() -> None:
     assert resolved.params.c_alpha_f == explicit.params.c_alpha_f
 
 
-def test_l2_parameters_are_refused_rather_than_defaulted() -> None:
-    # ADR-0025. tyre.schema.json 0.1.0 has no longitudinal slip stiffness, and
-    # the loader must say so rather than quietly handing over the core's
-    # default. A refusal produces nothing; a default would produce a
-    # trajectory labelled L2 resting on a number nobody measured.
+def test_the_reference_car_parameterises_l2_and_can_be_stepped() -> None:
+    # Schema 0.2.0 made the old refusal message come true: the tyre file
+    # carries linear.c_kappa and the loader fills the MF-lite blocks, so L2
+    # is reachable from a car file (ADR-0030).
     car = slipx.load_reference_car()
+    params = car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+
+    assert params.validate() is None
+    assert params.c_kappa == 120.0
+    for block in (params.tyre_front, params.tyre_rear):
+        assert block.shape_c == 1.68
+        assert block.curvature_e == 0.42
+        assert block.k_mu == 0.15
+        assert block.relax_length == 0.045
+        assert block.mu_y0 == 1.10
+        assert block.mu_x0 == 1.05
+
+    # And the label still leads: reachable does not mean measured.
+    assert params.provenance == slipx.Provenance.Provisional
+    assert car.summary().splitlines()[1].strip().startswith("provenance: PROVISIONAL")
+
+    model = slipx.VehicleModel.create(slipx.Tier.L2_DoubleTrack, params)
+    state = slipx.VehicleState()
+    state.vel_body.x = 4.0
+    for _ in range(500):
+        model.step(state, slipx.DriveInput(steer_cmd=0.08), 1e-3)
+    assert state.pos.x > 0.0
+    assert state.yaw > 0.0
+
+
+def test_the_files_c_kappa_reaches_the_params_not_the_cores_default(
+    car_factory,
+) -> None:
+    # Mutation escape made into a test: the reference car's 120.0 happens to
+    # equal the core's default, so a params_for_tier that silently forgot to
+    # copy the loaded value would pass every reference-car assertion. A value
+    # the default cannot produce proves the copy happens.
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        tyre.read_text(encoding="utf-8").replace("c_kappa: 120.0", "c_kappa: 150.0"),
+        encoding="utf-8",
+    )
+    car = slipx.load_car(path)
+    params = car.params_for_tier(slipx.Tier.L2_DoubleTrack)
+    assert params.c_kappa == 150.0
+    assert slipx.VehicleParams().c_kappa != 150.0
+
+
+def test_l2_is_still_refused_by_name_for_a_file_without_c_kappa(car_factory) -> None:
+    # ADR-0025's refusal path survives 0.2.0: a tyre file that lacks the
+    # field, which every 0.1.0 file does, is refused with the field named,
+    # never defaulted. A refusal produces nothing; a default would produce a
+    # trajectory labelled L2 resting on a number nobody measured.
+    path = car_factory()
+    tyre = path / "tyres" / "sponge_carpet.yaml"
+    tyre.write_text(
+        "\n".join(
+            line
+            for line in tyre.read_text(encoding="utf-8").splitlines()
+            if "c_kappa" not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    car = slipx.load_car(path)
 
     with pytest.raises(ValueError, match="c_kappa"):
         car.params_for_tier(slipx.Tier.L2_DoubleTrack)
 
-    # The message has to name the schema version that fixes it, or the reader
-    # goes looking for a field that does not exist.
+    # The message names both files' gaps and nothing that is present, and it
+    # explains that migrating the version cannot supply the measurement.
     try:
         car.params_for_tier(slipx.Tier.L2_DoubleTrack)
     except ValueError as exc:
-        assert "0.2.0" in str(exc)
-        assert "ADR-0025" in str(exc)
+        message = str(exc)
+    assert "front tyre linear.c_kappa" in message
+    assert "rear tyre linear.c_kappa" in message
+    assert "0.2.0" in message
+    assert "ADR-0025" in message
+    assert "mf_lite" not in message
+    assert "k_mu" not in message
+    assert "sigma" not in message
 
     # And this is not the ADR-0005 failure: no lower tier is handed back.
     # L0 and L1 keep working through the same call.
@@ -156,17 +222,3 @@ def test_l2_parameters_are_refused_rather_than_defaulted() -> None:
         params = car.params_for_tier(tier)
         assert params.validate() is None
         assert params.mass == car.params.mass
-
-
-def test_the_reference_car_supplies_everything_except_c_kappa() -> None:
-    # The other half of the same statement: the refusal above is about ONE
-    # missing field, not about the tyre file being empty. If a future schema
-    # drops something else this test says which.
-    car = slipx.load_reference_car()
-    try:
-        car.params_for_tier(slipx.Tier.L2_DoubleTrack)
-    except ValueError as exc:
-        message = str(exc)
-    assert "mf_lite" not in message
-    assert "k_mu" not in message
-    assert "sigma" not in message

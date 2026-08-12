@@ -11,7 +11,7 @@
 # (NFR-08), and it will keep saying so until somebody contributes a fitted set
 # with a validation report.
 
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 name: reference_1_10
 description: >-
   Provisional 1/10-scale competition car. Plausible geometry and mass for the

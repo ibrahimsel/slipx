@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.1.0/provenance.schema.json",
+  "$id": "https://slipx.dev/schema/0.2.0/provenance.schema.json",
   "title": "SlipX parameter provenance",
   "description": "Where a set of numbers came from (NFR-08, SCH-06).\n\nThis file is required, and its label is printed by tooling rather than only documented, because the failure mode it prevents is specific and observed: a plausible-looking number enters a config file, nobody records that it was guessed, and six months later somebody is tuning a controller against it in good faith. No parameter set in SlipX has been validated against a real car; until an outside contributor supplies a fitted set with a validation report, the honest phrasing is 'physically structured and identifiable', not 'validated'.",
   "type": "object",
