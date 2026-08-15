@@ -80,3 +80,10 @@ Use [`template.md`](template.md) for a new record.
 | # | Decision | Status |
 |---|---|---|
 | [0024](0024-a-run-viewer-is-in-scope.md) | A run viewer is in scope, and it lives in the Python package | Accepted |
+
+## The world
+
+| # | Decision | Status |
+|---|---|---|
+| [0034](0034-a-track-is-geometry-plus-a-declared-surface.md) | A track is geometry plus a declared surface, and friction stays in the tyre file | Proposed |
+| [0035](0035-track-geometry-is-converted-never-redistributed.md) | Track geometry is fetched and converted by the user, never redistributed by us | Proposed |

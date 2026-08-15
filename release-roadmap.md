@@ -1,10 +1,10 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-13. Published version: `0.1.0a1` (PyPI, tag `v0.1.0a1`,
-commit `644cb12`). Current tree: L2 is complete (drivetrain, battery, servo and
-differentials), the sink layer writes MCAP, Rerun and SVG, and every figure is
-generated from `slipx_core`. All unreleased; M4 is the release, and is in
-progress.
+Last updated: 2026-08-15. Published version: `0.2.0` (PyPI, tag `v0.2.0`).
+Current tree: L2 is complete (drivetrain, battery, servo and differentials),
+the sink layer writes MCAP, Rerun and SVG, and every figure is generated from
+`slipx_core`. M4 shipped that as `0.2.0`; M5 is in progress and is the rest of
+P1.
 
 This file is the working plan from the current state to a `1.0.0` release of
 the `slipx` distribution. It is written to be executed and updated by agents
@@ -314,7 +314,7 @@ special-cased in the sink code.
 
 ## M4. Release 0.2.0
 
-Status: in-progress. Size: small (days). Blocked by: M1, M2, M3.
+Status: done. Size: small (days). Blocked by: M1, M2, M3.
 
 Goal: the first release where the double-track tier is complete, reachable
 from a car file and visible. Everything below is release engineering.
@@ -382,7 +382,7 @@ from a car file and visible. Everything below is release engineering.
 
 ## M5. The rest of P1: sensing, track, ROS 2, reference stack
 
-Status: not-started. Size: extra large (many weeks). Release: 0.3.0 at the
+Status: in-progress. Size: extra large (many weeks). Release: 0.3.0 at the
 end. Hash impact: none expected in `slipx_core`; sensors and scene live above
 it. Determinism constraints extend to every new layer: seeded per-agent RNG
 only, no wall clock, fixed iteration order.
@@ -400,10 +400,52 @@ directories and must respect the downward dependency order
   has no matching tyre entry.
   Done when: a real track loads, and surface mismatch produces a named
   refusal.
+  Design settled 2026-08-15 as ADR-0034 (proposed): a track is a four-column
+  TUM centreline CSV plus a manifest beside it, the manifest declares a
+  surface identifier and never a friction number, arc length is derived and
+  banking is refused rather than defaulted, and the surface-to-tyre refusal
+  lives in `slipx_scene` against a caller-supplied list of `(compound,
+  surface)` pairs so the component stays below `slipx_schema`.
+  Built 2026-08-15: `src/world/slipx_scene` with `Centreline` (the parser,
+  derived arc length) and `Track` (the manifest checks and the surface to
+  tyre pairing), 30 tests, all 272 in the suite green, the five CI checks
+  clean and no conformance hash moved. Mutation pass: 21 tried, 19 caught.
+  Two escapes, both recorded rather than papered over. Deleting the per-field
+  finiteness check escapes because libstdc++'s number grammar rejects `nan`
+  and `inf` before the check can see them, so the branch is a guard for
+  libc++ that no test on this library can reach; probing it found a real hole
+  and closed it, since fields can all be finite while the derived arc length
+  overflows, and that case now has a test. Replacing `sqrt` of the sum of
+  squares with `hypot` escapes because the two agree within one build, which
+  is the whole point: the reason for `sqrt` is that it is correctly rounded
+  and `hypot` is not, so the difference only appears across C libraries
+  (ADR-0033) and no single-build test can see it.
+  Not yet done, and what M5.1 still needs: the track manifest schema and its
+  Python loader, the generated track that CI and the examples run on, and the
+  converter of ADR-0035, without which no real track loads.
 - [ ] **M5.2** **DECISION**: the first track. Prefer one with a published
   real-world counterpart so P2 fits can be cross-checked; Porto or an
   equivalent from the public F1TENTH map set.
   Done when: one track ships with provenance for its geometry.
+  Licences established 2026-08-15, and they rule out shipping the obvious
+  candidates: `f1tenth/f1tenth_racetracks`, the set that carries centrelines
+  in this format, is GPL-3.0; its upstream `TUMFTM/racetrack-database` is
+  LGPL-3.0; the underlying centrelines are OpenStreetMap, so ODbL and
+  share-alike as a derived database. Porto itself lives in
+  `f1tenth/f1tenth_simulator` as an occupancy grid with **no licence at all**,
+  as does `CPS-TUWien/f1tenth_maps`, so neither is redistributable.
+  `f1tenth/f1tenth_gym` is MIT but ships no Porto and no centreline. The
+  copyleft ones put copyleft licence text in an Apache-2.0 repository, which
+  `tools/licence_scan.py` fails on by design; the unlicensed ones grant
+  nothing at all, which is the harder stop of the two.
+  The choice is therefore not "which track" but "how a track reaches the
+  user".
+  Decided 2026-08-15 by the user, recorded as ADR-0035 (proposed): SlipX ships
+  an Apache-2.0 fetch-and-convert tool that writes the source, its licence and
+  the retrieval date into the track manifest, so Porto stays one command away
+  and no third-party geometry enters the tree or a wheel; one track we
+  generate ships alongside it, labelled as generated with no real-world
+  counterpart, and it is what CI and the examples run.
 - [ ] **M5.3** Lap counting and track-limit detection with configurable
   tolerance, per agent.
   Done when: analytical cases (crossing geometry) and property cases
