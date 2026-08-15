@@ -11,6 +11,8 @@
 # above the core that needs randomness. slipx_sim includes it from here.
 
 add_library(slipx_sense
+  src/encoder.cpp
+  src/imu.cpp
   src/lidar.cpp
 )
 add_library(slipx::sense ALIAS slipx_sense)

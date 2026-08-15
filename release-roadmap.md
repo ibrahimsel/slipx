@@ -492,11 +492,28 @@ directories and must respect the downward dependency order
   push out of it, and a closing wall on an open track, which needed a
   three-point fixture because on two points that segment is the same one
   reversed.
-- [ ] **M5.5** IMU model (bias random walk, scale error, noise density) and
+- [x] **M5.5** IMU model (bias random walk, scale error, noise density) and
   wheel-encoder odometry derived from simulated encoder counts, degrading
   correctly under wheel slip (this consumes L2's slip ratios).
   Done when: encoder odometry diverges from ground truth exactly when slip is
   present, asserted against the diagnostics.
+  Done 2026-08-15. The IMU carries the three errors that live on different
+  timescales: white noise stated as a density so sampling faster gives
+  noisier samples and the same answer after averaging, a bias random walk
+  that averaging does not remove, and a fixed scale error that is a parameter
+  rather than a draw, because it is a property of the unit and identifiable
+  from a manoeuvre with a known total heading change. Encoder odometry is
+  noiseless on purpose: an encoder has a quantisation rather than a noise
+  floor, and its interesting error is the slip, which is already in the wheel
+  speeds. The odometry cases run a real L2 car, so the tyre model decides
+  when it slips and the assertion is against the reported slip ratios rather
+  than against invented wheel speeds.
+  Mutation pass: 11 tried, 9 caught. One escape was a missing test for the
+  accelerometer scale error. The other found a real bug: counts were floored,
+  so a wheel turned backwards through 6.37 counts reported seven edges
+  crossed when it had crossed six. Truncation towards zero is right on both
+  sides, and the two agree for a wheel that only ever goes forwards, which is
+  how it would have shipped.
 - [ ] **M5.6** `slipx_sim` additions: validation mode (soft real-time with
   latency and jitter enabled) alongside deterministic mode; snapshot and
   restore of full simulation state (the state is already a memcpy by design;
