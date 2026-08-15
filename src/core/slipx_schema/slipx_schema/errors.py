@@ -86,6 +86,20 @@ class CarDirectoryError(SlipxSchemaError):
     """The car directory is missing a file, or names one that is not there."""
 
 
+class TrackDirectoryError(SlipxSchemaError):
+    """The track directory is missing a file, or names one that is not there."""
+
+
+class SurfaceMismatchError(SlipxSchemaError):
+    """A tyre was identified on one surface and the track is another.
+
+    Its own type rather than a generic validation failure, because it is the
+    one error a caller has a sensible reason to catch: a tool sweeping a car
+    across several tracks wants to skip the ones it has no tyres for, and
+    every other error here means somebody has to go and edit a file.
+    """
+
+
 @dataclass
 class Warning_:
     """A value that validates but looks wrong.

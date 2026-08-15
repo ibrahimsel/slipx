@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.2.0/tyre.schema.json",
+  "$id": "https://slipx.dev/schema/0.3.0/tyre.schema.json",
   "title": "SlipX tyre parameter set",
   "description": "One (compound, surface) pair. Referenced from dynamics.yaml, never embedded in it (SCH-05).\n\nThe parameter list is the whole thesis of the project in one file: every entry is identifiable from a manoeuvre drivable in a car park with the sensors already on a competition car. Full Pacejka 5.2 is not the target, because a parameter nobody can identify is worse than one that does not exist: it gets guessed and then trusted.\n\nThe linear block is consumed from L1; the friction, mf_lite and relaxation blocks are consumed from L2 and are ignored by tiers that cannot use them.",
   "type": "object",

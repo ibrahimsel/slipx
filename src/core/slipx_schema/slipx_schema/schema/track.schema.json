@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slipx.dev/schema/0.3.0/track.schema.json",
+  "title": "SlipX track manifest",
+  "description": "track.yaml: everything about a track that is not its geometry (ADR-0034).\n\nThe geometry itself is a centreline CSV in the four-column form of the TUM racetrack database, read unextended, and this file sits beside it. The split is deliberate: a file that is TUM compatible until it is not would be rejected by every other tool in the ecosystem, so anything the format cannot carry is carried here instead.\n\nWhat this file must NOT carry is friction. A track declares a surface identifier; the surface pairs with a tyre compound to select a tyre file, and that file holds mu_y0, mu_x0 and the load sensitivity (ADR-0010). A friction number here would be a second source for the parameter the whole identification programme exists to measure, supplied by a track author who measured nothing.\n\nSlipX ships no third-party track geometry. A track for a real venue is converted into place by a tool that records where it came from and under what terms (ADR-0035), which is why the geometry block is required rather than nice to have.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "surface",
+    "closed",
+    "centreline",
+    "geometry",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Semantic version of the schema this file is written against (SCH-01). An unknown major is refused; a known older minor is migrated.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "description": "Identifier for this track. Lower case, no spaces, so it can be a directory name, a ROS namespace and a registry key without transformation.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "description": {
+      "description": "Free text for humans.",
+      "type": "string",
+      "maxLength": 1000
+    },
+    "surface": {
+      "description": "What the track is made of, as an identifier: carpet, asphalt, polished_concrete. It is half of the (compound, surface) pair that selects a tyre file, so it is matched exactly and the pattern here keeps it lower case rather than leaving two spellings of one surface to be reconciled later. It is not a friction coefficient and there is deliberately no field for one.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "closed": {
+      "description": "Whether the last centreline point joins back to the first. Declared rather than inferred from the geometry: a paddock straight that starts and finishes near the same place is not a lap, and a tolerance on the closing distance would quietly make it one.",
+      "type": "boolean"
+    },
+    "centreline": {
+      "description": "Path to the centreline CSV, relative to the track directory. Four columns, x_m,y_m,w_tr_right_m,w_tr_left_m, with comment lines beginning #. Arc length is derived from the geometry rather than read, so there is no column for it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "geometry": {
+      "description": "Where the centreline came from and what may be done with it. Required, because SlipX redistributes no track geometry and a converted track therefore arrived under somebody else's terms; an obligation nobody was told about is an obligation nobody meets.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "licence"],
+      "properties": {
+        "source": {
+          "description": "The repository, survey or generator this geometry came from, specifically enough that somebody else could fetch the same file.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "licence": {
+          "description": "The terms the geometry is available under, as an SPDX identifier where there is one. 'none stated' is a legitimate and important answer: it means the geometry may not be redistributed at all, and a track carrying it must not be published with a result.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "retrieved": {
+          "description": "ISO 8601 date the geometry was fetched, written by the converter. A public map changes without changing its name.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "provenance": {
+      "description": "How the geometry was obtained, on the same three-label scale as every other parameter set in the project (NFR-08). A generated track is provisional and says so in its source; a track traced from a satellite image is provisional; a surveyed one is measured.",
+      "$ref": "provenance.schema.json"
+    }
+  }
+}

@@ -27,6 +27,8 @@ from .errors import (
     Report,
     SchemaVersionError,
     SlipxSchemaError,
+    SurfaceMismatchError,
+    TrackDirectoryError,
     ValidationError,
     Warning_,
 )
@@ -39,6 +41,7 @@ from .rules import (
     WIDTH_MAX_M,
     WIDTH_MIN_M,
 )
+from .track import TRACK_MANIFEST, Track, check_surface, load_track
 from .validate import SCHEMA_FILES, load_schema, validate_document
 from .version import SCHEMA_VERSION, Version, compatibility
 
@@ -55,6 +58,10 @@ __all__ = [
     "Report",
     "SchemaVersionError",
     "SlipxSchemaError",
+    "SurfaceMismatchError",
+    "TRACK_MANIFEST",
+    "Track",
+    "TrackDirectoryError",
     "Tyre",
     "ValidationError",
     "VehicleParameters",
@@ -62,9 +69,11 @@ __all__ = [
     "WIDTH_MAX_M",
     "WIDTH_MIN_M",
     "Warning_",
+    "check_surface",
     "compatibility",
     "load_car",
     "load_schema",
+    "load_track",
     "validate_car",
     "validate_document",
 ]

@@ -155,8 +155,9 @@ test-command = "python {project}/tools/exit_gate.py && slipx-conformance"
 # Working in the repository without installing: both packages are importable
 # from the source tree, and the extension is built in place next to the slipx
 # package by a plain `cmake --build`.
-pythonpath = ["src/bindings/slipx", "src/core/slipx_schema"]
+pythonpath = ["src/bindings/slipx", "src/core/slipx_schema", "tools"]
 testpaths = [
     "src/bindings/slipx/tests",
     "src/core/slipx_schema/tests",
+    "tools/tests",
 ]

@@ -29,6 +29,7 @@ SCHEMA_FILES = {
     "sensors": "sensors.schema.json",
     "provenance": "provenance.schema.json",
     "tyre": "tyre.schema.json",
+    "track": "track.schema.json",
 }
 
 

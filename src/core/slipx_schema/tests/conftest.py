@@ -19,6 +19,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 REFERENCE_CAR = REPO_ROOT / "examples" / "cars" / "reference_1_10"
+REFERENCE_TRACK = REPO_ROOT / "examples" / "tracks" / "paddock_stadium"
 
 
 @pytest.fixture
@@ -26,6 +27,41 @@ def reference_car() -> Path:
     """The shipped reference car directory, read-only."""
     assert REFERENCE_CAR.is_dir(), f"reference car missing at {REFERENCE_CAR}"
     return REFERENCE_CAR
+
+
+@pytest.fixture
+def reference_track() -> Path:
+    """The shipped generated track directory, read-only."""
+    assert REFERENCE_TRACK.is_dir(), f"reference track missing at {REFERENCE_TRACK}"
+    return REFERENCE_TRACK
+
+
+@pytest.fixture
+def track_factory(tmp_path: Path) -> Callable[..., Path]:
+    """Copy the shipped track and apply one edit to its manifest.
+
+    Same reasoning as ``car_factory``: a hand-written track manifest drifts
+    away from the one that ships, and then the tests pass against a file
+    nobody has.
+    """
+    counter = {"n": 0}
+
+    def make(edit: Callable[[Dict[str, Any]], None] | None = None) -> Path:
+        counter["n"] += 1
+        destination = tmp_path / f"track{counter['n']}"
+        shutil.copytree(REFERENCE_TRACK, destination)
+
+        if edit is not None:
+            target = destination / "track.yaml"
+            with target.open(encoding="utf-8") as handle:
+                document = yaml.safe_load(handle)
+            edit(document)
+            with target.open("w", encoding="utf-8") as handle:
+                yaml.safe_dump(document, handle, sort_keys=False)
+
+        return destination
+
+    return make
 
 
 def derived_b(tyre_path: Path) -> float:

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.2.0/sensors.schema.json",
+  "$id": "https://slipx.dev/schema/0.3.0/sensors.schema.json",
   "title": "SlipX sensor configuration",
   "description": "sensors.yaml: sensor instances, their rates, phases, noise and latency.\n\nNothing consumes this at schema 0.1.0. slipx_sense arrives in P1 (SENSE-01 to SENSE-05) and the 3D scan patterns in P4. It is defined now because the shape of the file determines the shape of the car directory, and a car directory written during P0 should still validate in P1.\n\nThe one structural decision already made here: rate and latency are configured independently (SENSE-02), and each sensor carries a phase. Sensors do not run on the physics step; the physics runs at 1 kHz and sensors sample on their own schedule, which is what makes motion distortion emerge from the integration rather than being applied to it afterwards (SENSE-01).",
   "type": "object",

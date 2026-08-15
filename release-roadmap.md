@@ -393,7 +393,7 @@ existing stack against SlipX. New C++ components (`slipx_scene`,
 directories and must respect the downward dependency order
 (`tools/dep_lint.py` enforces it).
 
-- [ ] **M5.1** `slipx_scene`, first slice: load a centreline CSV
+- [x] **M5.1** `slipx_scene`, first slice: load a centreline CSV
   (`s, x, y, w_left, w_right, banking, mu`), TUM racetrack database
   compatible, with per-segment surface identifier resolving the tyre
   `(compound, surface)` pair. Refuse to run when the track's declared surface
@@ -420,10 +420,13 @@ directories and must respect the downward dependency order
   is the whole point: the reason for `sqrt` is that it is correctly rounded
   and `hypot` is not, so the difference only appears across C libraries
   (ADR-0033) and no single-build test can see it.
-  Not yet done, and what M5.1 still needs: the track manifest schema and its
-  Python loader, the generated track that CI and the examples run on, and the
-  converter of ADR-0035, without which no real track loads.
-- [ ] **M5.2** **DECISION**: the first track. Prefer one with a published
+  Completed 2026-08-15 with the Python half: `track.schema.json` as schema
+  0.3.0 (ADR-0036), `slipx_schema.load_track` and `check_surface`, the
+  generated track `examples/tracks/paddock_stadium` with its generator, and
+  `tools/convert_track.py`. A real track loads through the converter and the
+  shipped one is asserted by both suites. Second mutation pass over the
+  Python half: 12 tried, 12 caught.
+- [x] **M5.2** **DECISION**: the first track. Prefer one with a published
   real-world counterpart so P2 fits can be cross-checked; Porto or an
   equivalent from the public F1TENTH map set.
   Done when: one track ships with provenance for its geometry.

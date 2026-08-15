@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.2.0/car.schema.json",
+  "$id": "https://slipx.dev/schema/0.3.0/car.schema.json",
   "title": "SlipX car manifest",
   "description": "car.yaml: the manifest of a car directory. It names the files that describe the vehicle and nothing else; every actual parameter lives in one of them. Keeping the manifest empty of physics is what allows dynamics.yaml to be replaced by an identified set (P2) without touching anything else.",
   "type": "object",

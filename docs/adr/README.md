@@ -87,3 +87,4 @@ Use [`template.md`](template.md) for a new record.
 |---|---|---|
 | [0034](0034-a-track-is-geometry-plus-a-declared-surface.md) | A track is geometry plus a declared surface, and friction stays in the tyre file | Proposed |
 | [0035](0035-track-geometry-is-converted-never-redistributed.md) | Track geometry is fetched and converted by the user, never redistributed by us | Proposed |
+| [0036](0036-schema-0-3-0-adds-the-track-kind.md) | Schema 0.3.0 adds the track manifest as a document kind | Proposed |

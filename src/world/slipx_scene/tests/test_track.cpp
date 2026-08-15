@@ -218,4 +218,55 @@ TEST(Track, RefusesGeometryWithNoStatedLicence) {
   EXPECT_TRUE(mentions(message, "licence")) << message;
 }
 
+// --------------------------------------------------------- the shipped track
+//
+// The generated stadium in examples/tracks. Its dimensions are exact by
+// construction, which is what makes them worth asserting here: two 8 m
+// straights and two semicircular ends of 3 m radius, so one lap is
+// 2*8 + 2*pi*3 = 34.8496 m, and the polyline is a hair under that because a
+// chord cuts the corner off an arc.
+
+TEST(ShippedTrack, LoadsAndMeasuresTheLapItClaims) {
+  const Centreline geometry =
+      Centreline::from_file(std::string(SLIPX_EXAMPLE_TRACK_DIR) +
+                            "/centreline.csv");
+
+  TrackManifest manifest;
+  manifest.name = "paddock_stadium";
+  manifest.surface = "carpet";
+  manifest.closed = true;
+  manifest.geometry_source = "examples/tracks/make_tracks.py";
+  manifest.geometry_licence = "Apache-2.0";
+  manifest.provenance_label = "provisional";
+
+  const Track track =
+      Track::build(geometry, manifest, {{"sponge", "carpet"}});
+
+  const double lap = 2.0 * 8.0 + 2.0 * 3.14159265358979323846 * 3.0;
+  EXPECT_TRUE(track.is_closed());
+  EXPECT_NEAR(track.length(), lap, 1e-3);
+  EXPECT_LT(track.length(), lap) << "a chord cannot be longer than its arc";
+
+  // The widths are 0.75 m each side, which is the 1.5 m the manifest
+  // describes, and they are read right before left.
+  for (const auto& point : track.centreline().points()) {
+    EXPECT_DOUBLE_EQ(point.w_left, 0.75);
+    EXPECT_DOUBLE_EQ(point.w_right, 0.75);
+  }
+}
+
+// The car that ships and the track that ship agree, so somebody following the
+// README meets none of the refusals above.
+TEST(ShippedTrack, TakesTheReferenceCarsTyres) {
+  const Centreline geometry =
+      Centreline::from_file(std::string(SLIPX_EXAMPLE_TRACK_DIR) +
+                            "/centreline.csv");
+
+  TrackManifest manifest = carpet_manifest();
+  manifest.name = "paddock_stadium";
+
+  EXPECT_NO_THROW(Track::build(geometry, manifest,
+                               {{"sponge", "carpet"}, {"sponge", "carpet"}}));
+}
+
 }  // namespace

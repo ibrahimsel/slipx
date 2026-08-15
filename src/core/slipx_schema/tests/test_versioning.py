@@ -8,7 +8,14 @@ from __future__ import annotations
 import pytest
 
 from conftest import derived_b
-from slipx_schema import SCHEMA_VERSION, SchemaVersionError, Version, compatibility, load_car
+from slipx_schema import (
+    SCHEMA_FILES,
+    SCHEMA_VERSION,
+    SchemaVersionError,
+    Version,
+    compatibility,
+    load_car,
+)
 from slipx_schema import migrate as migrate_module
 
 
@@ -83,17 +90,31 @@ def test_tyre_files_are_version_gated_too(car_factory) -> None:
 # --------------------------------------------------------------- migrations
 
 
-def test_the_0_1_0_to_0_2_0_migration_exists_for_every_kind() -> None:
-    # 0.2.0 added only optional fields (ADR-0030), so each step is the
-    # identity; it is still registered explicitly per kind, because a gap in
-    # the chain is a loud release bug and an implicit identity would hide a
-    # real one.
-    assert migrate_module.available() == [
-        (kind, 1)
-        for kind in sorted(
-            ("car", "dynamics", "limits", "sensors", "provenance", "tyre")
-        )
-    ]
+def test_every_kind_has_an_unbroken_migration_chain() -> None:
+    # Each step so far has been the identity, for a different reason each
+    # time: 0.2.0 added only optional fields (ADR-0030), and 0.3.0 added a
+    # whole document kind while changing no existing field (ADR-0036). Each is
+    # still registered explicitly per kind, because a gap in the chain is a
+    # loud release bug and an implicit identity would hide a real one.
+    #
+    # Asserted as a property rather than as a list of pairs. The list had to
+    # be edited by hand at every schema bump, which makes the bump look like
+    # it broke something; what actually matters is that no kind has a hole in
+    # it between the first released schema and the current one.
+    registered = set(migrate_module.available())
+    current = Version.parse(SCHEMA_VERSION)
+
+    for kind in sorted(SCHEMA_FILES):
+        for minor in range(1, current.minor):
+            assert (kind, minor) in registered, (
+                f"{kind} has no migration from 0.{minor}.0 to "
+                f"0.{minor + 1}.0; a file somebody wrote in good faith can no "
+                f"longer be read"
+            )
+
+    # And nothing is registered for a version that does not exist yet.
+    for kind, minor in registered:
+        assert minor < current.minor, f"{kind} migrates past {SCHEMA_VERSION}"
 
 
 def test_a_0_1_0_car_directory_still_loads_by_migration(car_factory) -> None:
@@ -125,7 +146,7 @@ def test_a_0_1_0_car_directory_still_loads_by_migration(car_factory) -> None:
     tyre.write_text(text, encoding="utf-8")
 
     car = load_car(path)
-    assert car.schema_version == "0.2.0"  # migrated forward
+    assert car.schema_version == SCHEMA_VERSION  # migrated forward
     assert car.tyre_front.c_kappa is None  # not invented
     assert car.params.c_kappa is None
     assert car.warnings == []

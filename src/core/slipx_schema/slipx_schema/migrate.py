@@ -89,5 +89,29 @@ def _identity(document: Document) -> Document:
     return dict(document)
 
 
-for _kind in ("car", "dynamics", "limits", "sensors", "provenance", "tyre"):
+_KINDS_0_1_0 = ("car", "dynamics", "limits", "sensors", "provenance", "tyre")
+
+for _kind in _KINDS_0_1_0:
     register(_kind, 1)(_identity)
+
+
+# ------------------------------------------------------------- 0.2.0 -> 0.3.0
+#
+# 0.3.0 added a whole document kind, the track manifest, and changed no field
+# of any kind that already existed (ADR-0036). So this step is the identity
+# too, for a different reason from the last one: not "the new fields are
+# optional" but "there are no new fields here at all".
+#
+# `track` is registered at this step as well, and it is the odd one out. No
+# track file written at 0.2.0 exists, because there were no tracks at 0.2.0.
+# The entry is here so that a file somebody hand-wrote with the wrong version
+# in it gets read and then validated against the real schema, which produces a
+# message about the field that is actually wrong, rather than the "this is a
+# release bug" a gap in the chain reports.
+
+for _kind in _KINDS_0_1_0 + ("track",):
+    register(_kind, 2)(_identity)
+
+# And the step before it, for the same reason: so that a track file carrying
+# any older version at all is read and then judged on its contents.
+register("track", 1)(_identity)

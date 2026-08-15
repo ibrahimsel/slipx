@@ -17,7 +17,31 @@ incomparable.
 
 ## Unreleased
 
-Nothing yet.
+No reference hash moves in this section so far. `slipx_scene` sits above the
+core and the core's numerical paths are untouched; the eighteen rows were
+re-checked, not re-measured.
+
+- **`slipx_scene`, the track.** A centreline loads from the four-column form
+  of the TUM racetrack database, read unextended, with arc length derived
+  rather than read. Everything about a track that is not geometry lives in a
+  manifest beside it, and the manifest declares a surface identifier rather
+  than a friction coefficient, so grip still comes from the
+  `(compound, surface)` tyre file that somebody measured (ADR-0034).
+- **Schema 0.3.0** adds one document kind, the track manifest, and changes no
+  field of any kind that already existed (ADR-0036). Every migration step is
+  the identity; car directories written at 0.1.0 and 0.2.0 keep loading. The
+  schema version and the distribution version are different numbers again,
+  which is the normal state.
+- **SlipX ships no third-party track geometry, and now says why** (ADR-0035).
+  Every public centreline set in this format is copyleft, and the F1TENTH
+  maps of real venues carry no licence at all. `tools/convert_track.py`
+  fetches one into a track directory on your own machine instead, recording
+  the source, its licence and the date in the manifest, and it refuses to
+  write geometry we may not redistribute into this repository.
+- **One generated track ships**, `examples/tracks/paddock_stadium`: two 8 m
+  straights and two 3 m ends, 34.85 m a lap, labelled provisional and
+  described in its own manifest as not being a real place. It is what CI and
+  the examples run on.
 
 ## 0.2.0
 
