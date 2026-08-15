@@ -68,6 +68,9 @@ endif()
 # them and only when both are in the build.
 if(SLIPX_BUILD_SCENE AND SLIPX_BUILD_SENSE)
   add_subdirectory(examples/cpp)
+  if(SLIPX_BUILD_SIM)
+    add_subdirectory(benchmarks)
+  endif()
 endif()
 
 message(STATUS "SlipX ${PROJECT_VERSION}: build type ${CMAKE_BUILD_TYPE}, "

@@ -200,4 +200,91 @@ TEST(Walls, TheShippedStadiumIsTheWidthItClaims) {
       << "a polyline wall on an arc is not exact, but it is close";
 }
 
+// ------------------------------------------------------- the spatial index
+//
+// The index exists because a measurement asked for it, and it is worth
+// exactly as much as its agreement with the definition. So the definition is
+// kept, as cast_brute_force, and these cases sweep thousands of rays across
+// both tracks and demand the two answers are identical rather than close: a
+// grid that occasionally misses the true nearest segment and returns the
+// second one would pass a tolerance-based test and be wrong in the way that
+// matters, which is a wall that is not there.
+
+TEST(Walls, TheIndexAgreesWithBruteForceOnTheSquare) {
+  const Walls walls(square());
+
+  std::size_t hits = 0;
+  for (int gx = -3; gx <= 13; ++gx) {
+    for (int gy = -3; gy <= 13; ++gy) {
+      for (int a = 0; a < 24; ++a) {
+        const double bearing = -kPi + 2.0 * kPi * a / 24.0;
+        const double x = gx;
+        const double y = gy;
+
+        const RayHit fast = walls.cast(x, y, bearing, 30.0);
+        const RayHit slow = walls.cast_brute_force(x, y, bearing, 30.0);
+
+        ASSERT_EQ(fast.hit, slow.hit)
+            << "at (" << x << ", " << y << ") bearing " << bearing;
+        if (fast.hit) {
+          ++hits;
+          EXPECT_DOUBLE_EQ(fast.range, slow.range)
+              << "at (" << x << ", " << y << ") bearing " << bearing;
+          EXPECT_EQ(fast.left_wall, slow.left_wall);
+        }
+      }
+    }
+  }
+  EXPECT_GT(hits, 1000u) << "a sweep that hits nothing proves nothing";
+}
+
+TEST(Walls, TheIndexAgreesWithBruteForceOnTheShippedStadium) {
+  Centreline geometry = Centreline::from_file(
+      std::string(SLIPX_EXAMPLE_TRACK_DIR) + "/centreline.csv");
+  const Track track = Track::build(
+      geometry, manifest_for("paddock_stadium", true), {{"sponge", "carpet"}});
+  const Walls walls(track);
+
+  // The index has to be doing something, or this test is asserting that
+  // brute force agrees with itself.
+  EXPECT_GT(walls.cell_count(), 1u);
+
+  std::size_t hits = 0;
+  for (int gx = -9; gx <= 9; ++gx) {
+    for (int gy = -5; gy <= 5; ++gy) {
+      for (int a = 0; a < 36; ++a) {
+        const double bearing = -kPi + 2.0 * kPi * a / 36.0;
+        const double x = gx;
+        const double y = gy;
+
+        const RayHit fast = walls.cast(x, y, bearing, 12.0);
+        const RayHit slow = walls.cast_brute_force(x, y, bearing, 12.0);
+
+        ASSERT_EQ(fast.hit, slow.hit)
+            << "at (" << x << ", " << y << ") bearing " << bearing;
+        if (fast.hit) {
+          ++hits;
+          EXPECT_DOUBLE_EQ(fast.range, slow.range)
+              << "at (" << x << ", " << y << ") bearing " << bearing;
+        }
+      }
+    }
+  }
+  EXPECT_GT(hits, 2000u);
+}
+
+// A ray that starts a long way outside the track's bounding box, crosses it
+// and leaves. The traversal must not give up when it starts outside the grid,
+// which is the easy way to write it and is wrong for exactly this ray.
+TEST(Walls, TheIndexFindsAWallFromOutsideTheGrid) {
+  const Walls walls(square());
+
+  const RayHit fast = walls.cast(-25.0, 5.0, 0.0, 60.0);
+  const RayHit slow = walls.cast_brute_force(-25.0, 5.0, 0.0, 60.0);
+
+  EXPECT_TRUE(slow.hit);
+  EXPECT_EQ(fast.hit, slow.hit);
+  EXPECT_DOUBLE_EQ(fast.range, slow.range);
+}
+
 }  // namespace

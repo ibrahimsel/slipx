@@ -571,6 +571,39 @@ directories and must respect the downward dependency order
   once.
   Done when: a benchmark suite runs in CI and the numbers are published in
   the docs with the hardware named.
+  Partly done 2026-08-15, and left unticked deliberately. The suite exists
+  (`benchmarks/slipx_bench.cpp`, run by CTest as `Benchmarks.Run`) and the
+  numbers are published with the machine named in
+  `docs/reference/performance.md`, so the "Done when" line holds. Two of the
+  three targets in the task itself do not, and ticking it would be a claim
+  ahead of the evidence.
+  Measured on a Ryzen 7 7800X3D under WSL2, GCC 13.3, RelWithDebInfo: L2 step
+  4.84 us against a target of 5 (met, with no margin); one agent with a
+  1080-ray 40 Hz LiDAR at 90x against a target of 100; twenty agents at 3.8x
+  against a target of 10.
+  Measuring it paid for itself immediately. The first raycast tested every
+  wall segment for every ray, which put one agent at 16x; a uniform grid with
+  a DDA traversal took it to 90x, and the grid is asserted against a
+  brute-force reference over thousands of rays rather than trusted. Two bugs
+  in the traversal were caught that way: sampling the ray every half cell
+  misses cells it clips at a corner, and nudging the start past the entry
+  point skips the origin's own cell for a ray that begins on a boundary,
+  which is what a ray from a wall corner does.
+  The remaining gap and the three candidate fixes are written up in
+  `docs/reference/performance.md`; closing it is M5.12.
+- [ ] **M5.12** Close the performance gap M5.9 measured: one agent from 90x
+  to over 100x, twenty agents from 3.8x to over 10x. The candidates, in the
+  order they look worth trying, are early exit in the wall traversal, a
+  projection that starts from the segment the same agent used last time, and
+  reusing the previous ray's answer as a first guess within a scan. None
+  changes what the simulator computes. Each lands with a before-and-after
+  measurement recorded in `docs/reference/performance.md`.
+  Note the arithmetic that constrains this: at 1 kHz the vehicle model alone
+  costs one agent 4.84 ms per simulated second, so twenty agents cap at about
+  10x before a single ray is cast. The 20-agent target needs the step under
+  5 us and the sensing close to free, and may need the step itself revisited.
+  Done when: both figures meet their targets on a named machine, or the
+  targets are renegotiated deliberately with the reason recorded.
 - [ ] **M5.10** P1 exit gate (external fact): a RoboRacer team runs their
   existing stack against SlipX with a one-file topic remap and reports that a
   tuning change made in sim held on their car. Track the outreach as work:

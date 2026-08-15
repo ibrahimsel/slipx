@@ -18,6 +18,7 @@ the lookup material; it does not teach the subject.
 | [`VehicleState` and diagnostics](state-and-diagnostics.md) | What a step reads and writes, and the NaN rule for what a tier cannot represent. |
 | [The tyre model](tyre-model.md) | The MF-lite derivation: the shape function, load sensitivity, where `B` comes from, the friction ellipse, and what was dropped and why. |
 | [The Python API](python-api.md) | Loading a car, stepping a model, the orchestrator, recording a run, the manifest. |
+| [Performance](performance.md) | Measured step cost and real-time factors, the machine they were measured on, and which of the three targets are currently missed. |
 
 ## Three things that are true everywhere in this directory
 
