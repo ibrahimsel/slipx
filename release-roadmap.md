@@ -449,10 +449,23 @@ directories and must respect the downward dependency order
   and no third-party geometry enters the tree or a wheel; one track we
   generate ships alongside it, labelled as generated with no real-world
   counterpart, and it is what CI and the examples run.
-- [ ] **M5.3** Lap counting and track-limit detection with configurable
+- [x] **M5.3** Lap counting and track-limit detection with configurable
   tolerance, per agent.
   Done when: analytical cases (crossing geometry) and property cases
   (direction, multiple laps) pass.
+  Done 2026-08-15. `projection.hpp` turns a world position into arc length
+  and a signed lateral offset, closest to a segment rather than to a sample
+  (up to 5 cm apart on a track sampled at 0.1 m, which is a third of a car's
+  width). `LapCounter` counts progress rather than line crossings: each
+  update adds the signed distance moved along the centreline, so reversing
+  over the line subtracts and a car wobbling on it accumulates nothing, and
+  direction falls out instead of being special-cased. Track limits carry a
+  per-agent tolerance that is required rather than defaulted, report a margin
+  rather than a flag, and remember an excursion after the car comes back.
+  Mutation pass: 15 tried, 14 caught first time. The escape was real and was
+  mine: the open-track test drove 20 m of a 30 m track, so removing the guard
+  that stops an open track reporting laps changed nothing. Driving it end to
+  end, where the distance equals the track length exactly, catches it.
 - [ ] **M5.4** `slipx_sense`, 2D LiDAR: every ray individually timestamped,
   emitter pose interpolated at that ray's timestamp so motion distortion
   emerges from the physics rather than being bolted on; per-sensor latency

@@ -10,6 +10,8 @@
 
 add_library(slipx_scene
   src/centreline.cpp
+  src/lap.cpp
+  src/projection.cpp
   src/track.cpp
 )
 add_library(slipx::scene ALIAS slipx_scene)
