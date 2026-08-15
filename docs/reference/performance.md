@@ -66,6 +66,22 @@ cheaper LiDAR.
 The track is the shipped `paddock_stadium`, whose two walls come to 696
 segments.
 
+## What the agents are doing, which is not racing
+
+The benchmark measures load, and its scenario is chosen to be a fixed amount
+of work rather than a plausible race. Every agent holds a constant 0.02 rad of
+steering and a 4 m/s speed demand, which is a 16.2 m circle: the cars leave
+the track within two seconds and none of them ever reads the LiDAR the case is
+named after. They start 0.3 m apart along one line, so with no contact model
+they overlap from the first step and pass through each other and through the
+walls. All twenty trajectories are the same trajectory, offset.
+
+None of that changes what the numbers mean, because the cost of a step does
+not depend on where the car is. It does mean a reader should not take "20
+agents" for a grid of twenty cars racing. For twenty cars driving the track,
+see `examples/cpp/ghost_race_main.cpp`, which is a demonstration and is not
+what is timed here.
+
 ## What changed, and by how much
 
 The three figures above were 4.84 us, 90x and 3.8x when they were first

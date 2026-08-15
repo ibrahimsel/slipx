@@ -1,6 +1,8 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-15. Published version: `0.2.0` (PyPI, tag `v0.2.0`).
+Last updated: 2026-08-15 (ghost race demo and the performance-doc correction
+noted under M5.8; no task status changed). Published version: `0.2.0` (PyPI,
+tag `v0.2.0`).
 Current tree: L2 is complete (drivetrain, battery, servo and differentials),
 the sink layer writes MCAP, Rerun and SVG, and every figure is generated from
 `slipx_core`. M4 shipped that as `0.2.0`; M5 is in progress and is the rest of
@@ -566,6 +568,31 @@ directories and must respect the downward dependency order
   also the only place in the tree that links scene and sense together, which
   is what ADR-0037 intended: something above both hands the raycast to the
   sensor as a plain function.
+  Extended 2026-08-15, at the user's request rather than as a task of its own:
+  `examples/cpp/ghost_race.hpp` runs twenty of them at once under the
+  orchestrator, each with its own controller and lap counter, and
+  `examples/ghost_race_figure.py` draws the recording as an animated SVG. It
+  is a demonstration and is labelled one everywhere it appears: with no
+  contact model and no race control the cars cannot interact, so it is twenty
+  time trials sharing a track and not a race. The figure is deliberately not
+  the SVG sink and says so; the sink's one-car-per-file rule is a decision
+  (ADR-0028) and is untouched. Occasioned by drawing the twenty-agent
+  benchmark and finding that its cars hold a constant steering angle and
+  leave the track inside two seconds, which `docs/reference/performance.md`
+  now states.
+  Mutation pass: 14 tried, 12 caught. Two escapes, both non-defects and both
+  recorded rather than papered over. Taking the lap time as `now` rather than
+  `now + dt` shifts every lap by one step, identically for every car, so it
+  changes no comparison the demo makes, and pinning it would assert the exact
+  step at which a floating-point projection crosses the line, which is a
+  stricter claim than the lap counter itself makes. Leaving `omega_w` unseeded
+  on the grid escapes because L2 has no wheel rotational state (ADR-0027): the
+  wheel speeds are reported rather than integrated, and the one thing the
+  model reads them for is a single step of ESC curve lookup that ADR-0031
+  already records as expected. Closing the first round of escapes also found
+  that a CI-time trim had opened one: three tests had been cut to a single
+  lap, and a lap time that is really an elapsed clock is invisible until the
+  second lap.
 - [ ] **M5.9** Performance benchmarks, measured and published: L2
   single-agent step under 5 microseconds per core; one agent with L2 and 2D
   LiDAR at 100 times real time or better headless; 20 agents with L2 and 2D

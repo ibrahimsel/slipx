@@ -42,3 +42,30 @@ Copy the directory to describe your own car. The loader refuses rather than
 defaults: a parameter it cannot fill produces an error naming the field and
 where it should come from, so a missing number is never quietly replaced by a
 plausible one.
+
+## The C++ examples
+
+These need the checkout and a build, because they use the components the
+Python package does not yet expose: the track, the sensors and the
+orchestrator.
+
+| File | What it is for |
+|---|---|
+| [`cpp/reference_stack.hpp`](cpp/reference_stack.hpp) | A wall follower and a pure pursuit controller. They validate the simulator rather than trying to win: one drives on a LiDAR scan alone, the other on ground truth against the centreline, so a failing lap says which half of P1 broke. |
+| [`cpp/ghost_race.hpp`](cpp/ghost_race.hpp) | Twenty cars lapping the shipped track at once under the orchestrator, each with its own controller and lap counter. |
+| [`cpp/ghost_race_main.cpp`](cpp/ghost_race_main.cpp) | Runs that field, prints a time trial classification, and writes the recording as three CSVs. |
+| [`ghost_race_figure.py`](ghost_race_figure.py) | Draws the recording as a self-contained animated SVG. Standard library only, and it reads the CSVs and nothing else. |
+
+```
+cmake -S . -B build && cmake --build build -j
+./build/examples/cpp/slipx_ghost_race /tmp/race
+python3 examples/ghost_race_figure.py /tmp/race
+```
+
+A ghost race is not a race, and the code says so in more places than this one.
+SlipX has no contact model and no race control until P3, so the cars cannot
+touch, cannot be held up and cannot be overtaken in any sense that costs the
+car ahead anything, and nothing decides a winner. What twenty of them lapping
+at once does demonstrate is that the pieces compose: the track geometry, the
+projection, the controllers, the vehicle models and the lap counters, in one
+orchestrated deterministic run.

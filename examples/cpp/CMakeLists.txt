@@ -15,6 +15,22 @@ target_include_directories(slipx_reference_stack INTERFACE
 target_link_libraries(slipx_reference_stack INTERFACE
   slipx::scene slipx::sense slipx::core)
 
+# The ghost race: twenty cars driving the track at once, which needs the
+# orchestrator as well. It links slipx::sim on top of the stack above, and it
+# is a separate target so the reference stack keeps its narrower dependencies.
+add_library(slipx_ghost_race INTERFACE)
+target_include_directories(slipx_ghost_race INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(slipx_ghost_race INTERFACE
+  slipx_reference_stack slipx::sim)
+
+add_executable(slipx_ghost_race_main ghost_race_main.cpp)
+set_target_properties(slipx_ghost_race_main PROPERTIES OUTPUT_NAME slipx_ghost_race)
+target_link_libraries(slipx_ghost_race_main PRIVATE slipx_ghost_race)
+target_compile_definitions(slipx_ghost_race_main PRIVATE
+  SLIPX_EXAMPLE_TRACK_DIR="${CMAKE_SOURCE_DIR}/examples/tracks/paddock_stadium")
+slipx_apply_determinism_flags(slipx_ghost_race_main)
+
 if(SLIPX_BUILD_TESTS AND BUILD_TESTING)
   add_subdirectory(tests)
 endif()
