@@ -544,9 +544,26 @@ directories and must respect the downward dependency order
   matrix.
   Done when: an existing F1TENTH stack connects with a remap file and no code
   change.
-- [ ] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
+  **Blocked** 2026-08-15, on the environment rather than on the design. No
+  ROS 2 is installed in this checkout's WSL distribution, its apt repository
+  is not configured, and adding one needs a password `sudo` prompts for and
+  an agent cannot answer. The exit condition is external anyway: it names an
+  existing F1TENTH stack connecting, which is somebody else's stack. Unblocks
+  with a ROS 2 Jazzy installation; the design work behind it does not depend
+  on the rest of M5 and can be done at any point.
+- [x] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
   that validate the simulator, explicitly not a competitive stack.
   Done when: both run a lap on the shipped track headlessly in CI.
+  Done 2026-08-15, in `examples/cpp`, header-only and outside every
+  component, because nothing in the library should depend on them. The pair
+  is chosen so the two consume different halves of P1: the wall follower sees
+  nothing but a scan, so its lap says the sensor chain is coherent, and pure
+  pursuit takes ground truth against the centreline, so its lap says the
+  geometry and the vehicle model agree about where the car is. When one lap
+  fails and the other passes, the failure is already half localised. This is
+  also the only place in the tree that links scene and sense together, which
+  is what ADR-0037 intended: something above both hands the raycast to the
+  sensor as a plain function.
 - [ ] **M5.9** Performance benchmarks, measured and published: L2
   single-agent step under 5 microseconds per core; one agent with L2 and 2D
   LiDAR at 100 times real time or better headless; 20 agents with L2 and 2D

@@ -64,6 +64,12 @@ if(SLIPX_BUILD_PYTHON)
   add_subdirectory(src/bindings/slipx)
 endif()
 
+# The reference stack. Needs both world components, so it is configured after
+# them and only when both are in the build.
+if(SLIPX_BUILD_SCENE AND SLIPX_BUILD_SENSE)
+  add_subdirectory(examples/cpp)
+endif()
+
 message(STATUS "SlipX ${PROJECT_VERSION}: build type ${CMAKE_BUILD_TYPE}, "
                "sense=${SLIPX_BUILD_SENSE} scene=${SLIPX_BUILD_SCENE} "
                "sim=${SLIPX_BUILD_SIM} "
