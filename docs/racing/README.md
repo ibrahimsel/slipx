@@ -67,9 +67,12 @@ happens while it is still settling, which is most of a lap.
 |---|---|---|
 | 8 | [Tyre relaxation](08-tyre-relaxation.md) | Why does grip arrive late, and why does that change with speed? |
 | 12 | [Actuator lag](12-actuator-lag.md) | Why is the steering angle not the one you commanded? |
+| 13 | [A scan is not a snapshot](13-a-scan-is-not-a-snapshot.md) | Why does a laser scan taken while moving show a shape the world does not have? |
 
 Articles 8 and 12 are a pair: one delay that shrinks as the car speeds up and
-one that does not.
+one that does not. Article 13 is the third of the same kind, and the one that
+bites hardest: a sensor whose measurement is smeared over time rather than
+merely late.
 
 **Reference**
 
@@ -78,8 +81,8 @@ one that does not.
 **Planned, not yet written.** Listed so the shape of the series is visible and
 so nobody writes the same article twice: the autonomy pipeline; localisation and
 mapping; global and local planning; path tracking, from pure pursuit to MPC;
-state estimation and sensor models; the sim-to-real gap; and reproducibility and
-benchmarking. Contributions welcome, and the articles above are the register to
+inertial and odometric sensor errors, which article 13 only touches; the
+sim-to-real gap; and reproducibility and benchmarking. Contributions welcome, and the articles above are the register to
 match.
 
 ## Conventions

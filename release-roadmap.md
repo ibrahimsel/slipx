@@ -382,9 +382,10 @@ from a car file and visible. Everything below is release engineering.
 
 ## M5. The rest of P1: sensing, track, ROS 2, reference stack
 
-Status: in-progress. Size: extra large (many weeks). Release: 0.3.0 at the
-end. Hash impact: none expected in `slipx_core`; sensors and scene live above
-it. Determinism constraints extend to every new layer: seeded per-agent RNG
+Status: in-progress; M5.1 to M5.6 and M5.8 done, M5.7 blocked on the
+environment, M5.9 measured and two targets missed (M5.12). Size: extra large
+(many weeks). Release: 0.3.0 at the end. Hash impact: none expected in
+`slipx_core`, and none observed; sensors and scene live above it. Determinism constraints extend to every new layer: seeded per-agent RNG
 only, no wall clock, fixed iteration order.
 
 Goal: the remaining P1 deliverables, so a RoboRacer team can run their
