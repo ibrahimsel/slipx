@@ -334,17 +334,19 @@ single-threaded. The LiDAR cases use 1080 rays at 40 Hz over a full circle with
 a 10 m maximum range, a Hokuyo UST-10LX, on a track whose walls come to 696
 segments.
 
-| Case | Measured |
-|---|---|
-| L2 single-agent step | 4.84 us |
-| 1 agent, L2 and 2D LiDAR, headless | 90x real time |
-| 20 agents, L2 and 2D LiDAR, headless | 3.8x real time |
+| Case | Measured | P1 target |
+|---|---|---|
+| L2 single-agent step | 1.92 us | under 5 us |
+| 1 agent, L2 and 2D LiDAR, headless | 179x real time | over 100x |
+| 20 agents, L2 and 2D LiDAR, headless | 8.4x real time | over 10x, missed |
 
 No number here should be compared against a number from a different machine.
 The benchmark is a plain executable with no benchmark-library dependency, run by
 CTest so a change that makes the simulator an order of magnitude slower fails
-the build. Run it yourself and read the full breakdown in
-[`docs/reference/performance.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/reference/performance.md).
+the build. The twenty-agent target is the one still missed, by 24 per cent, and
+the arithmetic saying why is in
+[`docs/reference/performance.md`](https://github.com/ibrahimsel/slipx/blob/main/docs/reference/performance.md)
+along with the before-and-after for each figure.
 
 The integrator has no threads in it by design, and the orchestrator steps agents
 in a fixed order for the same reason. The figures above are per core: a machine

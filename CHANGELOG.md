@@ -42,6 +42,28 @@ re-checked, not re-measured.
   straights and two 3 m ends, 34.85 m a lap, labelled provisional and
   described in its own manifest as not being a real place. It is what CI and
   the examples run on.
+- **The L2 step is 2.6 times faster and computes exactly what it did before.**
+  Measured on the machine named in `docs/reference/performance.md`, 4.98 us to
+  1.92 us, with a single agent and a 2D LiDAR going from 93x real time to 179x
+  and twenty agents from 4.0x to 8.4x. Every reference hash is unchanged, which
+  is the point: the tier calls `pow` forty times a step instead of two hundred
+  and eighty, because the tyre's load sensitivity splits into a half that
+  depends on the tyre and a half that depends on the load, and it evaluates
+  each wheel's slip angle and Magic Formula shape term once per derivative
+  instead of once per load pass, because neither depends on a vertical load.
+  The wall traversal tests each grid cell as it reaches it and stops at the
+  first hit it can prove is nearest, instead of gathering every candidate along
+  the ray. Of the three P1 performance targets, the single-agent LiDAR one is
+  now met and the twenty-agent one is still missed, by 24 per cent; the
+  arithmetic saying why, and what it would take, is on that page.
+- **Two holes the speed work found in the test suite are now closed.** No case
+  distinguished the front tyre from the rear one in the friction budget,
+  because the reference car has its CoG mid-wheelbase and the same compound at
+  both ends, so a model reading one tyre for all four wheels produced every
+  published trajectory unchanged. And no track under test had segments uneven
+  enough in length for a wall's bounding box to reach cells the wall crosses
+  nowhere near, which is the case that separates "nearest wall" from "first
+  wall found".
 
 ## 0.2.0
 

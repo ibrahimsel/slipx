@@ -253,24 +253,50 @@ inline double mu_at_load(double mu0, double k_mu, double fz, double fz_nom) {
   return mu0 * std::pow(fz / fz_nom, -k_mu);
 }
 
-// Peak lateral force magnitude at a vertical load [N]. Never negative.
+// The peak force law is mu_y0 Fz_nom^k_mu Fz^(1-k_mu), and it splits cleanly
+// into a half that depends on the tyre alone and a half that depends on the
+// load alone. The two functions below are those halves, and the product of
+// them in that order is exactly peak_lateral_force.
 //
-//   mu_y(Fz) Fz = mu_y0 Fz_nom^k_mu Fz^(1-k_mu)
-//
-// Grouped that way so that a lifted wheel gives zero rather than the
-// inf * 0 = NaN that the literal mu(Fz) * Fz produces at Fz = 0. Zero load is
-// not an edge case at L2: quasi_static_loads clamps a lifted wheel to exactly
-// zero, so this path is taken by any car that reaches its rollover threshold.
-inline double peak_lateral_force(const MfLite& t, double fz) {
+// The split is here because of what L2 does with it. A double-track step
+// evaluates both peaks at four wheels twice per derivative and five times per
+// step, and Fz_nom^k_mu is the same number every one of those times: hoisting
+// it turned forty calls to pow per step into eight. The grouping is written
+// out rather than left to the compiler because the compiler may not regroup
+// it, and because a caller that hoists is entitled to the same bits as one
+// that does not.
+
+// The tyre-only half, mu0 Fz_nom^k_mu, for both branches. Units are awkward
+// and that is honest: the halves are not forces, only their product is.
+struct NominalPeak {
+  double x = 0.0;   // longitudinal
+  double y = 0.0;   // lateral
+};
+
+inline NominalPeak nominal_peak(const MfLite& t) {
+  const double nominal = std::pow(t.fz_nom, t.k_mu);
+  return {t.mu_x0 * nominal, t.mu_y0 * nominal};
+}
+
+// The load-only half, Fz^(1-k_mu). Exactly zero at zero load, which is the
+// whole reason the law is grouped this way: a lifted wheel must give zero
+// force and not the inf * 0 = NaN that the literal mu(Fz) * Fz produces.
+// Zero load is not an edge case at L2, where quasi_static_loads clamps a
+// lifted wheel to exactly zero, so any car that reaches its rollover
+// threshold takes this path.
+inline double load_factor(const MfLite& t, double fz) {
   if (fz <= 0.0) return 0.0;
-  return t.mu_y0 * std::pow(t.fz_nom, t.k_mu) * std::pow(fz, 1.0 - t.k_mu);
+  return std::pow(fz, 1.0 - t.k_mu);
+}
+
+// Peak lateral force magnitude at a vertical load [N]. Never negative.
+inline double peak_lateral_force(const MfLite& t, double fz) {
+  return nominal_peak(t).y * load_factor(t, fz);
 }
 
 // Peak longitudinal force magnitude at a vertical load [N]. Never negative.
-// Same grouping and the same zero-load guard.
 inline double peak_longitudinal_force(const MfLite& t, double fz) {
-  if (fz <= 0.0) return 0.0;
-  return t.mu_x0 * std::pow(t.fz_nom, t.k_mu) * std::pow(fz, 1.0 - t.k_mu);
+  return nominal_peak(t).x * load_factor(t, fz);
 }
 
 // Pure-slip lateral force [N] at slip angle alpha [rad] and vertical load
@@ -344,6 +370,24 @@ inline CombinedForce friction_ellipse(double fx, double fy, double fx_max,
 
   const double nx = fx / fx_max;
   const double ny = fy / fy_max;
+
+  // A tyre well inside its budget needs no hypot to prove it. The squared
+  // demand is three instructions against a call, and the threshold carries a
+  // margin far wider than any rounding hypot could do: nx^2 + ny^2 <= 0.99
+  // puts the demand below 0.995, so no value that takes this branch could
+  // have failed the exact test below. Anything nearer the limit than that,
+  // including everything at the limit, still goes through hypot.
+  //
+  // The guard is there because L2 evaluates this fifty times a step and a
+  // hypot is worth a dozen multiplies. Overflow does not slip through it: an
+  // enormous nx squares to infinity, which fails the comparison and falls to
+  // the exact path, which is what hypot is careful about in the first place.
+  if (nx * nx + ny * ny <= 0.99) {
+    out.fx = fx;
+    out.fy = fy;
+    return out;
+  }
+
   const double demand = std::hypot(nx, ny);
   if (demand <= 1.0) {
     out.fx = fx;

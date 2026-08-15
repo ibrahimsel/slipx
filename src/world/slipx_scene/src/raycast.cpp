@@ -79,6 +79,18 @@ void offset_normal_at(const std::vector<CentrelinePoint>& points,
   }
 }
 
+// The smaller and larger of two numbers, as a comparison rather than as
+// std::fmin and std::fmax.
+//
+// This is not a style preference. fmin and fmax have to return the operand
+// that is not NaN when one of them is, which minsd and maxsd do not do, so
+// the compiler emits a call into libm for each one; measured, that call was
+// most of the cost of a step of the traversal below, which does one per cell
+// crossed. Nothing the traversal compares is ever NaN unless the caller's
+// pose already is, and a pose that is NaN misses under either rule.
+constexpr double smaller(double a, double b) { return a < b ? a : b; }
+constexpr double larger(double a, double b) { return a > b ? a : b; }
+
 // The grid cell an ordinate falls in, clamped to the grid.
 std::size_t cell_of(double value, double origin, double size,
                     std::size_t count) {
@@ -87,14 +99,22 @@ std::size_t cell_of(double value, double origin, double size,
   return index >= count ? count - 1 : index;
 }
 
-// Where a ray from (ox, oy) along (dx, dy) crosses the segment from (ax, ay)
-// to (bx, by), as a distance along the ray, or a negative number for no
-// crossing.
+// Where a ray from (ox, oy) along (dx, dy) crosses the segment starting at
+// (ax, ay) with edge vector (ex, ey), as a distance along the ray, or a
+// negative number for no crossing. `limit` is the distance beyond which the
+// caller has already found something nearer and does not care.
+//
+// The two divisions are ordered rather than paired: most of the segments a
+// ray is offered are behind it or further away than the wall it has already
+// found, and those are rejected on t alone and never pay for u. `limit` is
+// the distance beyond which the caller already knows something nearer, folded
+// in here so that the rejection happens before the second division rather
+// than after it.
+//
+// Nothing about the values changes. t and u are the same expressions of the
+// same inputs; they are simply computed at the point of use.
 double ray_segment(double ox, double oy, double dx, double dy, double ax,
-                   double ay, double bx, double by) {
-  const double ex = bx - ax;
-  const double ey = by - ay;
-
+                   double ay, double ex, double ey, double limit) {
   const double denominator = dx * ey - dy * ex;
   if (denominator == 0.0) return -1.0;  // parallel, including collinear
 
@@ -102,9 +122,10 @@ double ray_segment(double ox, double oy, double dx, double dy, double ax,
   const double py = ay - oy;
 
   const double t = (px * ey - py * ex) / denominator;  // along the ray
-  const double u = (px * dy - py * dx) / denominator;  // along the segment
-
   if (t < 0.0) return -1.0;              // behind the emitter
+  if (t >= limit) return -1.0;           // something nearer is already known
+
+  const double u = (px * dy - py * dx) / denominator;  // along the segment
   if (u < 0.0 || u > 1.0) return -1.0;   // past an end of the wall
   return t;
 }
@@ -138,21 +159,38 @@ void Walls::build_index() {
   const std::size_t count = left_x_.size();
   const std::size_t spans = closed_ ? count : count - 1;
 
-  segments_.reserve(spans * 2);
+  // Both endpoints, kept for the length and the bounding boxes below. The
+  // stored segment carries the edge vector instead, and the far endpoint is
+  // not recoverable from it: ax + (bx - ax) is not bx in floating point, and
+  // a bounding box off by an ulp can put a segment in a cell the ray never
+  // visits, which is a wall that is not there.
+  struct Span {
+    double ax, ay, bx, by;
+    bool left;
+  };
+  std::vector<Span> ends;
+  ends.reserve(spans * 2);
   for (std::size_t i = 0; i < spans; ++i) {
     const std::size_t j = (i + 1) % count;
-    segments_.push_back(
-        Segment{left_x_[i], left_y_[i], left_x_[j], left_y_[j], true});
-    segments_.push_back(
-        Segment{right_x_[i], right_y_[i], right_x_[j], right_y_[j], false});
+    ends.push_back(
+        Span{left_x_[i], left_y_[i], left_x_[j], left_y_[j], true});
+    ends.push_back(
+        Span{right_x_[i], right_y_[i], right_x_[j], right_y_[j], false});
+  }
+
+  segments_.reserve(ends.size());
+  segment_left_.reserve(ends.size());
+  for (const Span& s : ends) {
+    segments_.push_back(Segment{s.ax, s.ay, s.bx - s.ax, s.by - s.ay});
+    segment_left_.push_back(s.left ? 1u : 0u);
   }
 
   if (segments_.empty()) return;
 
-  double min_x = segments_[0].ax, max_x = segments_[0].ax;
-  double min_y = segments_[0].ay, max_y = segments_[0].ay;
+  double min_x = ends[0].ax, max_x = ends[0].ax;
+  double min_y = ends[0].ay, max_y = ends[0].ay;
   double total_length = 0.0;
-  for (const Segment& s : segments_) {
+  for (const Span& s : ends) {
     min_x = std::fmin(min_x, std::fmin(s.ax, s.bx));
     max_x = std::fmax(max_x, std::fmax(s.ax, s.bx));
     min_y = std::fmin(min_y, std::fmin(s.ay, s.by));
@@ -188,32 +226,61 @@ void Walls::build_index() {
     ny_ = static_cast<std::size_t>(height / cell_size_) + 1;
   }
 
-  cells_.assign(nx_ * ny_, {});
-
   // Each segment goes into every cell its bounding box touches. Conservative,
   // so a ray never misses a segment it should have tested; the cost is that a
   // long diagonal segment is registered in cells it does not actually cross,
   // which is a few extra intersection tests and never a wrong answer.
-  for (std::uint32_t index = 0; index < segments_.size(); ++index) {
-    const Segment& s = segments_[index];
+  //
+  // Built in two passes so the result is one flat array: count how many
+  // segments each cell takes, turn the counts into offsets, then fill. A cell
+  // ends up holding its segments in increasing index order either way, which
+  // matters because a tie between two segments at the same distance is
+  // resolved by whichever is tested first.
+  const std::size_t cell_total = nx_ * ny_;
+  cell_start_.assign(cell_total + 1, 0);
+
+  const auto for_each_cell = [&](const Span& s, const auto& visit) {
     const std::size_t x0 = cell_of(std::fmin(s.ax, s.bx), origin_x_, cell_size_, nx_);
     const std::size_t x1 = cell_of(std::fmax(s.ax, s.bx), origin_x_, cell_size_, nx_);
     const std::size_t y0 = cell_of(std::fmin(s.ay, s.by), origin_y_, cell_size_, ny_);
     const std::size_t y1 = cell_of(std::fmax(s.ay, s.by), origin_y_, cell_size_, ny_);
     for (std::size_t cy = y0; cy <= y1; ++cy) {
-      for (std::size_t cx = x0; cx <= x1; ++cx) {
-        cells_[cy * nx_ + cx].push_back(index);
-      }
+      for (std::size_t cx = x0; cx <= x1; ++cx) visit(cy * nx_ + cx);
     }
+  };
+
+  for (const Span& s : ends) {
+    for_each_cell(s, [&](std::size_t cell) { ++cell_start_[cell + 1]; });
+  }
+  for (std::size_t cell = 0; cell < cell_total; ++cell) {
+    cell_start_[cell + 1] += cell_start_[cell];
+  }
+
+  cell_items_.assign(cell_start_[cell_total], 0);
+  std::vector<std::uint32_t> filled(cell_total, 0);
+  for (std::uint32_t index = 0; index < ends.size(); ++index) {
+    for_each_cell(ends[index], [&](std::size_t cell) {
+      cell_items_[cell_start_[cell] + filled[cell]] = index;
+      ++filled[cell];
+    });
   }
 
   stamp_.assign(segments_.size(), 0);
 }
 
-void Walls::gather(double x, double y, double dx, double dy, double max_range,
-                   std::vector<std::uint32_t>& candidates) const {
-  candidates.clear();
-  if (cells_.empty()) return;
+RayHit Walls::cast(double x, double y, double bearing, double max_range) const {
+  const double dx = std::cos(bearing);
+  const double dy = std::sin(bearing);
+
+  RayHit best;
+  double best_range = max_range;
+
+  const auto answer = [&best, &best_range]() {
+    best.range = best.hit ? best_range : 0.0;
+    return best;
+  };
+
+  if (cell_items_.empty()) return answer();
 
   ++visit_;
   if (visit_ == 0) {  // the stamp wrapped, so start the numbering again
@@ -246,14 +313,14 @@ void Walls::gather(double x, double y, double dx, double dy, double max_range,
     double t0 = (lo - start) / direction;
     double t1 = (hi - start) / direction;
     if (t0 > t1) std::swap(t0, t1);
-    enter = std::fmax(enter, t0);
-    leave = std::fmin(leave, t1);
+    enter = larger(enter, t0);
+    leave = smaller(leave, t1);
   };
 
   clip(x, dx, origin_x_, far_x);
   clip(y, dy, origin_y_, far_y);
 
-  if (leave < enter) return;  // the ray never touches the grid
+  if (leave < enter) return answer();  // the ray never touches the grid
 
   // Start exactly at the entry point, with no nudge along the ray.
   //
@@ -299,14 +366,51 @@ void Walls::gather(double x, double y, double dx, double dy, double max_range,
     delta_y = cell_size_ / std::fabs(dy);
   }
 
+  // Read once, outside the loop. The loop stores into stamp_, and the
+  // compiler has to assume that store could land on any other unsigned 32-bit
+  // object it can reach, visit_ included, so without this it reloads both the
+  // counter and the vectors' data pointers on every segment.
+  const std::uint32_t* const starts = cell_start_.data();
+  const std::uint32_t* const items = cell_items_.data();
+  std::uint32_t* const stamps = stamp_.data();
+  const Segment* const segments = segments_.data();
+  const std::uint32_t visit = visit_;
+
   double travelled = start_t;
   while (travelled <= leave) {
-    for (std::uint32_t index :
-         cells_[static_cast<std::size_t>(cy) * nx_ + static_cast<std::size_t>(cx)]) {
-      if (stamp_[index] == visit_) continue;
-      stamp_[index] = visit_;
-      candidates.push_back(index);
+    const std::size_t cell =
+        static_cast<std::size_t>(cy) * nx_ + static_cast<std::size_t>(cx);
+    for (std::uint32_t k = starts[cell]; k < starts[cell + 1]; ++k) {
+      const std::uint32_t index = items[k];
+      if (stamps[index] == visit) continue;
+      stamps[index] = visit;
+
+      const Segment& s = segments[index];
+      const double t =
+          ray_segment(x, y, dx, dy, s.ax, s.ay, s.ex, s.ey, best_range);
+      if (t >= 0.0) {
+        best_range = t;
+        best.hit = true;
+        best.left_wall = segment_left_[index] != 0u;
+      }
     }
+
+    // The distance at which the ray leaves this cell, which is where the next
+    // one begins.
+    const double exit_t = smaller(next_x, next_y);
+
+    // Stop as soon as the answer is settled. Every segment still untested is
+    // registered in a cell this ray has not reached, and a segment's hit point
+    // lies inside its own bounding box, so the cell holding that hit is one
+    // the traversal has yet to enter and the hit is therefore no nearer than
+    // exit_t. A hit already found at or before exit_t cannot be beaten: an
+    // exact tie at exit_t loses to it, since the search keeps the first of
+    // equals and that is the one in hand.
+    //
+    // This is where the work goes on a track. A 10 m ray crosses tens of
+    // cells, a car in a 1.5 m corridor sees a wall in the first two or three,
+    // and without this the traversal walks the other thirty for nothing.
+    if (best.hit && best_range <= exit_t) break;
 
     if (next_x < next_y) {
       cx += step_x;
@@ -323,30 +427,8 @@ void Walls::gather(double x, double y, double dx, double dy, double max_range,
       break;
     }
   }
-}
 
-RayHit Walls::cast(double x, double y, double bearing, double max_range) const {
-  const double dx = std::cos(bearing);
-  const double dy = std::sin(bearing);
-
-  static thread_local std::vector<std::uint32_t> candidates;
-  gather(x, y, dx, dy, max_range, candidates);
-
-  RayHit best;
-  double best_range = max_range;
-
-  for (std::uint32_t index : candidates) {
-    const Segment& s = segments_[index];
-    const double t = ray_segment(x, y, dx, dy, s.ax, s.ay, s.bx, s.by);
-    if (t >= 0.0 && t < best_range) {
-      best_range = t;
-      best.hit = true;
-      best.left_wall = s.left_wall;
-    }
-  }
-
-  best.range = best.hit ? best_range : 0.0;
-  return best;
+  return answer();
 }
 
 RayHit Walls::cast_brute_force(double x, double y, double bearing,
@@ -357,12 +439,14 @@ RayHit Walls::cast_brute_force(double x, double y, double bearing,
   RayHit best;
   double best_range = max_range;
 
-  for (const Segment& s : segments_) {
-    const double t = ray_segment(x, y, dx, dy, s.ax, s.ay, s.bx, s.by);
-    if (t >= 0.0 && t < best_range) {
+  for (std::size_t index = 0; index < segments_.size(); ++index) {
+    const Segment& s = segments_[index];
+    const double t =
+        ray_segment(x, y, dx, dy, s.ax, s.ay, s.ex, s.ey, best_range);
+    if (t >= 0.0) {
       best_range = t;
       best.hit = true;
-      best.left_wall = s.left_wall;
+      best.left_wall = segment_left_[index] != 0u;
     }
   }
 

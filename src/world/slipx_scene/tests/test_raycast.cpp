@@ -273,6 +273,64 @@ TEST(Walls, TheIndexAgreesWithBruteForceOnTheShippedStadium) {
   EXPECT_GT(hits, 2000u);
 }
 
+// A track whose segments are wildly uneven in length: two 10 m straights that
+// are ONE segment each, and two ends sampled every 0.1 m.
+//
+// It exists to break an assumption the two tracks above quietly satisfy. A
+// segment is registered in every cell its bounding box touches, and on a
+// uniformly sampled track a segment is about a quarter of a cell long, so the
+// cell it is registered in is the cell the ray meets it in. A 10 m straight
+// is registered in a dozen cells, most of which it crosses nowhere near where
+// the ray does. A traversal that stopped at the first cell offering any hit
+// would return that straight, several metres away, while a wall two cells
+// ahead sat nearer and untested.
+Track uneven() {
+  std::string csv;
+  const auto point = [&csv](double x, double y) {
+    csv += std::to_string(x) + "," + std::to_string(y) + ",0.5,0.5\n";
+  };
+
+  point(0.0, 0.0);                                    // the bottom straight
+  for (int i = 0; i <= 20; ++i) point(10.0, i * 0.1);  // the right-hand end
+  point(0.0, 2.0);                                    // the top straight
+  for (int i = 19; i >= 1; --i) point(0.0, i * 0.1);   // the left-hand end
+
+  Centreline geometry = Centreline::from_csv(csv, "uneven.csv");
+  return Track::build(geometry, manifest_for("uneven", true),
+                      {{"sponge", "carpet"}});
+}
+
+TEST(Walls, TheIndexAgreesWithBruteForceWhenSegmentLengthsAreUneven) {
+  const Walls walls(uneven());
+
+  // The point of the fixture is lost if the grid collapses to one cell.
+  ASSERT_GT(walls.cell_count(), 20u);
+
+  std::size_t hits = 0;
+  for (int gx = 0; gx <= 20; ++gx) {
+    for (int gy = 0; gy <= 8; ++gy) {
+      for (int a = 0; a < 72; ++a) {
+        const double x = gx * 0.5;
+        const double y = gy * 0.25;
+        const double bearing = -kPi + 2.0 * kPi * a / 72.0;
+
+        const RayHit fast = walls.cast(x, y, bearing, 30.0);
+        const RayHit slow = walls.cast_brute_force(x, y, bearing, 30.0);
+
+        ASSERT_EQ(fast.hit, slow.hit)
+            << "at (" << x << ", " << y << ") bearing " << bearing;
+        if (fast.hit) {
+          ++hits;
+          EXPECT_DOUBLE_EQ(fast.range, slow.range)
+              << "at (" << x << ", " << y << ") bearing " << bearing;
+          EXPECT_EQ(fast.left_wall, slow.left_wall);
+        }
+      }
+    }
+  }
+  EXPECT_GT(hits, 5000u);
+}
+
 // A ray that starts a long way outside the track's bounding box, crosses it
 // and leaves. The traversal must not give up when it starts outside the grid,
 // which is the easy way to write it and is wrong for exactly this ray.

@@ -128,6 +128,15 @@ enum : std::size_t {
   kN = 13, kNVel = 9
 };
 
+// A tyre's friction budget at one vertical load: the two ellipse axes and the
+// slip stiffness. This is where the powers of L2 live, so it is also where
+// the tier's cost lives.
+struct TyreBudget {
+  double fx_max = 0.0;                                            //     [N]
+  double fy_max = 0.0;                                            //     [N]
+  double c_kappa = 0.0;                                           // [N per -]
+};
+
 // Everything the derivative needs that does not change within a step.
 struct StepConstants {
   double delta_cmd = 0.0;  // travel-clipped steering command         [rad]
@@ -140,6 +149,11 @@ struct StepConstants {
   MfLite tyre_front;       // one FRONT tyre, B derived at its static load
   MfLite tyre_rear;        // one REAR tyre
 
+  // The tyre-only half of the peak force law (tyre.hpp), which depends on the
+  // nominal load and never on the load being asked about.
+  NominalPeak peak_front;
+  NominalPeak peak_rear;
+
   // Longitudinal slip stiffness per tyre at that tyre's static load, used to
   // report the slip ratio consistent with the delivered force and to close
   // the spool's constrained-speed form. Positive. The two are equal today and
@@ -150,6 +164,20 @@ struct StepConstants {
 
   double fz_nom_front = 0.0;  // static load on one front tyre           [N]
   double fz_nom_rear = 0.0;   // static load on one rear tyre            [N]
+
+  // Wheel positions in the body frame. Geometry, so per-model rather than
+  // per-step, but they are read four times in every force evaluation and this
+  // is where the evaluation looks for constants.
+  std::array<double, kWheelCount> wheel_x{};                    //      [m]
+  std::array<double, kWheelCount> wheel_y{};                    //      [m]
+
+  // The first load pass always runs at the static loads, which do not change
+  // within a step and, for a given car, not between steps either. Both the
+  // loads and the budgets they imply are therefore per-step constants, and
+  // hoisting them here is half of what stopped this tier calling pow two
+  // hundred and eighty times a step.
+  WheelLoads statics;
+  std::array<TyreBudget, kWheelCount> static_budget{};
 };
 
 // Everything the diagnostics block wants and the integrator does not.
@@ -176,6 +204,30 @@ struct WheelPre {
   double fy_max = 0.0;    //                                         [N]
   double c_kappa = 0.0;   // slip stiffness at this load       [N per -]
   double vx_safe = 0.0;   // floored wheel-centre speed            [m/s]
+};
+
+// What a derivative evaluation knows about a wheel before it knows a vertical
+// load, which is everything expensive about it.
+//
+// The two load passes of ADR-0027 see identical values here: a slip angle is
+// an arctangent of the wheel's own velocity, the Magic Formula shape term is
+// two more arctangents and a sine of the LAGGED slip angle, and none of the
+// four depends on how hard the tyre is pressed into the road. Evaluating them
+// once per derivative instead of once per pass halves the transcendental
+// count of the tier, and changes no arithmetic: the same function of the same
+// arguments is the same number.
+struct WheelKinematics {
+  double alpha = 0.0;     // geometric slip angle                  [rad]
+  double shape = 0.0;     // MF shape term at the lagged slip        [-]
+  double vxw = 0.0;       // wheel centre velocity, body x         [m/s]
+  double vx_safe = 0.0;   // the same, floored away from zero      [m/s]
+};
+
+struct Kinematics {
+  std::array<WheelKinematics, kWheelCount> wheel{};
+  double cos_delta = 1.0;
+  double sin_delta = 0.0;
+  double resistance = 0.0;  // drag plus rolling resistance          [N]
 };
 
 class DoubleTrackL2 final : public VehicleModel {
@@ -205,6 +257,9 @@ class DoubleTrackL2 final : public VehicleModel {
 
     StepConstants c;
     c.delta_cmd = delta_cmd;
+    for (unsigned i = 0; i < kWheelCount; ++i) {
+      wheel_offset(i, &c.wheel_x[i], &c.wheel_y[i]);
+    }
     switch (params_.layout) {
       case DriveLayout::kFrontWheelDrive:
         c.front_share = 1.0;
@@ -298,9 +353,9 @@ class DoubleTrackL2 final : public VehicleModel {
     // The tyres are built once per step rather than once per derivative
     // evaluation: B is a function of the parameters and the static load only,
     // so it does not change within a step (CORE-03).
-    const WheelLoads statics = static_loads(params_);
-    c.fz_nom_front = statics.fz[kFrontLeft];
-    c.fz_nom_rear = statics.fz[kRearLeft];
+    c.statics = static_loads(params_);
+    c.fz_nom_front = c.statics.fz[kFrontLeft];
+    c.fz_nom_rear = c.statics.fz[kRearLeft];
 
     // VehicleParams carries cornering stiffness per AXLE, because that is what
     // a single-track tier needs; MF-lite is per tyre, so each axle value is
@@ -310,10 +365,15 @@ class DoubleTrackL2 final : public VehicleModel {
                                 c.fz_nom_front);
     c.tyre_rear = make_mf_lite(params_.tyre_rear, 0.5 * params_.c_alpha_r,
                                c.fz_nom_rear);
+    c.peak_front = nominal_peak(c.tyre_front);
+    c.peak_rear = nominal_peak(c.tyre_rear);
     // One slip stiffness for all four tyres: the run that identifies it cannot
     // separate the axles. See the field's note in params.hpp.
     c.c_kappa_front = params_.c_kappa;
     c.c_kappa_rear = params_.c_kappa;
+
+    // The budget the first load pass will use, every pass, every derivative.
+    budget_at(c, c.statics, &c.static_budget);
 
     StateVec<kN> y{};
     y[kVx] = s.vel_body.x;
@@ -525,27 +585,24 @@ class DoubleTrackL2 final : public VehicleModel {
     }
   }
 
-  // One evaluation of the tyre forces at a given set of vertical loads. Called
-  // twice per derivative: see the note on the algebraic loop above.
-  void evaluate_forces(const StateVec<kN>& q, const StepConstants& c,
-                       const WheelLoads& loads, Forces* f) const {
+  // Everything one derivative evaluation can settle before it knows a vertical
+  // load. See the note on WheelKinematics for why this is a separate pass.
+  Kinematics kinematics(const StateVec<kN>& q, const StepConstants& c) const {
     const double vx = q[kVx];
     const double vy = q[kVy];
     const double r = q[kR];
 
+    Kinematics kin;
+
     // The ACHIEVED road wheel angle is state now (ADR-0031), so the steer
     // trigonometry is per evaluation rather than per step.
     const double delta = q[kSteer];
-    const double cos_delta = std::cos(delta);
-    const double sin_delta = std::sin(delta);
+    kin.cos_delta = std::cos(delta);
+    kin.sin_delta = std::sin(delta);
 
-    // Phase one: everything about a wheel that does not depend on how the
-    // differential splits the longitudinal demand.
-    std::array<WheelPre, kWheelCount> pre{};
     for (unsigned i = 0; i < kWheelCount; ++i) {
-      double xw = 0.0;
-      double yw = 0.0;
-      wheel_offset(i, &xw, &yw);
+      const double xw = c.wheel_x[i];
+      const double yw = c.wheel_y[i];
       const bool front = (i == kFrontLeft || i == kFrontRight);
 
       // Velocity of the wheel centre in the body frame. The yaw rate makes the
@@ -561,29 +618,79 @@ class DoubleTrackL2 final : public VehicleModel {
       // between the wheel's travel and its plane, and the steered wheels have
       // their plane rotated by delta.
       const double steer_i = front ? delta : 0.0;
-      const double alpha = std::atan2(vyw, vx_safe) - steer_i;
 
       const MfLite& tyre = front ? c.tyre_front : c.tyre_rear;
+
+      kin.wheel[i].alpha = std::atan2(vyw, vx_safe) - steer_i;
+      // The shape term uses the LAGGED slip angle, which is the state, while
+      // the load below is the instantaneous one. That asymmetry is the point
+      // of ADR-0026: the force is inside the current friction budget however
+      // much history the slip angle carries.
+      kin.wheel[i].shape = mf_shape(tyre.b, tyre.c, tyre.e, q[kLag0 + i]);
+      kin.wheel[i].vxw = vxw;
+      kin.wheel[i].vx_safe = vx_safe;
+    }
+
+    // Aerodynamic drag and rolling resistance, both opposing travel, and both
+    // acting at the CoG rather than per wheel. Same smoothing as L1: a
+    // discontinuity at zero speed makes RK4's four evaluations disagree about
+    // which side of it they are on.
+    const double f_drag = params_.drag_coeff * vx * std::fabs(vx);
+    const double f_roll = params_.roll_resist * params_.mass * kGravity *
+                          std::tanh(vx / params_.v_eps);
+    kin.resistance = f_drag + f_roll;
+
+    return kin;
+  }
+
+  // The friction budget of all four tyres at one set of vertical loads. The
+  // only part of a force evaluation that has to be redone when the loads
+  // change, and the only part that costs a power.
+  void budget_at(const StepConstants& c, const WheelLoads& loads,
+                 std::array<TyreBudget, kWheelCount>* out) const {
+    for (unsigned i = 0; i < kWheelCount; ++i) {
+      const bool front = (i == kFrontLeft || i == kFrontRight);
+      const MfLite& tyre = front ? c.tyre_front : c.tyre_rear;
+      const NominalPeak& peak = front ? c.peak_front : c.peak_rear;
       const double fz = loads.fz[i];
 
-      // The force uses the LAGGED slip angle, which is the state, while the
-      // load is the instantaneous one. That asymmetry is the point of
-      // ADR-0026: the force is inside the current friction budget however much
-      // history the slip angle carries.
-      pre[i].fy_pure = mf_lite_fy(tyre, q[kLag0 + i], fz);
-      pre[i].fx_max = peak_longitudinal_force(tyre, fz);
-      pre[i].fy_max = peak_lateral_force(tyre, fz);
-      pre[i].vx_safe = vx_safe;
+      // One power for both ellipse axes: the load-only half of the peak force
+      // law is shared and the tyre-only half is a per-step constant. See the
+      // split in tyre.hpp, which exists for this call site.
+      const double load = load_factor(tyre, fz);
+      (*out)[i].fx_max = peak.x * load;
+      (*out)[i].fy_max = peak.y * load;
 
       // Slip stiffness at this load, entering the same way it does for
       // cornering stiffness: the stiffness scales as the peak force does.
       const double c_kappa_nom = front ? c.c_kappa_front : c.c_kappa_rear;
       const double fz_nom = front ? c.fz_nom_front : c.fz_nom_rear;
-      pre[i].c_kappa = c_kappa_nom * std::pow(fz / fz_nom, 1.0 - tyre.k_mu);
+      (*out)[i].c_kappa = c_kappa_nom * std::pow(fz / fz_nom, 1.0 - tyre.k_mu);
+    }
+  }
 
-      f->alpha[i] = alpha;
-      f->fz[i] = fz;
-      f->vx_wheel[i] = vxw;
+  // One evaluation of the tyre forces at a given set of vertical loads. Called
+  // twice per derivative: see the note on the algebraic loop above.
+  void evaluate_forces(const StepConstants& c, const Kinematics& kin,
+                       const WheelLoads& loads,
+                       const std::array<TyreBudget, kWheelCount>& budget,
+                       Forces* f) const {
+    const double cos_delta = kin.cos_delta;
+    const double sin_delta = kin.sin_delta;
+
+    // Phase one: everything about a wheel that does not depend on how the
+    // differential splits the longitudinal demand.
+    std::array<WheelPre, kWheelCount> pre{};
+    for (unsigned i = 0; i < kWheelCount; ++i) {
+      pre[i].fy_pure = -budget[i].fy_max * kin.wheel[i].shape;
+      pre[i].fx_max = budget[i].fx_max;
+      pre[i].fy_max = budget[i].fy_max;
+      pre[i].c_kappa = budget[i].c_kappa;
+      pre[i].vx_safe = kin.wheel[i].vx_safe;
+
+      f->alpha[i] = kin.wheel[i].alpha;
+      f->fz[i] = loads.fz[i];
+      f->vx_wheel[i] = kin.wheel[i].vxw;
     }
 
     // Phase two: the drivetrain. Each driven axle splits its share of the
@@ -628,9 +735,8 @@ class DoubleTrackL2 final : public VehicleModel {
     std::array<double, kWheelCount> mz_w{};
 
     for (unsigned i = 0; i < kWheelCount; ++i) {
-      double xw = 0.0;
-      double yw = 0.0;
-      wheel_offset(i, &xw, &yw);
+      const double xw = c.wheel_x[i];
+      const double yw = c.wheel_y[i];
       const bool front = (i == kFrontLeft || i == kFrontRight);
 
       // Wheel frame to body frame. Only the front wheels are rotated.
@@ -664,14 +770,9 @@ class DoubleTrackL2 final : public VehicleModel {
     const double mz = (mz_w[kFrontLeft] + mz_w[kFrontRight]) +
                       (mz_w[kRearLeft] + mz_w[kRearRight]);
 
-    // Aerodynamic drag and rolling resistance, both opposing travel, and both
-    // acting at the CoG rather than per wheel. Same smoothing as L1: a
-    // discontinuity at zero speed makes RK4's four evaluations disagree about
-    // which side of it they are on.
-    const double f_drag = params_.drag_coeff * vx * std::fabs(vx);
-    const double f_roll = params_.roll_resist * params_.mass * kGravity *
-                          std::tanh(vx / params_.v_eps);
-    fx_body -= (f_drag + f_roll);
+    // Drag and rolling resistance, computed once per derivative rather than
+    // once per load pass: neither depends on a vertical load.
+    fx_body -= kin.resistance;
 
     f->ax = fx_body / params_.mass;
     f->ay = fy_body / params_.mass;
@@ -682,14 +783,20 @@ class DoubleTrackL2 final : public VehicleModel {
 
   StateVec<kN> derivative(const StateVec<kN>& q, const StepConstants& c,
                           Forces* f) const {
+    // What both passes agree about, worked out once.
+    const Kinematics kin = kinematics(q, c);
+
     // Pass one: static loads, to get an acceleration to transfer load with.
+    // The budget at those loads is a per-step constant, so it arrives ready.
     Forces first;
-    evaluate_forces(q, c, static_loads(params_), &first);
+    evaluate_forces(c, kin, c.statics, c.static_budget, &first);
 
     // Pass two: the loads those accelerations imply, and the forces they give.
     // Two passes, always, whatever the residual (ADR-0027).
     const WheelLoads loads = quasi_static_loads(params_, first.ax, first.ay);
-    evaluate_forces(q, c, loads, f);
+    std::array<TyreBudget, kWheelCount> budget;
+    budget_at(c, loads, &budget);
+    evaluate_forces(c, kin, loads, budget, f);
 
     StateVec<kN> d{};
     d[kVx] = f->ax + q[kVy] * q[kR];

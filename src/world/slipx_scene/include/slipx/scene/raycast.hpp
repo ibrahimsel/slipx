@@ -59,6 +59,9 @@ class Walls {
   // down a straight on an open track leaves the end of the walls and hits
   // nothing, and reporting a range of zero for it would be a wall against
   // the sensor.
+  //
+  // Const but not thread-safe: it writes the scratch stamps declared below.
+  // One Walls per thread if two threads ever cast at once.
   RayHit cast(double x, double y, double bearing, double max_range) const;
 
   // The same query, testing every wall segment. Kept because it is the
@@ -77,7 +80,9 @@ class Walls {
 
   // Diagnostic, for the benchmark and for anybody wondering whether the
   // index is doing anything.
-  std::size_t cell_count() const { return cells_.size(); }
+  std::size_t cell_count() const {
+    return cell_start_.empty() ? 0 : cell_start_.size() - 1;
+  }
 
  private:
   // A uniform grid over the walls, built once.
@@ -89,14 +94,21 @@ class Walls {
   // it the right one here: a BVH would be faster still and would have to be
   // right about more things, and the racing phase has a broadphase of its
   // own to build later.
+  //
+  // The traversal tests each cell's segments as it reaches that cell, rather
+  // than collecting every candidate along the ray and testing the lot at the
+  // end, so that a hit inside the current cell ends the walk. That is also
+  // measured: it is most of what took the sensing from a 90x single agent to
+  // one comfortably past the P1 target.
+  // A segment as the intersection test wants it rather than as the wall
+  // describes it: the start point and the edge vector, so the subtraction
+  // happens once at construction instead of once per ray per segment. Four
+  // doubles, so two segments to a cache line.
   struct Segment {
-    double ax, ay, bx, by;
-    bool left_wall;
+    double ax, ay, ex, ey;
   };
 
   void build_index();
-  void gather(double x, double y, double dx, double dy, double max_range,
-              std::vector<std::uint32_t>& candidates) const;
 
   std::vector<double> left_x_, left_y_;
   std::vector<double> right_x_, right_y_;
@@ -104,15 +116,34 @@ class Walls {
 
   std::vector<Segment> segments_;
 
-  // Grid geometry. cells_ holds, for each cell, the segments whose bounding
-  // box overlaps it.
+  // Which wall each segment belongs to, kept apart from the geometry because
+  // a ray reads it at most once, on the segment it finally hits, and putting
+  // it in Segment would cost every segment it tests a wider stride.
+  std::vector<std::uint8_t> segment_left_;
+
+  // Grid geometry, and the grid itself in compressed form: cell_items_ holds
+  // every cell's segment indices end to end, and cell_start_ says where each
+  // cell's run begins, with a tail entry so the last cell needs no special
+  // case.
+  //
+  // A vector of vectors is the obvious shape and costs a pointer chase and a
+  // likely cache miss per cell. A scan walks a handful of cells per ray and
+  // several hundred thousand rays a second, so that pointer chase is a real
+  // fraction of the work rather than a tidiness argument.
   double origin_x_ = 0.0, origin_y_ = 0.0;
   double cell_size_ = 1.0;
   std::size_t nx_ = 1, ny_ = 1;
-  std::vector<std::vector<std::uint32_t>> cells_;
+  std::vector<std::uint32_t> cell_start_;
+  std::vector<std::uint32_t> cell_items_;
 
   // Stamps, so a segment reached through two cells is tested once. Mutable
   // because it is scratch space for a const query and holds no answer.
+  //
+  // Only one segment in nine that a ray is offered is a repeat, so this looks
+  // like bookkeeping that costs more than it saves. Measured, it is the other
+  // way round by about a seventh: a stamp is a load and a compare against a
+  // line that is already hot, and the test it skips is six multiplies and a
+  // division.
   mutable std::vector<std::uint32_t> stamp_;
   mutable std::uint32_t visit_ = 0;
 };

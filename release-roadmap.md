@@ -383,7 +383,8 @@ from a car file and visible. Everything below is release engineering.
 ## M5. The rest of P1: sensing, track, ROS 2, reference stack
 
 Status: in-progress; M5.1 to M5.6 and M5.8 done, M5.7 blocked on the
-environment, M5.9 measured and two targets missed (M5.12). Size: extra large
+environment, M5.9 measured and M5.12 closed one of the two missed targets and
+left the twenty-agent one short by 24 per cent. Size: extra large
 (many weeks). Release: 0.3.0 at the end. Hash impact: none expected in
 `slipx_core`, and none observed; sensors and scene live above it. Determinism constraints extend to every new layer: seeded per-agent RNG
 only, no wall clock, fixed iteration order.
@@ -592,6 +593,10 @@ directories and must respect the downward dependency order
   which is what a ray from a wall corner does.
   The remaining gap and the three candidate fixes are written up in
   `docs/reference/performance.md`; closing it is M5.12.
+  Superseded by M5.12's numbers on 2026-08-15: the step is 1.92 us, one agent
+  179x and twenty agents 8.4x, measured against a rebuild of this commit in
+  the same session. The figures above are what this commit measured and are
+  left as they were recorded.
 - [ ] **M5.12** Close the performance gap M5.9 measured: one agent from 90x
   to over 100x, twenty agents from 3.8x to over 10x. The candidates, in the
   order they look worth trying, are early exit in the wall traversal, a
@@ -605,6 +610,54 @@ directories and must respect the downward dependency order
   5 us and the sensing close to free, and may need the step itself revisited.
   Done when: both figures meet their targets on a named machine, or the
   targets are renegotiated deliberately with the reason recorded.
+  Half done 2026-08-15, and left unticked for the same reason M5.9 is: one
+  target is met and one is not, and ticking it would be a claim ahead of the
+  evidence. Measured by alternating the old and new binaries in one session,
+  best of ten each: the step 4.98 to 1.92 us, one agent 93x to 179x (**met**),
+  twenty agents 4.0x to 8.4x (**missed**, by 24 per cent). No reference hash
+  moved and none was allowed to; that was the constraint the whole slice was
+  written under, and it is asserted after every change rather than hoped for.
+  The step was revisited, as the note above anticipated, and it turned out to
+  be the easy half. It was calling `pow` 280 times per millisecond of car:
+  `Fz_nom^k_mu` does not depend on the load being asked about and both peak
+  branches share `Fz^(1-k_mu)`, so tyre.hpp now splits the peak force law into
+  a tyre-only half and a load-only half with the grouping written out, and the
+  first load pass runs at loads that are a per-step constant. Separately, the
+  two load passes were each recomputing every wheel's slip angle and Magic
+  Formula shape term, which is four arctangents and a sine per wheel that no
+  vertical load can change; those moved to once per derivative.
+  The wall traversal now tests each cell as it reaches it and stops at the
+  first hit it can prove is nearest, rather than gathering every candidate to
+  the maximum range and testing the lot. The proof is that a segment's
+  intersection lies inside its own bounding box, so an untested segment's hit
+  is in a cell the walk has not entered and is no nearer than the current
+  cell's far edge. About half the cost of a ray.
+  The third candidate is deliberately not done and should be struck rather
+  than carried: a projection that starts from the last segment is not on the
+  path either benchmark measures, since neither runs a lap counter, and making
+  the search local changes the answer `scene::project` returns, which is the
+  one thing this slice refused to do. The second candidate, a first guess
+  within a scan, was assessed and rejected: it cannot let the walk skip a
+  cell, so it saves a few segment tests and nothing else.
+  What is left is 24 per cent, all of it in the sensing, and the grid's cell
+  size was swept over a factor of twenty to confirm the shipped choice sits at
+  the bottom of a broad minimum. Closing it means a different acceleration
+  structure, which is an ADR and the racing phase's broadphase, or a
+  deliberate renegotiation of the target. Both are the user's call.
+  Mutation pass: 28 tried, 23 caught. Two escapes were real holes and are now
+  tests. No case distinguished the front tyre from the rear one in the
+  friction budget, because the reference car has its CoG mid-wheelbase and the
+  same compound at both ends, so reading one tyre for all four wheels produced
+  every published trajectory unchanged. And no track under test had segment
+  lengths uneven enough for a wall's bounding box to reach cells it crosses
+  nowhere near, which is exactly the case separating "the nearest wall" from
+  "the first wall found"; a fixture with 10 m straights and 0.1 m ends kills
+  both that and an exit taken one cell too eagerly. The other five escapes are
+  recorded rather than papered over, and all five are non-defects: three
+  weaken the early-exit test in the safe direction, so they cost cells and
+  change no answer; one loosens the grid clip the same way; and one changes
+  which of two exactly equidistant segments wins, which is unobservable
+  because both walls have strictly positive widths and so never coincide.
 - [ ] **M5.10** P1 exit gate (external fact): a RoboRacer team runs their
   existing stack against SlipX with a one-file topic remap and reports that a
   tuning change made in sim held on their car. Track the outreach as work:

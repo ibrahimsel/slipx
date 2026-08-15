@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 
 #include "slipx/load_transfer.hpp"
@@ -1536,6 +1537,69 @@ TEST(L2, TheForceFollowsTheLaggedSlipAngleAndNotTheInstantaneousOne) {
         << "wheel " << i;
     EXPECT_GT(std::fabs(from_instant), 2.0 * std::fabs(d.fy[i]))
         << "wheel " << i;
+  }
+}
+
+// A wheel's friction budget comes from the tyre on ITS OWN axle.
+//
+// This looks like something the tier's other cases must already cover, and
+// until this case existed they did not. The reference car has its CoG exactly
+// between the axles and the same compound at both ends, so the two axles'
+// peak forces are the same number and a model that read the front tyre for
+// all four wheels would produce every published trajectory unchanged. Fitting
+// a compound per axle is a normal thing to do, and it is the first thing that
+// would have gone wrong.
+//
+// The measurable consequence is the ceiling on each wheel's lateral force. A
+// wheel can never make more than its own tyre's peak at its own load, so a
+// bald rear under a grippy front is held to the bald tyre's number; read the
+// front tyre for all four and the rear sails past it.
+TEST(L2, EachAxleTakesItsBudgetFromItsOwnTyre) {
+  VehicleParams p = reference_params();
+  p.tyre_front.mu_y0 = 2.2;   // grip at the front
+  p.tyre_front.mu_x0 = 2.2;
+  p.tyre_rear.mu_y0 = 0.35;   // and next to none at the rear
+  p.tyre_rear.mu_x0 = 0.35;
+
+  const slipx::WheelLoads statics = slipx::static_loads(p);
+  const MfLite front = slipx::make_mf_lite(p.tyre_front, 0.5 * p.c_alpha_f,
+                                           statics.fz[kFrontLeft]);
+  const MfLite rear = slipx::make_mf_lite(p.tyre_rear, 0.5 * p.c_alpha_r,
+                                          statics.fz[kRearLeft]);
+
+  // The two ceilings are different numbers, or the case below asks nothing.
+  ASSERT_GT(slipx::peak_lateral_force(front, statics.fz[kFrontLeft]),
+            4.0 * slipx::peak_lateral_force(rear, statics.fz[kRearLeft]));
+
+  // The largest fraction of its own budget each wheel ever used. Taken over
+  // the whole manoeuvre rather than at the end, because a bald end that has
+  // let go goes past its peak and comes back down the falling branch, and the
+  // settled value says nothing about how hard it was working on the way.
+  auto model = VehicleModel::create(Tier::L2_DoubleTrack, p);
+  VehicleState s = travelling(6.0);
+  StepDiagnostics d;
+  std::array<double, slipx::kWheelCount> worst{};
+
+  for (int step = 0; step < 2000; ++step) {
+    model->step(s, DriveInput{0.30, hold_speed(s, 6.0)}, kDt, &d);
+    for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+      const bool is_front = (i == kFrontLeft || i == kFrontRight);
+      const double budget =
+          slipx::peak_lateral_force(is_front ? front : rear, d.fz[i]);
+      if (budget > 0.0) {
+        worst[i] = std::fmax(worst[i], std::fabs(d.fy[i]) / budget);
+      }
+    }
+  }
+
+  for (unsigned i = 0; i < slipx::kWheelCount; ++i) {
+    EXPECT_LE(worst[i], 1.0) << "wheel " << i << " made more force than the "
+                                "tyre on its own axle can";
+  }
+  for (const unsigned i : {kRearLeft, kRearRight}) {
+    EXPECT_GT(worst[i], 0.9)
+        << "wheel " << i << ": the bald end never reached its own limit, so "
+           "this case would pass against any ceiling at all";
   }
 }
 
