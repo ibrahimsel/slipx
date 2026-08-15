@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -72,6 +73,29 @@ struct AgentSpec {
   Policy policy{};   // empty means coast: zero steer, zero demand
 };
 
+// How a run treats the wall clock.
+//
+// The two modes answer different questions and a run cannot answer both. In
+// deterministic mode there is no clock at all: the simulation advances as
+// fast as it can and the trajectory is a function of the inputs, which is
+// what makes a hash worth comparing. In validation mode the run is paced
+// against real time, so a stack under test experiences a scan arriving late
+// the way it would on a car, and the trajectory then depends on how loaded
+// the machine was.
+//
+// The manifest records which mode produced it, and says plainly that a
+// validation run promises nothing about reproducibility. A manifest that
+// claimed bit-identity for a run paced by a laptop's scheduler would be the
+// most damaging single line in this library.
+enum class RunMode {
+  kDeterministic,
+  kValidation,
+};
+
+inline const char* to_string(RunMode mode) {
+  return mode == RunMode::kValidation ? "validation" : "deterministic";
+}
+
 struct SimulationConfig {
   // SIM-01: fixed step, default 1 kHz, decoupled from any sensor rate.
   double dt = 1.0e-3;
@@ -87,6 +111,42 @@ struct SimulationConfig {
   // Schema version the parameters were parsed with, for the manifest. Empty
   // when parameters were built in code.
   std::string schema_version;
+
+  // Deterministic unless asked otherwise, and asking is deliberate: a run
+  // that quietly became unreproducible because a default changed is the
+  // failure this whole library is arranged to prevent.
+  RunMode mode = RunMode::kDeterministic;
+
+  // Validation mode only. How much faster than real time to run: 1.0 is real
+  // time, 0.5 is half speed for a stack that cannot keep up, and larger
+  // values compress a long run. Ignored in deterministic mode, where there is
+  // no clock to be fast or slow against.
+  double real_time_factor = 1.0;
+};
+
+// Everything a running simulation is, at one instant (SIM-08).
+//
+// The vehicle state is trivially copyable by design, so the expensive part of
+// this is nothing. What makes it more than a memcpy of the states is the
+// bookkeeping around them: each agent's random stream and each agent's
+// running hash have to come back too, or the resumed run is a different run
+// that happens to start from the same position.
+struct AgentSnapshot {
+  VehicleState state;
+  StepDiagnostics diagnostics;
+  Rng::State rng;
+  std::uint64_t hash_state = 0;
+};
+
+struct SimulationSnapshot {
+  std::uint64_t steps = 0;
+  std::vector<AgentSnapshot> agents;
+
+  // How much of the input log had been written. Restoring truncates the log
+  // to this, so that resuming and running on produces the log the
+  // uninterrupted run would have, rather than one with the discarded steps
+  // still in it.
+  std::size_t input_log_entries = 0;
 };
 
 class Simulation {
@@ -166,6 +226,22 @@ class Simulation {
   // trajectory.
   void replay(const std::vector<DriveInput>& log);
 
+  // --------------------------------------------------------- snapshots
+  //
+  // SIM-08. Take a snapshot mid-run, carry on, and restore: the simulation is
+  // then exactly where it was, and running on from there reproduces the run
+  // that was never interrupted, bit for bit, in deterministic mode.
+  SimulationSnapshot snapshot() const;
+
+  // Throws std::invalid_argument if the snapshot describes a different number
+  // of agents. It is not a general loader: a snapshot belongs to the
+  // simulation that produced it, and restoring one into a differently
+  // configured run would produce a plausible trajectory from a car that was
+  // never there.
+  void restore(const SimulationSnapshot& snapshot);
+
+  RunMode mode() const { return config_.mode; }
+
  private:
   struct Agent {
     std::string name;
@@ -181,6 +257,8 @@ class Simulation {
 
   void hash_states();
   void check_index(std::size_t i) const;
+  // Validation mode only; reads no clock in deterministic mode.
+  void pace();
 
   SimulationConfig config_;
   std::vector<Agent> agents_;
@@ -189,6 +267,13 @@ class Simulation {
   std::vector<DriveInput> input_log_;
   std::uint64_t steps_ = 0;
   bool logging_inputs_ = false;
+
+  // Validation mode only: when the run started on the wall clock, and how
+  // much simulation time had elapsed then. Unused, and untouched, in
+  // deterministic mode.
+  bool pacing_started_ = false;
+  std::chrono::steady_clock::time_point pacing_origin_{};
+  double pacing_origin_time_ = 0.0;
 };
 
 }  // namespace sim

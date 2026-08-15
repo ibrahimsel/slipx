@@ -60,6 +60,12 @@ struct RunManifest {
   std::uint64_t steps = 0;       // steps advanced
   std::string integrator;        // "rk4" or "semi_implicit_euler"  (CORE-13)
   std::uint64_t master_seed = 0;
+
+  // "deterministic" or "validation". A validation run is paced against a wall
+  // clock, so its trajectory depends on how loaded the machine was, and the
+  // determinism block below says so instead of repeating a promise that does
+  // not hold for it.
+  std::string run_mode = "deterministic";
   std::vector<AgentManifest> agents;
 
   // ------------------------------------------------------------ the build

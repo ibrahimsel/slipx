@@ -96,6 +96,29 @@ class Rng {
 
   std::uint64_t state() const { return state_; }
 
+  // The whole of the generator's state, for snapshot and restore (SIM-08).
+  //
+  // The engine word is not the whole of it, and that is the trap this struct
+  // exists to avoid. normal() generates two values at a time and keeps the
+  // second, so a generator that has just handed out the first is one draw
+  // ahead of an identically seeded one that has not. Restoring the engine
+  // word alone would leave a simulation that resumes correctly until
+  // something asks for a normal, and then diverges for a reason that looks
+  // like anything except a missing bool.
+  struct State {
+    std::uint64_t engine = 0;
+    double spare = 0.0;
+    bool has_spare = false;
+  };
+
+  State save() const { return State{state_, spare_, has_spare_}; }
+
+  void restore(const State& saved) {
+    state_ = saved.engine;
+    spare_ = saved.spare;
+    has_spare_ = saved.has_spare;
+  }
+
  private:
   std::uint64_t state_;
   double spare_ = 0.0;

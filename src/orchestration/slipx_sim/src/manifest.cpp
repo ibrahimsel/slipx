@@ -77,6 +77,9 @@ std::string RunManifest::configuration_digest() const {
   h.update(dt);
   h.update(integrator);
   h.update_u64(master_seed);
+  // Two runs in different modes are not comparable, whatever else matches:
+  // one is a function of its inputs and the other of a machine's scheduler.
+  h.update(run_mode);
   for (const AgentManifest& a : agents) {
     h.update(a.name);
     h.update(a.tier);
@@ -154,10 +157,22 @@ std::string RunManifest::to_json() const {
   // build": for a redistributed wheel those are different things, and the
   // hash tracks libm (ADR-0033).
   o << "  \"determinism\": {\n";
-  o << "    \"within_build\": \"bit-identical for the same binary on the "
-       "same C library\",\n";
-  o << "    \"across_platforms\": \"not guaranteed; conformance is to a "
-       "stated tolerance\"\n";
+  if (run_mode == "validation") {
+    // Said plainly, and not left to the documentation. This file is what
+    // somebody reads when a result did not reproduce, and a manifest that
+    // claimed bit-identity for a run paced by a laptop's scheduler would be
+    // the most damaging single line in this library.
+    o << "    \"within_build\": \"NOT REPRODUCIBLE: this run was paced "
+         "against a wall clock in validation mode, so its trajectory depends "
+         "on the machine it ran on\",\n";
+    o << "    \"across_platforms\": \"not guaranteed, and not meaningful for "
+         "a validation run\"\n";
+  } else {
+    o << "    \"within_build\": \"bit-identical for the same binary on the "
+         "same C library\",\n";
+    o << "    \"across_platforms\": \"not guaranteed; conformance is to a "
+         "stated tolerance\"\n";
+  }
   o << "  },\n";
 
   o << "  \"trajectory_hash\": " << quote(trajectory_hash) << "\n";

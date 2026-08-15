@@ -3,8 +3,11 @@
 
 #include "slipx/sim/simulation.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
+#include <string>
+#include <thread>
 
 #include "slipx/sim/build_info.hpp"
 
@@ -146,6 +149,93 @@ void Simulation::advance() {
 
   ++steps_;
   hash_states();
+
+  pace();
+}
+
+// Soft real time, and only in validation mode.
+//
+// Soft, and the word is doing work: this sleeps when the simulation is ahead
+// of the clock and does not try to catch up when it is behind, because
+// catching up means taking steps faster than real time, which is the one
+// thing a latency test must not do. A run that cannot keep up is a result,
+// not an error, and the honest response is to fall behind visibly rather than
+// to compress the timeline and report a stack meeting deadlines it missed.
+//
+// Nothing here runs in deterministic mode. Not "runs and does nothing": the
+// clock is not read at all, so there is no path by which a scheduling
+// decision can reach a trajectory.
+void Simulation::pace() {
+  if (config_.mode != RunMode::kValidation) return;
+
+  const double factor = config_.real_time_factor > 0.0
+                            ? config_.real_time_factor
+                            : 1.0;
+
+  if (!pacing_started_) {
+    pacing_started_ = true;
+    pacing_origin_ = std::chrono::steady_clock::now();
+    pacing_origin_time_ = time();
+    return;
+  }
+
+  const double elapsed_sim = (time() - pacing_origin_time_) / factor;
+  const auto target = pacing_origin_ +
+                      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                          std::chrono::duration<double>(elapsed_sim));
+  const auto now = std::chrono::steady_clock::now();
+  if (now < target) std::this_thread::sleep_until(target);
+}
+
+SimulationSnapshot Simulation::snapshot() const {
+  SimulationSnapshot out;
+  out.steps = steps_;
+  out.input_log_entries = input_log_.size();
+  out.agents.reserve(agents_.size());
+
+  for (const Agent& a : agents_) {
+    AgentSnapshot one;
+    one.state = a.state;
+    one.diagnostics = a.diagnostics;
+    one.rng = a.rng.save();
+    one.hash_state = a.hash.value();
+    out.agents.push_back(one);
+  }
+  return out;
+}
+
+void Simulation::restore(const SimulationSnapshot& snapshot) {
+  if (snapshot.agents.size() != agents_.size()) {
+    throw std::invalid_argument(
+        "slipx_sim: this snapshot holds " +
+        std::to_string(snapshot.agents.size()) +
+        " agents and the simulation has " + std::to_string(agents_.size()) +
+        ". A snapshot belongs to the simulation that produced it; restoring "
+        "one into a differently configured run would produce a plausible "
+        "trajectory from a car that was never there.");
+  }
+
+  for (std::size_t i = 0; i < agents_.size(); ++i) {
+    Agent& a = agents_[i];
+    const AgentSnapshot& one = snapshot.agents[i];
+    a.state = one.state;
+    a.diagnostics = one.diagnostics;
+    a.rng.restore(one.rng);
+    a.hash.restore(one.hash_state);
+  }
+
+  steps_ = snapshot.steps;
+
+  // The log is truncated rather than left alone, so that resuming and running
+  // on produces the log the uninterrupted run would have written.
+  if (snapshot.input_log_entries <= input_log_.size()) {
+    input_log_.resize(snapshot.input_log_entries);
+  }
+
+  // Pacing restarts from here. Restoring a snapshot in validation mode and
+  // expecting the clock to carry on from where it was would make the
+  // simulation sprint to catch up with a wall time it never spent running.
+  pacing_started_ = false;
 }
 
 void Simulation::run(std::uint64_t steps) {
@@ -169,6 +259,7 @@ void Simulation::reset() {
   }
   steps_ = 0;
   input_log_.clear();
+  pacing_started_ = false;
 }
 
 void Simulation::replay(const std::vector<DriveInput>& log) {
@@ -238,6 +329,7 @@ RunManifest Simulation::manifest() const {
   m.steps = steps_;
   m.integrator = to_string(config_.integrator);
   m.master_seed = config_.master_seed;
+  m.run_mode = to_string(config_.mode);
 
   m.agents.reserve(agents_.size());
   m.agent_trajectory_hashes.reserve(agents_.size());

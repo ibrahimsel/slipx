@@ -514,12 +514,27 @@ directories and must respect the downward dependency order
   crossed when it had crossed six. Truncation towards zero is right on both
   sides, and the two agree for a wheel that only ever goes forwards, which is
   how it would have shipped.
-- [ ] **M5.6** `slipx_sim` additions: validation mode (soft real-time with
+- [x] **M5.6** `slipx_sim` additions: validation mode (soft real-time with
   latency and jitter enabled) alongside deterministic mode; snapshot and
   restore of full simulation state (the state is already a memcpy by design;
   expose and test it).
   Done when: a snapshot taken mid-run restores bit-identically in
   deterministic mode.
+  Done 2026-08-15. The state was already a memcpy; what a snapshot has to
+  carry beyond it is the bookkeeping. Each agent's running trajectory hash is
+  a fold and has to be resumed with the states, or a resumed run agrees about
+  every state and disagrees about the run. Each agent's generator has to
+  carry its Box-Muller spare as well as its engine word, because `normal()`
+  produces two values and keeps one: restoring the word alone gives a
+  simulation that resumes correctly until something asks for a normal, and
+  then diverges for a reason that looks like anything except a missing bool.
+  Validation mode paces against a wall clock and is soft in the direction
+  that matters: it sleeps when ahead and does not catch up when behind, since
+  catching up means stepping faster than real time, which is the one thing a
+  latency test must not do. The manifest records the mode, the mode is part
+  of the configuration digest, and a validation manifest says NOT
+  REPRODUCIBLE in the field where a deterministic one promises bit-identity.
+  Mutation pass: 9 tried, 9 caught.
 - [ ] **M5.7** `slipx_ros`: the per-agent topic set under `/car_N/`
   (`drive` in, `scan`, `imu`, `odom`, ground truth out), matching F1TENTH
   topic names and QoS where conventions exist; `/clock` published and correct

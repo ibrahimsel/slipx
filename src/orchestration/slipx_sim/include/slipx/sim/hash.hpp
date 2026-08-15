@@ -96,6 +96,13 @@ class TrajectoryHash {
 
   std::uint64_t value() const { return state_; }
 
+  // Restore an accumulator to a value it previously reported, for snapshot
+  // and restore (SIM-08). The hash is a running fold, so resuming a run from
+  // a snapshot has to resume the fold too: starting it again from the offset
+  // basis would produce a hash for the tail of the run rather than for the
+  // run, and the two would silently differ from an uninterrupted one.
+  void restore(std::uint64_t state) { state_ = state; }
+
   // Lower-case, zero-padded, sixteen characters. The form that appears in CI
   // logs and in manifests, so it is produced in exactly one place.
   std::string hex() const {
