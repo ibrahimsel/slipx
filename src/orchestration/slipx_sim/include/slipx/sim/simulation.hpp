@@ -40,13 +40,20 @@
 #include <string>
 #include <vector>
 
+#include "slipx/sense/rng.hpp"
 #include "slipx/sim/hash.hpp"
 #include "slipx/sim/manifest.hpp"
-#include "slipx/sim/rng.hpp"
 #include "slipx/vehicle_model.hpp"
 
 namespace slipx {
 namespace sim {
+
+// The seeded generator lives in slipx_sense, the lowest C++ layer above the
+// core that needs randomness (ADR-0037). It is named here as well, because a
+// run's per-agent random stream is an orchestration concept even though the
+// type that produces it is not.
+using sense::Rng;
+using sense::derive_seed;
 
 // An in-process agent policy (SIM-02): a callable, not a topic, not a socket.
 // Receives the agent's state at the start of the step, the simulation time,

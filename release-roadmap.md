@@ -466,7 +466,7 @@ directories and must respect the downward dependency order
   mine: the open-track test drove 20 m of a 30 m track, so removing the guard
   that stops an open track reporting laps changed nothing. Driving it end to
   end, where the distance equals the track length exactly, catches it.
-- [ ] **M5.4** `slipx_sense`, 2D LiDAR: every ray individually timestamped,
+- [x] **M5.4** `slipx_sense`, 2D LiDAR: every ray individually timestamped,
   emitter pose interpolated at that ray's timestamp so motion distortion
   emerges from the physics rather than being bolted on; per-sensor latency
   (constant plus jitter distribution) configurable independently of rate;
@@ -474,6 +474,24 @@ directories and must respect the downward dependency order
   probability behind a parameter.
   Done when: a fast-spinning agent produces a measurably distorted scan and a
   stationary one does not; latency and noise are seeded and reproducible.
+  Done 2026-08-15. The layering had to be settled first and it wanted a
+  record: `slipx_sense` and `slipx_scene` are siblings and neither includes
+  the other (ADR-0037), so the LiDAR receives the world as a function from a
+  ray to a distance and never learns what a track is. The seeded generator
+  moved from `slipx/sim/rng.hpp` to `slipx/sense/rng.hpp`, the lowest C++
+  layer above the core that needs it; no hash moved, which was checked rather
+  than assumed. `tools/dep_lint.py` now enforces the sibling rule.
+  Distortion is not modelled, it emerges: every ray is cast from the pose at
+  its own timestamp, so nothing multiplies anything by a speed and a
+  stationary car is undistorted without a special case. `slipx_scene` gained
+  `Walls`, which offsets the centreline by its widths (with the mitre, or
+  corners cut in by 29 per cent on a square) and intersects rays against it.
+  Mutation pass: 15 tried, 12 caught first time. Three escapes, all weak
+  tests rather than weak code, now covered: a measurement noise pushed past
+  the maximum range, a return from inside the blind zone that noise could
+  push out of it, and a closing wall on an open track, which needed a
+  three-point fixture because on two points that segment is the same one
+  reversed.
 - [ ] **M5.5** IMU model (bias random walk, scale error, noise density) and
   wheel-encoder odometry derived from simulated encoder counts, degrading
   correctly under wheel slip (this consumes L2's slip ratios).

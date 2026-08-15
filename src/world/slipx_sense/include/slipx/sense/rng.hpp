@@ -3,6 +3,12 @@
 //
 // Per-agent seeded random numbers (SIM-03).
 //
+// It lives in slipx_sense rather than in slipx_sim because sensing is the
+// lowest C++ layer above the core that needs randomness, and the alternatives
+// were worse: a copy in each consumer would be two generators that must agree
+// forever with nothing enforcing it, and a home in slipx_core would
+// contradict the rule this comment goes on to state (ADR-0037).
+//
 // Nothing in slipx_core uses this, and nothing in slipx_core ever will
 // (CORE-04): the vehicle model is a deterministic function of its arguments,
 // which is what makes a trajectory hash meaningful. Randomness enters above
@@ -29,14 +35,14 @@
 // shows up as twenty cars whose sensor noise looks suspiciously similar in the
 // first millisecond of a race.
 
-#ifndef SLIPX_SIM_RNG_HPP
-#define SLIPX_SIM_RNG_HPP
+#ifndef SLIPX_SENSE_RNG_HPP
+#define SLIPX_SENSE_RNG_HPP
 
 #include <cmath>
 #include <cstdint>
 
 namespace slipx {
-namespace sim {
+namespace sense {
 
 class Rng {
  public:
@@ -106,7 +112,7 @@ inline std::uint64_t derive_seed(std::uint64_t master_seed,
   return z ^ (z >> 31);
 }
 
-}  // namespace sim
+}  // namespace sense
 }  // namespace slipx
 
-#endif  // SLIPX_SIM_RNG_HPP
+#endif  // SLIPX_SENSE_RNG_HPP

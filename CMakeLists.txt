@@ -25,6 +25,7 @@ endif()
 slipx_assert_determinism_flags()
 
 option(SLIPX_BUILD_TESTS  "Build the C++ test suites"        ON)
+option(SLIPX_BUILD_SENSE  "Build slipx_sense"                ON)
 option(SLIPX_BUILD_SCENE  "Build slipx_scene"                ON)
 option(SLIPX_BUILD_SIM    "Build slipx_sim"                  ON)
 option(SLIPX_BUILD_PYTHON "Build the pybind11 extension"     OFF)
@@ -35,6 +36,7 @@ option(SLIPX_WERROR       "Treat warnings as errors"         OFF)
 # test suite with slipx_schema absent" claim is something CI can execute.
 option(SLIPX_CORE_ONLY "Configure slipx_core and nothing else" OFF)
 if(SLIPX_CORE_ONLY)
+  set(SLIPX_BUILD_SENSE OFF)
   set(SLIPX_BUILD_SCENE OFF)
   set(SLIPX_BUILD_SIM OFF)
   set(SLIPX_BUILD_PYTHON OFF)
@@ -45,6 +47,10 @@ if(SLIPX_BUILD_TESTS AND BUILD_TESTING)
 endif()
 
 add_subdirectory(src/core/slipx_core)
+
+if(SLIPX_BUILD_SENSE)
+  add_subdirectory(src/world/slipx_sense)
+endif()
 
 if(SLIPX_BUILD_SCENE)
   add_subdirectory(src/world/slipx_scene)
@@ -59,5 +65,6 @@ if(SLIPX_BUILD_PYTHON)
 endif()
 
 message(STATUS "SlipX ${PROJECT_VERSION}: build type ${CMAKE_BUILD_TYPE}, "
-               "scene=${SLIPX_BUILD_SCENE} sim=${SLIPX_BUILD_SIM} "
+               "sense=${SLIPX_BUILD_SENSE} scene=${SLIPX_BUILD_SCENE} "
+               "sim=${SLIPX_BUILD_SIM} "
                "python=${SLIPX_BUILD_PYTHON} tests=${SLIPX_BUILD_TESTS}")

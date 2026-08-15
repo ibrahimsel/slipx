@@ -59,6 +59,24 @@ LAYERS: list[tuple[str, Path]] = [
 
 LAYER_INDEX = {name: i for i, (name, _) in enumerate(LAYERS)}
 
+# Pairs that are siblings rather than layers, where NEITHER may include the
+# other (ADR-0037).
+#
+# The list above has to be a total order, because comparing two components
+# needs one, and that forces an order onto pairs the design does not order.
+# slipx_scene and slipx_sense are the case: the spec's diagram puts them on
+# one line, and the order between them here is an artefact of which was typed
+# first. Left as a plain layer comparison it would silently permit the scene
+# to include a sensor, which is half of a coupling that is not wanted in
+# either direction.
+#
+# A sensor model is about timing, noise and dropouts; what a ray hits is a
+# question for whoever owns geometry. They meet in slipx_sim, which is above
+# both and is allowed to know about each.
+SIBLINGS: list[tuple[str, str]] = [
+    ("slipx_scene", "slipx_sense"),
+]
+
 # The include prefix each component owns, so an include can be attributed to a
 # layer. slipx_core owns slipx/ at the top level; everything else namespaces
 # itself one level down.
@@ -179,6 +197,30 @@ def check_layering(verbose: bool) -> list[str]:
     return violations
 
 
+def check_siblings() -> list[str]:
+    """Neither of a sibling pair may include the other (ADR-0037)."""
+    forbidden: dict[str, set[str]] = {}
+    for one, other in SIBLINGS:
+        forbidden.setdefault(one, set()).add(other)
+        forbidden.setdefault(other, set()).add(one)
+
+    directories = dict(LAYERS)
+    violations = []
+    for name, banned in sorted(forbidden.items()):
+        for path in sources_of(REPO_ROOT / directories[name], include_tests=True):
+            for _, header in includes_in(path):
+                owner = owner_of(header)
+                if owner in banned:
+                    violations.append(
+                        f"{path.relative_to(REPO_ROOT)}: {name} includes "
+                        f"<{header}>, which belongs to {owner}. Those two are "
+                        f"siblings and neither may include the other "
+                        f"(ADR-0037); they meet in slipx_sim, which is above "
+                        f"both."
+                    )
+    return violations
+
+
 def check_core_dependencies() -> list[str]:
     """slipx_core may include the standard library and nothing else."""
     violations = []
@@ -266,6 +308,7 @@ def main() -> int:
     violations += check_core_dependencies()
     violations += check_core_link_line()
     violations += check_layering(args.verbose)
+    violations += check_siblings()
     violations += check_python_layering()
 
     if violations:

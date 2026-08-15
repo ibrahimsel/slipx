@@ -19,7 +19,7 @@ using slipx::Tier;
 using slipx::VehicleParams;
 using slipx::VehicleState;
 using slipx::sim::AgentSpec;
-using slipx::sim::Rng;
+using slipx::sense::Rng;
 using slipx::sim::Simulation;
 using slipx::sim::SimulationConfig;
 

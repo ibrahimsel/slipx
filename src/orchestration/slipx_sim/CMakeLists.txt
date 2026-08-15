@@ -56,7 +56,9 @@ target_include_directories(slipx_sim PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(slipx_sim PUBLIC slipx::core)
+# slipx::sense for the seeded generator, which lives at the lowest layer
+# above the core that needs it (ADR-0037).
+target_link_libraries(slipx_sim PUBLIC slipx::core slipx::sense)
 target_compile_features(slipx_sim PUBLIC cxx_std_17)
 slipx_apply_determinism_flags(slipx_sim)
 

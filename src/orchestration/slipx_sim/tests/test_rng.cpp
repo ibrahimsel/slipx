@@ -16,12 +16,12 @@
 #include <set>
 #include <vector>
 
-#include "slipx/sim/rng.hpp"
+#include "slipx/sense/rng.hpp"
 
 namespace {
 
-using slipx::sim::derive_seed;
-using slipx::sim::Rng;
+using slipx::sense::derive_seed;
+using slipx::sense::Rng;
 
 // SplitMix64 from seed 0, as published. If this test fails, the engine has
 // been changed, and every reference hash in the repository is now wrong.

@@ -43,7 +43,7 @@
 #include "slipx/sim/hash.hpp"
 #include "slipx/sim/manifest.hpp"
 #include "slipx/sim/manoeuvres.hpp"
-#include "slipx/sim/rng.hpp"
+#include "slipx/sense/rng.hpp"
 #include "slipx/sim/simulation.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
