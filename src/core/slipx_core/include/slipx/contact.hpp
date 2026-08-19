@@ -106,6 +106,15 @@ struct ContactImpulse {
   Vec2 delta_velocity_a, delta_velocity_b;                     //   [m/s]
   double delta_yaw_rate_a = 0.0, delta_yaw_rate_b = 0.0;       // [rad/s]
   Vec2 delta_position_a, delta_position_b;                     //     [m]
+
+  // Each body's contribution to the closing speed at the contact point,
+  // along the normal and positive TOWARD the other body, yaw included.
+  // Their sum is the closing speed. Reported for every touching pair,
+  // approaching or not, because who was moving at whom is the fact a race
+  // referee attributes fault from (ADR-0046) and it is already computed
+  // here; a separating pair simply reports non-positive numbers.
+  double approach_a = 0.0;   //                                     [m/s]
+  double approach_b = 0.0;   //                                     [m/s]
 };
 
 namespace contact_detail {
@@ -282,6 +291,8 @@ inline ContactImpulse resolve_contact(const ContactBody& a,
                 b.velocity.y + b.yaw_rate * rb.x};
   const Vec2 v_rel = vb - va;   // of b relative to a
   const double vn = v_rel.dot(n);
+  out.approach_a = va.dot(n);
+  out.approach_b = -vb.dot(n);
 
   // Normal impulse, only when the bodies are closing (vn < 0). A pair that
   // is penetrating but already separating gets the positional projection

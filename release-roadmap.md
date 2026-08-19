@@ -901,7 +901,8 @@ because parameter sets compound and racing features do not.
 
 ## M7. P3: racing
 
-Status: in-progress; M7.1 done. Size: extra large (many weeks). Release:
+Status: in-progress; M7.1 to M7.5 done, M7.9 decided (deferred). Size:
+extra large (many weeks). Release:
 0.5.0 at the end. Hash impact: contact and rollover enter `slipx_core`
 numerical paths; expect deliberate hash movements, recorded per the standing
 discipline. (M7.1 moved none: detection reads diagnostics the core already
@@ -1033,13 +1034,47 @@ computed, and the conformance script re-checked all six rows.)
   order, inactive boxes sweeping). Answer-preserving weakenings of the
   traversal pruning were not tried: the leaf test is exact and the boxes
   conservative, so those mutants cost only time by construction.
-- [ ] **M7.5** Race control per the published RoboRacer ruleset: time trial,
+- [x] **M7.5** Race control per the published RoboRacer ruleset: time trial,
   obstacle avoidance test, head-to-head, grid and rolling starts; contact
   attribution from relative geometry and closing velocity with the ruleset's
   penalty logic; the ruleset repository tracked as a versioned dependency with
   the implemented revision stated.
   Done when: scenario tests cover each procedure and the build states its
   ruleset revision.
+  Done 2026-08-19, recorded as ADR-0046: `slipx_race`, a new component
+  above the sim and the scene (the dependency lint gained the layer in the
+  same change), implementing `f1tenth/roboracer_rules` at revision
+  `202c3771465b1690c0e28618271cca91d5c842c9` (2025-10-13), stated by the
+  build via `ruleset_statement()` and cited rule by rule at each
+  implementation site. Time trial with 2.4.5's two-category scoring and
+  tie-by-laps; the obstacle test of 2.5.1.6 (an ordinary footprinted agent
+  is the obstacle, contact is the sim's own model, "complete stop" is an
+  operationalised floor that arms only once the car moves); head-to-head
+  rounds and best-of-three matches per 2.5, with grid starts one car width
+  apart, side swap and a seeded round-three coin flip, light contact
+  recorded once per touch episode and never penalised, fault from approach
+  contributions with ties against the car behind, crash restarts at 2 m
+  plus the 1 m recovery bonus, three warnings a disqualification that ends
+  the match, DNFs handing the round to the survivor, and the border
+  enforced by rule (a wall crash places the car at rest where it left)
+  because nothing in SlipX collides a car with a wall. Rolling starts ship
+  as a labelled non-ruleset extension. The sim gained per-step
+  ContactEvents (pair, impulse, per-car approach) and the core's impulse
+  reports the approach split. Every referee judgment is a named RaceConfig
+  field labelled as a mechanisation. Python bindings for race control are
+  deferred to M7.8's harness decision. Scenario tests cover every
+  procedure; a match replayed is the same match.
+  Mutation pass: 20 tried, 20 caught, after three test gaps the drafting
+  itself exposed were closed first (an exact streak assertion, a
+  wrap-around obstacle placement, a bound on light-contact episodes):
+  fault inverted, light threshold dropped, level restart, bonus dropped,
+  warnings never disqualifying, DQ ending only the round, sides never
+  swapping, simultaneous finish to the car behind, border crash leaving
+  the car rolling, streak surviving a crash, stop check firing on a
+  standing start, obstacle contact ignored, pass distance unwrapped,
+  streak ranking inverted, ties ignoring laps, grid on the centreline,
+  pose never wrapping, DNF rewarding the DNF'd car, light contact every
+  step, rolling start at rest.
 - [ ] **M7.6** The structured event stream: every race-control outcome as
   timestamped, machine-readable events, encoded as MCAP so the event stream
   and the run sinks are one format, not two. Any leaderboard, report or CI job

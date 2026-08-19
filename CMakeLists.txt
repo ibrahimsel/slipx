@@ -28,6 +28,7 @@ option(SLIPX_BUILD_TESTS  "Build the C++ test suites"        ON)
 option(SLIPX_BUILD_SENSE  "Build slipx_sense"                ON)
 option(SLIPX_BUILD_SCENE  "Build slipx_scene"                ON)
 option(SLIPX_BUILD_SIM    "Build slipx_sim"                  ON)
+option(SLIPX_BUILD_RACE   "Build slipx_race"                 ON)
 option(SLIPX_BUILD_PYTHON "Build the pybind11 extension"     OFF)
 option(SLIPX_WERROR       "Treat warnings as errors"         OFF)
 
@@ -39,6 +40,7 @@ if(SLIPX_CORE_ONLY)
   set(SLIPX_BUILD_SENSE OFF)
   set(SLIPX_BUILD_SCENE OFF)
   set(SLIPX_BUILD_SIM OFF)
+  set(SLIPX_BUILD_RACE OFF)
   set(SLIPX_BUILD_PYTHON OFF)
 endif()
 
@@ -58,6 +60,11 @@ endif()
 
 if(SLIPX_BUILD_SIM)
   add_subdirectory(src/orchestration/slipx_sim)
+endif()
+
+# Race control needs the simulation and the track at once (ADR-0046).
+if(SLIPX_BUILD_RACE AND SLIPX_BUILD_SIM AND SLIPX_BUILD_SCENE)
+  add_subdirectory(src/orchestration/slipx_race)
 endif()
 
 if(SLIPX_BUILD_PYTHON)

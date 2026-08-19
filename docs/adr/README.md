@@ -102,3 +102,4 @@ Use [`template.md`](template.md) for a new record.
 | [0043](0043-contact-is-one-impulse-between-declared-footprints.md) | Contact is one planar impulse between declared footprints | Proposed |
 | [0044](0044-the-barrier-is-a-step-tagged-mailbox.md) | The barrier is a step-tagged mailbox, and a miss has three answers | Proposed |
 | [0045](0045-the-broadphase-is-a-static-bvh-plus-a-refit-overlay.md) | The broadphase is a static BVH plus a refit overlay, and the grid keeps the wall rays | Proposed |
+| [0046](0046-race-control-is-a-layer-that-mechanises-the-ruleset.md) | Race control is a layer above the sim that mechanises the ruleset | Proposed |

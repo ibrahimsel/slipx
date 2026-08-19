@@ -252,6 +252,7 @@ void Simulation::advance() {
 // step, which is order-dependent but deterministic, and the order is the
 // agent numbering the manifest records.
 void Simulation::resolve_contacts() {
+  contacts_.clear();
   const auto body_of = [](const Agent& a) {
     ContactBody b;
     b.cog = a.state.pos.xy();
@@ -311,6 +312,17 @@ void Simulation::resolve_contacts() {
         apply(b, impulse.delta_velocity_b, impulse.delta_yaw_rate_b,
               impulse.delta_position_b);
       }
+
+      ContactEvent event;
+      event.step = steps_ + 1;
+      event.a = static_cast<std::uint32_t>(i);
+      event.b = static_cast<std::uint32_t>(j);
+      event.point = geometry.point;
+      event.normal = geometry.normal;
+      event.jn = impulse.jn;
+      event.approach_a = impulse.approach_a;
+      event.approach_b = impulse.approach_b;
+      contacts_.push_back(event);
     }
   }
 }
@@ -490,6 +502,7 @@ void Simulation::reset() {
   }
   steps_ = 0;
   input_log_.clear();
+  contacts_.clear();
   pacing_started_ = false;
 }
 

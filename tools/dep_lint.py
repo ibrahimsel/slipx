@@ -4,9 +4,9 @@
 
 """NFR-06: the dependency direction of SRS 2.1, enforced automatically.
 
-    slipx_registry -> slipx_id -> slipx_ros -> slipx_sim
-                   -> slipx_scene / slipx_sense
-                   -> slipx (Python) -> slipx_schema -> slipx_core
+    slipx_registry -> slipx_id -> slipx_ros -> slipx (Python)
+                   -> slipx_race -> slipx_sim
+                   -> slipx_scene / slipx_sense -> slipx_schema -> slipx_core
 
 Dependencies flow strictly downward. No component may depend on anything above
 it, and slipx_core may depend on nothing but the C++ standard library.
@@ -50,6 +50,9 @@ LAYERS: list[tuple[str, Path]] = [
     ("slipx_sense", Path("src/world/slipx_sense")),
     ("slipx_scene", Path("src/world/slipx_scene")),
     ("slipx_sim", Path("src/orchestration/slipx_sim")),
+    # Race control sits above the sim and the scene because the referee
+    # needs both at once, and below the bindings (ADR-0046).
+    ("slipx_race", Path("src/orchestration/slipx_race")),
     ("slipx", Path("src/bindings/slipx")),
     ("slipx_c", Path("src/bindings/slipx_c")),
     ("slipx_ros", Path("src/integration/slipx_ros")),
@@ -81,6 +84,7 @@ SIBLINGS: list[tuple[str, str]] = [
 # layer. slipx_core owns slipx/ at the top level; everything else namespaces
 # itself one level down.
 INCLUDE_OWNERS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^slipx/race/"), "slipx_race"),
     (re.compile(r"^slipx/sim/"), "slipx_sim"),
     (re.compile(r"^slipx/scene/"), "slipx_scene"),
     (re.compile(r"^slipx/sense/"), "slipx_sense"),

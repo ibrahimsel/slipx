@@ -227,6 +227,23 @@ struct SimulationConfig {
   double barrier_timeout = 0.0;
 };
 
+// One resolved contact, reported so a layer above (race control, the event
+// stream) can interpret it; the sim resolves the physics and holds no
+// opinion about fault (ADR-0046). The list for the most recent step is
+// available through Simulation::contacts().
+struct ContactEvent {
+  std::uint64_t step = 0;    // the step count after the advance that hit
+  std::uint32_t a = 0;       // agent indices, a < b
+  std::uint32_t b = 0;
+  Vec2 point;                // contact point, world                     [m]
+  Vec2 normal;               // unit, from a toward b
+  double jn = 0.0;           // normal impulse delivered               [N s]
+  // Each car's contribution to the closing speed, positive toward the
+  // other car; the sum is the closing speed (see contact.hpp).
+  double approach_a = 0.0;   //                                        [m/s]
+  double approach_b = 0.0;   //                                        [m/s]
+};
+
 // Everything a running simulation is, at one instant (SIM-08).
 //
 // The vehicle state is trivially copyable by design, so the expensive part of
@@ -323,6 +340,11 @@ class Simulation {
   // still running.
   const std::optional<DnfEvent>& dnf(std::size_t i) const;
 
+  // Every contact the most recent step resolved, in pair order. Cleared and
+  // refilled by each advance (and by each replayed step), so a consumer
+  // polls it between steps; keeping history is the consumer's job.
+  const std::vector<ContactEvent>& contacts() const { return contacts_; }
+
   std::string trajectory_hash() const;
   std::string agent_trajectory_hash(std::size_t i) const;
 
@@ -415,6 +437,10 @@ class Simulation {
   std::vector<Agent> agents_;
   // Preallocated in add_agent so that advance() does no allocation of its own.
   std::vector<DriveInput> pending_inputs_;
+  // Refilled by every contact pass. Grows on the first step whose contact
+  // count exceeds anything seen before and keeps its capacity after, so the
+  // steady state allocates nothing.
+  std::vector<ContactEvent> contacts_;
   std::vector<DriveInput> input_log_;
   std::uint64_t steps_ = 0;
   bool logging_inputs_ = false;

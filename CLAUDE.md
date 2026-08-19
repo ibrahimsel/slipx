@@ -42,6 +42,7 @@ resolved in favour of embeddability.
 | `src/core/slipx_schema` | JSON Schemas and the Python reference parser; independently versioned |
 | `src/bindings/slipx` | pybind11 package: bindings, car loader, `slipx.sinks`, conformance console script |
 | `src/orchestration/slipx_sim` | fixed-step lockstep orchestrator, manifests, replay, conformance binary |
+| `src/orchestration/slipx_race` | race control: the pinned RoboRacer ruleset mechanised (starts, time trial, obstacle test, head-to-head, events) |
 | `src/bindings/slipx_c`, `src/world/*`, `src/integration/slipx_ros`, `src/tooling/*` | placeholders for later phases |
 | `conformance/reference_hashes.tsv` | published trajectory hashes, keyed by build |
 | `docs/racing/` | the tutorial series (its own brief below) |

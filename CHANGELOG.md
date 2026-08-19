@@ -21,6 +21,24 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Race control** (ADR-0046). A new component, `slipx_race`, above the
+  sim and the scene: the referee that the pinned RoboRacer ruleset
+  (`github.com/f1tenth/roboracer_rules` @ `202c377`, 2025-10-13, stated by
+  the build and printed by `race::ruleset_statement()`) turns into code.
+  Time trials with the two-category scoring of rule 2.4.5, the obstacle
+  avoidance test of 2.5.1.6 (passing means not touching it and not coming
+  to a complete stop), and head-to-head rounds and matches per 2.5:
+  side-by-side grid starts one car width apart, first to the lap count,
+  light contact recorded and never penalised, crashes attributed from
+  relative geometry and closing speed (the car contributing more approach
+  speed is at fault), restarts with the at-fault car set back two metres
+  plus one when the victim still runs, three warnings a disqualification,
+  and the border enforced by rule rather than by physics, because nothing
+  in SlipX collides a car with a wall. Every judgment the rulebook leaves
+  to referees is a named `RaceConfig` field, labelled as a mechanisation.
+  Every outcome is a flat timestamped `RaceEvent` for the event stream to
+  encode. The sim now reports per-step `ContactEvent`s (pair, impulse,
+  and each car's approach contribution) for race control to interpret.
 - **The racing broadphase, and a renegotiated performance target**
   (ADR-0045). `slipx/scene/broadphase.hpp`: a prebuilt `SceneBvh` over the
   wall segments (fully specified build, ordered pruned traversal,
