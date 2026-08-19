@@ -712,10 +712,14 @@ directories and must respect the downward dependency order
 
 ## M6. P2: identification and the registry
 
-Status: in-progress. Size: extra large (many weeks). Release: 0.4.0 at the
-end. This phase is the differentiator; the SRS is explicit that it must not
-slip behind the racing features, because parameter sets compound and racing
-features do not.
+Status: in-progress; every buildable task is done (M6.1 to M6.5, M6.9, and
+M6.6's staging). What remains needs the outside world: the user pushes the
+registry (M6.6), the chassis decision is "not now" (M6.7), the exit gate
+needs three external contributions (M6.8), and the release is deferred to
+the end of M7 by the 2026-08-19 decision (M6.10). Size: extra large
+(many weeks). Release: 0.4.0 at the end. This phase is the differentiator;
+the SRS is explicit that it must not slip behind the racing features,
+because parameter sets compound and racing features do not.
 
 - [x] **M6.1** The manoeuvre library: skidpad, step steer, ramp steer,
   straight-line acceleration, coastdown, circle-to-slip. Each with a written
@@ -852,6 +856,11 @@ features do not.
   parameter set is worth more than its cost.
   Done when: decided; if yes, one fitted set with a validation report exists
   and is labelled `identified`, not `provisional`.
+  Decided 2026-08-19 by the user: not now. The P2 exit gate rests on
+  external contributors' cars; the identification pipeline is built and
+  synthetically proven, so a chassis bought later is exercised immediately.
+  Left unticked because a "yes" would still change what exists; revisit at
+  the 0.4.0 release at the latest.
 - [ ] **M6.8** P2 exit gate (external fact): three parameter sets in the
   registry contributed by people who are not the maintainer, each with an
   attached validation report. Seed by co-authoring with two friendly teams.
@@ -916,10 +925,16 @@ expect deliberate hash movements, recorded per the standing discipline.
   Done when: each has tests or, for the RMW decision, a recorded benchmark.
 - [ ] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
-- [ ] **M7.9** **DECISION**: governance. If a competition adopts SlipX,
+- [x] **M7.9** **DECISION**: governance. If a competition adopts SlipX,
   ownership of the ruleset implementation becomes contested; decide before,
   not after.
   Done when: recorded (ADR or governance doc).
+  Decided 2026-08-19 by the user, and recorded here as the governance
+  position: deferred, deliberately. Deciding governance for an adoption
+  that has not happened is getting ahead of ourselves; the decision is
+  taken when and if someone adopts, and the tripwire is the first adoption
+  enquiry. Until then the implementation states its ruleset revision
+  (M7.5) and nothing more is promised.
 - [ ] **M7.10** P3 exit gate (external fact): one course or one competition
   runs an evaluation on SlipX.
   Done when: it has happened and can be cited.
