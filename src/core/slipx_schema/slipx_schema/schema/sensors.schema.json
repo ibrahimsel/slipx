@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.4.0/sensors.schema.json",
+  "$id": "https://slipx.dev/schema/0.5.0/sensors.schema.json",
   "title": "SlipX sensor configuration",
-  "description": "sensors.yaml: sensor instances, their rates, phases, noise and latency.\n\nNothing consumes this at schema 0.1.0. slipx_sense arrives in P1 (SENSE-01 to SENSE-05) and the 3D scan patterns in P4. It is defined now because the shape of the file determines the shape of the car directory, and a car directory written during P0 should still validate in P1.\n\nThe one structural decision already made here: rate and latency are configured independently (SENSE-02), and each sensor carries a phase. Sensors do not run on the physics step; the physics runs at 1 kHz and sensors sample on their own schedule, which is what makes motion distortion emerge from the integration rather than being applied to it afterwards (SENSE-01).",
+  "description": "sensors.yaml: sensor instances, their schedules, transport and model parameters.\n\nConsumed since 0.5.0 by the sensor rig (ADR-0047): the loader maps each entry onto the matching sensor model's parameter struct and refuses, naming the sensor and the field, anything it cannot fill (ADR-0048). Each entry may carry a block named after its type holding that model's full parameter set; the blocks are optional at the schema level, so migrated older files stay valid, and strictly validated when present, because a partially specified sensor is a mistake rather than a smaller sensor.\n\nThe structural decisions: rate and latency are configured independently (SENSE-02) and each sensor carries a phase, because sensors do not run on the physics step. The physics runs at 1 kHz and sensors sample on their own schedule, which is what makes motion distortion emerge from the integration rather than being applied to it afterwards (SENSE-01). Latency jitter is the half-width of a uniform distribution, matching what the models implement: transport delay is bounded, and it must not exceed the constant or a message could be stamped before the instant it measured (enforced at build time; JSON Schema cannot compare two fields).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "sensors"],
@@ -30,12 +30,12 @@
           "maxLength": 64
         },
         "type": {
-          "description": "Sensor model. lidar_2d, imu and wheel_encoder arrive in P1; lidar_3d in P4 (SENSE-06).",
+          "description": "Sensor model. lidar_2d, imu and wheel_encoder are built; lidar_3d arrives in P4 (SENSE-06) and is refused by name until then, never substituted by a simpler sensor.",
           "type": "string",
           "enum": ["lidar_2d", "lidar_3d", "imu", "wheel_encoder"]
         },
         "rate": {
-          "description": "Sample rate. [Hz] Independent of the physics rate and of the latency below.",
+          "description": "Sample rate. [Hz] Independent of the physics rate and of the latency below. For a scanning LiDAR this is the revolution rate, and one scan takes one revolution.",
           "type": "number", "exclusiveMinimum": 0.0, "maximum": 10000.0
         },
         "phase": {
@@ -43,25 +43,95 @@
           "type": "number", "minimum": 0.0, "exclusiveMaximum": 1.0
         },
         "mount": {
-          "description": "Name of the frame in the URDF this sensor is mounted to. The TF tree that runs on the real car owns the transform, so it is referenced here rather than duplicated.",
+          "description": "Name of the frame in the URDF this sensor is mounted to. The TF tree that runs on the real car owns the transform, so it is referenced here rather than duplicated, and nothing in the simulator consumes it.",
           "type": "string", "maxLength": 128
         },
         "latency": {
-          "description": "Transport and processing delay, modelled separately from rate (SENSE-02).",
+          "description": "Transport and processing delay, modelled separately from rate (SENSE-02): a sensor publishing at 40 Hz with 25 ms of delay is not the same as one publishing at 40 Hz without it.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "constant": { "description": "[s]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
-            "jitter_stddev": { "description": "[s]", "type": "number", "minimum": 0.0, "maximum": 1.0 }
+            "jitter": { "description": "Half-width of the uniform jitter about the constant; must not exceed it, which is enforced at build time. [s]", "type": "number", "minimum": 0.0, "maximum": 1.0 }
           }
         },
-        "noise": {
-          "description": "Sensor-specific noise parameters. Left open at 0.1.0 because the fields differ per sensor type and slipx_sense has not yet fixed them; it is validated as a free object rather than pretending to a structure that has not been designed.",
-          "type": "object"
-        },
         "dropout_probability": {
-          "description": "Per-sample dropout probability (SENSE-03). [-]",
+          "description": "Per-sample dropout probability, before any material factor the world reports (SENSE-03). Consumed by the LiDAR model. [-]",
           "type": "number", "minimum": 0.0, "maximum": 1.0
+        },
+        "lidar_2d": { "$ref": "#/$defs/lidar_2d" },
+        "imu": { "$ref": "#/$defs/imu" },
+        "wheel_encoder": { "$ref": "#/$defs/wheel_encoder" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "lidar_2d" } }, "required": ["type"] },
+          "then": { "properties": { "imu": false, "wheel_encoder": false } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "imu" } }, "required": ["type"] },
+          "then": { "properties": { "lidar_2d": false, "wheel_encoder": false } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "wheel_encoder" } }, "required": ["type"] },
+          "then": { "properties": { "lidar_2d": false, "imu": false } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "lidar_3d" } }, "required": ["type"] },
+          "then": { "properties": { "lidar_2d": false, "imu": false, "wheel_encoder": false } }
+        }
+      ]
+    },
+    "lidar_2d": {
+      "description": "The 2D scanning LiDAR's parameters. Every ray is individually timestamped and the scan takes one revolution (SENSE-01); the sector is stated in the sensor frame relative to the car's heading.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rays", "angle_min", "angle_max", "range_min", "range_max",
+                   "noise_base", "noise_per_metre"],
+      "properties": {
+        "rays": { "description": "Rays per scan. [-]", "type": "integer", "minimum": 2, "maximum": 100000 },
+        "angle_min": { "description": "Start of the angular sector, sensor frame, positive left (ISO 8855). [rad]", "type": "number", "minimum": -3.1415926535897932, "maximum": 3.1415926535897932 },
+        "angle_max": { "description": "End of the angular sector; must exceed angle_min, enforced by the model. [rad]", "type": "number", "minimum": -3.1415926535897932, "maximum": 3.1415926535897932 },
+        "range_min": { "description": "Below this the unit reports nothing. [m]", "type": "number", "minimum": 0.0, "maximum": 1000.0 },
+        "range_max": { "description": "Beyond this the unit reports nothing. [m]", "type": "number", "exclusiveMinimum": 0.0, "maximum": 1000.0 },
+        "noise_base": { "description": "Range noise floor: the standard deviation at zero range. [m]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "noise_per_metre": { "description": "Range noise growth: standard deviation added per metre of range. [-]", "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      }
+    },
+    "imu": {
+      "description": "The IMU's three error mechanisms on their three timescales: white noise stated as a density (per root hertz, so sampling faster gives noisier samples and the same answer after averaging), a bias random walk that averaging does not remove, and fixed scale errors that are properties of the unit. Initial biases are stated, not drawn: zero is a legitimate and unusual value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accel_noise_density", "gyro_noise_density",
+                   "accel_bias_walk", "gyro_bias_walk",
+                   "accel_scale_error", "gyro_scale_error",
+                   "accel_bias_x", "accel_bias_y", "gyro_bias_z"],
+      "properties": {
+        "accel_noise_density": { "description": "[m/s^2 / sqrt(Hz)]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "gyro_noise_density": { "description": "[rad/s / sqrt(Hz)]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "accel_bias_walk": { "description": "[m/s^2 / sqrt(s)]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "gyro_bias_walk": { "description": "[rad/s / sqrt(s)]", "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "accel_scale_error": { "description": "Fixed multiplicative error; 0.01 reads 1 per cent high. [-]", "type": "number", "minimum": -0.5, "maximum": 0.5 },
+        "gyro_scale_error": { "description": "[-]", "type": "number", "minimum": -0.5, "maximum": 0.5 },
+        "accel_bias_x": { "description": "Starting bias, body x. [m/s^2]", "type": "number", "minimum": -10.0, "maximum": 10.0 },
+        "accel_bias_y": { "description": "Starting bias, body y. [m/s^2]", "type": "number", "minimum": -10.0, "maximum": 10.0 },
+        "gyro_bias_z": { "description": "Starting bias, yaw rate. [rad/s]", "type": "number", "minimum": -1.0, "maximum": 1.0 }
+      }
+    },
+    "wheel_encoder": {
+      "description": "Wheel encoders and the odometry built from them. The radius here is deliberately the one somebody typed into a config file, allowed to disagree with the car's own wheel_radius, because typing the wrong one is a common and instructive failure. Needs a tier that computes wheel speeds (L2 and above), which is enforced at build time by name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counts_per_revolution", "wheel_radius", "wheels_used"],
+      "properties": {
+        "counts_per_revolution": { "description": "Counts per full wheel revolution, after gearing and quadrature decoding. [-]", "type": "number", "exclusiveMinimum": 0.0, "maximum": 1000000.0 },
+        "wheel_radius": { "description": "The radius the odometry multiplies by. [m]", "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0 },
+        "wheels_used": {
+          "description": "Which wheels the odometry averages, in the core's wheel order: front-left, front-right, rear-left, rear-right. A rear-drive car with a motor encoder measures the driven wheels and has the worst possible odometry under acceleration, which is the honest default to state.",
+          "type": "array",
+          "items": { "type": "boolean" },
+          "minItems": 4,
+          "maxItems": 4
         }
       }
     }

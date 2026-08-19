@@ -127,3 +127,58 @@ register("track", 1)(_identity)
 
 for _kind in _KINDS_0_1_0 + ("track",):
     register(_kind, 3)(_identity)
+
+
+# ------------------------------------------------------------- 0.4.0 -> 0.5.0
+#
+# 0.5.0 makes the sensor file carry what the sensor models consume
+# (ADR-0048). Two of its changes touch fields a 0.4.0 file could hold:
+#
+# - ``latency.jitter_stddev`` becomes ``latency.jitter``, the half-width of
+#   the uniform jitter the models actually implement. The value is converted
+#   by the square root of three, which preserves the variance the author
+#   stated: the same physical quantity under a new parameterisation, not an
+#   invented number.
+# - The free ``noise`` object is gone, replaced by typed per-sensor blocks.
+#   Its keys were never defined, so no migration can restructure a non-empty
+#   one; per the module docstring, that fails loudly rather than dropping
+#   data. An empty one carried nothing and is removed.
+#
+# Every other kind moves by identity.
+
+_SQRT_3 = 3.0 ** 0.5
+
+
+@register("sensors", 4)
+def _sensors_0_4_to_0_5(document: Document) -> Document:
+    out = dict(document)
+    migrated = []
+    for entry in document.get("sensors", []):  # type: ignore[union-attr]
+        working = dict(entry)
+        noise = working.pop("noise", None)
+        if noise:
+            name = working.get("name", "?")
+            raise ValueError(
+                f"sensor '{name}' carries a free-form 'noise' object, whose "
+                f"keys were never defined, so no migration can restructure "
+                f"it without guessing. Restate it in the 0.5.0 shape: a "
+                f"typed block named after the sensor type (ADR-0048)."
+            )
+        latency = working.get("latency")
+        if isinstance(latency, dict) and "jitter_stddev" in latency:
+            latency = dict(latency)
+            sigma = latency.pop("jitter_stddev")
+            if isinstance(sigma, (int, float)):
+                # Half-width of the uniform jitter with the same variance the
+                # author stated as a standard deviation.
+                latency["jitter"] = float(sigma) * _SQRT_3
+            else:
+                latency["jitter"] = sigma  # let validation name the problem
+            working["latency"] = latency
+        migrated.append(working)
+    out["sensors"] = migrated
+    return out
+
+
+for _kind in ("car", "dynamics", "limits", "provenance", "tyre", "track"):
+    register(_kind, 4)(_identity)

@@ -32,7 +32,10 @@ contact patches, load transfer, MF-lite tyres, a differential, an ESC, a
 battery and a steering servo. L3 raises rather than silently giving you a
 simpler model, and so does any tier a build does not implement.
 
-Sensors and the ROS 2 layer arrive in P1.
+Per-agent sensors (2D LiDAR with motion distortion, IMU, wheel odometry) run
+through ``slipx.SensorRig``, an observer that cannot perturb the trajectory
+(ADR-0047), configured by hand or from a car directory's ``sensors.yaml``
+via ``slipx.sensors_for`` (ADR-0048). The ROS 2 layer is still to come.
 
 No parameter set shipped with SlipX has been validated against a real car. The
 honest phrasing for anything built on them is "physically structured and
@@ -45,6 +48,7 @@ from __future__ import annotations
 # C++ tests run against, so there is no second implementation to drift.
 from ._slipx import (  # noqa: F401
     AgentManifest,
+    AgentSensors,
     AgentSpec,
     CombinedForce,
     CommandMailbox,
@@ -55,11 +59,26 @@ from ._slipx import (  # noqa: F401
     DnfEvent,
     DriveInput,
     DriveLayout,
+    EncoderSample,
+    EncoderSensor,
+    EncoderSpec,
+    Hit,
+    ImuReading,
+    ImuSample,
+    ImuSensor,
+    ImuSpec,
     Integrator,
+    LidarSensor,
+    LidarSpec,
     MfLite,
+    OdometryReading,
+    Pose,
     Provenance,
+    Ray,
     Rng,
     RunManifest,
+    Scan,
+    SensorRig,
     Simulation,
     SimulationConfig,
     StepDiagnostics,
@@ -92,6 +111,7 @@ from .cars import (
     reference_car_path,
     to_vehicle_params,
 )
+from .sensors import sensors_for
 from .version import __version__
 
 # Recording a run and emitting it (SINK-01 to SINK-05, ADR-0028). Standard
@@ -102,6 +122,7 @@ from . import sinks  # noqa: E402  (after version, which record_run reports)
 
 __all__ = [
     "AgentManifest",
+    "AgentSensors",
     "AgentSpec",
     "Car",
     "CombinedForce",
@@ -113,11 +134,26 @@ __all__ = [
     "DnfEvent",
     "DriveInput",
     "DriveLayout",
+    "EncoderSample",
+    "EncoderSensor",
+    "EncoderSpec",
+    "Hit",
+    "ImuReading",
+    "ImuSample",
+    "ImuSensor",
+    "ImuSpec",
     "Integrator",
+    "LidarSensor",
+    "LidarSpec",
     "MfLite",
+    "OdometryReading",
+    "Pose",
     "Provenance",
+    "Ray",
     "Rng",
     "RunManifest",
+    "Scan",
+    "SensorRig",
     "Simulation",
     "SimulationConfig",
     "StepDiagnostics",
@@ -145,6 +181,7 @@ __all__ = [
     "peak_lateral_force",
     "peak_longitudinal_force",
     "reference_car_path",
+    "sensors_for",
     "sinks",
     "step_steer",
     "to_vehicle_params",

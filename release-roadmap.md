@@ -2,11 +2,12 @@
 
 Last updated: 2026-08-19, the session after the M7.1-M7.6 one: M7.8 landed
 (the leaderboard harness's tests and mutation pass; the code itself was
-staged the session before), and the WSL environment check found the user's
-apt install completed, so ROS 2 Jazzy with ackermann-msgs, colcon and
-rmw-zenoh-cpp plus g++-11, clang-18, ninja and Python tooling are all
-present: M5.7 and the ROS halves of M7.7 are UNBLOCKED, and M7.7 is the
-next task. In the session before, M7.1 through M7.6 were built (rollover
+staged the session before), and M7.7's sensors half landed as two slices,
+the sensor rig (ADR-0047) and the sensors.yaml wiring with schema 0.5.0
+(ADR-0048). The WSL environment check found the user's apt install
+completed, so ROS 2 Jazzy with ackermann-msgs, colcon and rmw-zenoh-cpp
+plus g++-11, clang-18, ninja and Python tooling are all present: M5.7 and
+the ROS halves of M7.7 are UNBLOCKED and are the next task. In the session before, M7.1 through M7.6 were built (rollover
 events, contact, the barrier, the broadphase with the 20-agent target
 renegotiated to over 7x, race control on the pinned ruleset, the MCAP
 event stream; ADR-0042 to ADR-0046) and M5.9 and M5.12 closed.
@@ -1169,6 +1170,29 @@ computed, and the conformance script re-checked all six rows.)
   wired to these structs through the loader (schema 0.5.0, its own ADR)
   and the Python surface; then the ROS halves, unblocked by the completed
   environment install.
+  The sensors half COMPLETED later on 2026-08-19 with that wiring
+  (ADR-0048): schema 0.5.0 gives each sensor entry a typed block carrying
+  its model's full parameter set (strict when present, refused by name at
+  build when absent, per the M1 pattern), renames latency.jitter_stddev to
+  latency.jitter (the uniform half-width the models implement) with a
+  variance-preserving migration, and fails a free-form noise object loudly
+  rather than guessing at undefined keys. `slipx.sensors_for` builds
+  AgentSensors from a loaded car, refusing lidar_3d outright until P4; the
+  rig, the sensor specs and their samples are bound to Python with the
+  world as a callable, and the reference sensors.yaml is rewritten in
+  full. Tests: 10 schema-side, 12 binding-side including trajectory-hash
+  equality between a sensored car and its bare twin and bit-identical
+  streams from identically seeded rigs. Mutation pass over the wiring: 15
+  tried, 15 caught (defaulted requirements, defaulted blocks, the jitter
+  bound dropped, lidar_3d silently substituting lidar_2d, phase and
+  latency defaulted, latency and jitter swapped, wheels_used dropped, IMU
+  densities crossed, LiDAR rate and dropout not wired, the sqrt-3
+  conversion dropped, the noise refusal dropped, the conversion skipped,
+  an empty noise kept). The harness truncating migrate.py mid-pass and
+  the file being restored from git plus the conversation is why the
+  scratchpad harness now writes with an explicit encoding.
+  Still open in M7.7: the race_sync client, the RMW benchmark and
+  multi-host agents, all ROS work and now unblocked.
 - [x] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
   IN PROGRESS, staged 2026-08-19 as a session handoff; the code compiles

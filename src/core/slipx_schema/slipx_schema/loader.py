@@ -365,7 +365,8 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
         sensors = sensors_doc.get("sensors", [])
     else:
         notes.append(
-            "no sensors file; nothing consumes one until slipx_sense lands in P1"
+            "no sensors file; the car carries no sensors, which is legal for "
+            "a dynamics-only study, and the sensor rig gets nothing to build"
         )
 
     # Structural failures make every check below meaningless, so stop here.

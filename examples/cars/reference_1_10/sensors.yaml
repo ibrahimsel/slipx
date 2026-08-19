@@ -1,30 +1,37 @@
 # Sensor configuration.
 #
-# NOTHING CONSUMES THIS YET. slipx_sense arrives in P1 (SENSE-01 to SENSE-05)
-# and the 3D scan patterns in P4. The file is here, and validated, so that a
-# car directory written during P0 still validates afterwards, and so the shape
-# of the directory is settled before anything depends on it.
-#
-# The sensors below describe a typical RoboRacer build. Their rates and
-# latencies are plausible for the hardware named, and none of them has been
-# measured; when slipx_sense lands, these are numbers to replace, not to trust.
+# Consumed by the sensor rig (ADR-0047): `slipx.sensors_for` maps these
+# entries onto the C++ sensor models, and refuses by name anything it cannot
+# fill (ADR-0048). The sensors below describe a typical RoboRacer build.
+# Their values are plausible for the hardware named, and none of them has
+# been measured: they carry the same provisional standing as everything else
+# in this directory, and they are numbers to replace, not to trust.
 
-schema_version: "0.2.0"
+schema_version: "0.5.0"
 
 sensors:
   - name: scan
     type: lidar_2d
     # A 2D scanner of the Hokuyo UST-10LX class.
-    rate: 40.0        #                                                [Hz]
-    phase: 0.0        # fraction of the period                          [-]
+    rate: 40.0        # revolutions per second; one scan per revolution [Hz]
+    phase: 0.0        # fraction of the period                           [-]
     mount: laser_frame
     latency:
-      # Modelled separately from rate (SENSE-02), because they are separate
-      # things and a sensor that publishes at 40 Hz with 25 ms of delay is not
-      # the same as one that publishes at 40 Hz without it.
-      constant: 0.012      #                                            [s]
-      jitter_stddev: 0.002 #                                            [s]
+      # Modelled separately from rate, because they are separate things and
+      # a sensor that publishes at 40 Hz with 25 ms of delay is not the same
+      # as one that publishes at 40 Hz without it. The jitter is the
+      # half-width of a uniform spread about the constant.
+      constant: 0.012  #                                                 [s]
+      jitter: 0.003    #                                                 [s]
     dropout_probability: 0.001
+    lidar_2d:
+      rays: 1080
+      angle_min: -2.35619449019234   # -135 degrees                    [rad]
+      angle_max: 2.35619449019234    # +135 degrees                    [rad]
+      range_min: 0.02                #                                   [m]
+      range_max: 30.0                #                                   [m]
+      noise_base: 0.01               # noise floor at zero range         [m]
+      noise_per_metre: 0.002         # noise growth with range           [-]
 
   - name: imu
     type: imu
@@ -36,7 +43,20 @@ sensors:
     mount: imu_frame
     latency:
       constant: 0.002
-      jitter_stddev: 0.0005
+      jitter: 0.0008
+    imu:
+      accel_noise_density: 0.002   #                     [m/s^2 / sqrt(Hz)]
+      gyro_noise_density: 0.0003   #                     [rad/s / sqrt(Hz)]
+      accel_bias_walk: 0.0001      #                      [m/s^2 / sqrt(s)]
+      gyro_bias_walk: 0.00002      #                      [rad/s / sqrt(s)]
+      accel_scale_error: 0.0       #                                    [-]
+      gyro_scale_error: 0.0        #                                    [-]
+      # Zero starting biases are a claim like any other: this unit is
+      # assumed calibrated at power-on, and a stack that estimates bias
+      # should expect to find the walk, not an initial offset.
+      accel_bias_x: 0.0            #                                [m/s^2]
+      accel_bias_y: 0.0            #                                [m/s^2]
+      gyro_bias_z: 0.0             #                                [rad/s]
 
   - name: wheel_encoder
     type: wheel_encoder
@@ -45,4 +65,13 @@ sensors:
     mount: base_link
     latency:
       constant: 0.001
-      jitter_stddev: 0.0002
+      jitter: 0.0003
+    wheel_encoder:
+      counts_per_revolution: 120.0  # after gearing and quadrature        [-]
+      # The radius the odometry multiplies by, allowed to disagree with the
+      # car's own wheel_radius on purpose: a stack uses the number somebody
+      # typed, and typing the wrong one is an instructive failure.
+      wheel_radius: 0.05            #                                    [m]
+      # A motor encoder on a rear-driven car measures the driven wheels:
+      # front-left, front-right, rear-left, rear-right.
+      wheels_used: [false, false, true, true]

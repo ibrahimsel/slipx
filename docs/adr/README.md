@@ -94,6 +94,7 @@ Use [`template.md`](template.md) for a new record.
 | [0040](0040-the-fitter-reads-rosbag2-without-ros.md) | The fitter reads rosbag2 without ROS, and emits a car directory | Proposed |
 | [0041](0041-schema-0-4-0-opens-the-compound-vocabulary.md) | Schema 0.4.0 opens the compound vocabulary and ties a fit to its data | Proposed |
 | [0047](0047-sensors-are-a-rig-beside-the-simulation.md) | Sensors are a rig beside the simulation, configured per agent, and observation never perturbs | Proposed |
+| [0048](0048-schema-0-5-0-makes-the-sensor-file-buildable.md) | Schema 0.5.0 makes the sensor file carry what the sensor models consume | Proposed |
 
 ## Racing
 

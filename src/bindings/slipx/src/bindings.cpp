@@ -44,6 +44,7 @@
 #include "slipx/sim/manifest.hpp"
 #include "slipx/sim/manoeuvres.hpp"
 #include "slipx/sense/rng.hpp"
+#include "slipx/sim/sensor_rig.hpp"
 #include "slipx/sim/simulation.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
@@ -757,6 +758,233 @@ PYBIND11_MODULE(_slipx, m) {
       .def_property_readonly("input_logging", &Simulation::input_logging)
       .def("input_log", &Simulation::input_log,
            "Flat, step-major: entry (step * agent_count + agent).");
+
+  // ----------------------------------------------------- sensors (ADR-0047)
+  //
+  // The rig observes a simulation it cannot write to, so sensing is free by
+  // construction and stays out of the manifest and the digest. The world is
+  // a callable(agent, pose, bearing) -> Hit; a Python callable works and is
+  // called once per ray, so a native world is where the speed is when it
+  // matters. collect() deliberately keeps the GIL: the world may be Python.
+
+  py::class_<sense::Pose>(m, "Pose",
+                          "An emitter pose in the world frame (ISO 8855: x "
+                          "forward, y left, yaw positive anticlockwise).")
+      .def(py::init<>())
+      .def_readwrite("x", &sense::Pose::x, "[m]")
+      .def_readwrite("y", &sense::Pose::y, "[m]")
+      .def_readwrite("yaw", &sense::Pose::yaw, "[rad]");
+
+  py::class_<sense::Hit>(
+      m, "Hit",
+      "What a ray found. material_dropout scales the configured dropout "
+      "probability for this target: 1 is an ordinary surface, 0 never "
+      "drops. A world that knows nothing about materials returns 1 and is "
+      "honest.")
+      .def(py::init<>())
+      .def_readwrite("hit", &sense::Hit::hit)
+      .def_readwrite("range", &sense::Hit::range, "[m]")
+      .def_readwrite("material_dropout", &sense::Hit::material_dropout,
+                     "[-]");
+
+  py::class_<sense::LidarSpec>(
+      m, "LidarSpec",
+      "The 2D scanning LiDAR. Rays are spread over one revolution in time, "
+      "so a scan takes as long as it takes and motion distortion emerges "
+      "from the pose at each ray's own timestamp.")
+      .def(py::init<>())
+      .def_readwrite("rate_hz", &sense::LidarSpec::rate_hz,
+                     "revolutions per second; one scan each [Hz]")
+      .def_readwrite("rays", &sense::LidarSpec::rays)
+      .def_readwrite("angle_min", &sense::LidarSpec::angle_min, "[rad]")
+      .def_readwrite("angle_max", &sense::LidarSpec::angle_max, "[rad]")
+      .def_readwrite("range_min", &sense::LidarSpec::range_min, "[m]")
+      .def_readwrite("range_max", &sense::LidarSpec::range_max, "[m]")
+      .def_readwrite("latency_s", &sense::LidarSpec::latency_s, "[s]")
+      .def_readwrite("latency_jitter_s", &sense::LidarSpec::latency_jitter_s,
+                     "uniform half-width, at most latency_s [s]")
+      .def_readwrite("noise_base_m", &sense::LidarSpec::noise_base_m, "[m]")
+      .def_readwrite("noise_per_metre", &sense::LidarSpec::noise_per_metre,
+                     "[-]")
+      .def_readwrite("dropout_probability",
+                     &sense::LidarSpec::dropout_probability, "[-]");
+
+  py::class_<sense::Ray>(
+      m, "Ray",
+      "One ray. A dropped or out-of-range ray is valid == False and its "
+      "range is NaN, never zero: zero is a wall against the mast.")
+      .def_readonly("time", &sense::Ray::time,
+                    "when this ray was emitted, simulation time [s]")
+      .def_readonly("angle", &sense::Ray::angle, "sensor-frame bearing [rad]")
+      .def_readonly("range", &sense::Ray::range, "NaN when not valid [m]")
+      .def_readonly("valid", &sense::Ray::valid);
+
+  py::class_<sense::Scan>(
+      m, "Scan",
+      "One scan. start_time is when the first ray was emitted, stamp_time "
+      "when the scan became available to a consumer; the gap is the "
+      "revolution plus the latency, and confusing them puts a stack's "
+      "timestamps out by a scan period.")
+      .def_readonly("start_time", &sense::Scan::start_time, "[s]")
+      .def_readonly("stamp_time", &sense::Scan::stamp_time, "[s]")
+      .def_readonly("rays", &sense::Scan::rays);
+
+  py::class_<sense::ImuSpec>(
+      m, "ImuSpec",
+      "The IMU's three error mechanisms on their three timescales: white "
+      "noise as a density, a bias random walk averaging does not remove, "
+      "and fixed scale errors that are properties of the unit.")
+      .def(py::init<>())
+      .def_readwrite("accel_noise_density", &sense::ImuSpec::accel_noise_density,
+                     "[m/s^2 / sqrt(Hz)]")
+      .def_readwrite("gyro_noise_density", &sense::ImuSpec::gyro_noise_density,
+                     "[rad/s / sqrt(Hz)]")
+      .def_readwrite("accel_bias_walk", &sense::ImuSpec::accel_bias_walk,
+                     "[m/s^2 / sqrt(s)]")
+      .def_readwrite("gyro_bias_walk", &sense::ImuSpec::gyro_bias_walk,
+                     "[rad/s / sqrt(s)]")
+      .def_readwrite("accel_scale_error", &sense::ImuSpec::accel_scale_error,
+                     "0.01 reads 1 per cent high [-]")
+      .def_readwrite("gyro_scale_error", &sense::ImuSpec::gyro_scale_error,
+                     "[-]")
+      .def_readwrite("accel_bias_x", &sense::ImuSpec::accel_bias_x, "[m/s^2]")
+      .def_readwrite("accel_bias_y", &sense::ImuSpec::accel_bias_y, "[m/s^2]")
+      .def_readwrite("gyro_bias_z", &sense::ImuSpec::gyro_bias_z, "[rad/s]");
+
+  py::class_<sense::ImuSample>(
+      m, "ImuSample",
+      "One IMU sample: specific force in the body frame (a level car's az "
+      "reads standard gravity plus the unit's errors) and the yaw rate.")
+      .def_readonly("time", &sense::ImuSample::time, "[s]")
+      .def_readonly("ax", &sense::ImuSample::ax, "[m/s^2]")
+      .def_readonly("ay", &sense::ImuSample::ay, "[m/s^2]")
+      .def_readonly("az", &sense::ImuSample::az, "[m/s^2]")
+      .def_readonly("yaw_rate", &sense::ImuSample::yaw_rate, "[rad/s]");
+
+  py::class_<sense::EncoderSpec>(
+      m, "EncoderSpec",
+      "Wheel encoders and the odometry built from them. Noiseless on "
+      "purpose: an encoder has a quantisation, not a noise floor, and its "
+      "interesting error is the slip, which is already in the wheel "
+      "speeds. The radius is deliberately allowed to disagree with the "
+      "car's own.")
+      .def(py::init<>())
+      .def_readwrite("counts_per_revolution",
+                     &sense::EncoderSpec::counts_per_revolution,
+                     "after gearing and quadrature decoding [-]")
+      .def_readwrite("wheel_radius", &sense::EncoderSpec::wheel_radius, "[m]")
+      .def_readwrite("wheels_used", &sense::EncoderSpec::wheels_used,
+                     "which wheels the odometry averages: FL, FR, RL, RR");
+
+  py::class_<sense::EncoderSample>(
+      m, "EncoderSample",
+      "What the encoders say, which is not what happened: distance and "
+      "speed are what the wheels turned times a radius, and they diverge "
+      "from ground truth by exactly the slip.")
+      .def_readonly("time", &sense::EncoderSample::time, "[s]")
+      .def_readonly("counts", &sense::EncoderSample::counts,
+                    "cumulative, signed, per wheel")
+      .def_readonly("wheel_speed", &sense::EncoderSample::wheel_speed,
+                    "quantised, over the last interval [rad/s]")
+      .def_readonly("distance", &sense::EncoderSample::distance,
+                    "cumulative, what the encoders believe [m]")
+      .def_readonly("speed", &sense::EncoderSample::speed, "[m/s]");
+
+  py::class_<LidarSensor>(m, "LidarSensor",
+                          "One LiDAR instance on one agent: the model's spec "
+                          "plus the rig's phase.")
+      .def(py::init<>())
+      .def_readwrite("name", &LidarSensor::name)
+      .def_readwrite("spec", &LidarSensor::spec)
+      .def_readwrite("phase", &LidarSensor::phase,
+                     "fraction of the period before the first scan [-]");
+
+  py::class_<ImuSensor>(m, "ImuSensor",
+                        "One IMU instance: the model's spec plus the "
+                        "schedule and transport the rig owns.")
+      .def(py::init<>())
+      .def_readwrite("name", &ImuSensor::name)
+      .def_readwrite("spec", &ImuSensor::spec)
+      .def_readwrite("rate_hz", &ImuSensor::rate_hz, "[Hz]")
+      .def_readwrite("phase", &ImuSensor::phase, "[-]")
+      .def_readwrite("latency_s", &ImuSensor::latency_s, "[s]")
+      .def_readwrite("latency_jitter_s", &ImuSensor::latency_jitter_s,
+                     "uniform half-width, at most latency_s [s]");
+
+  py::class_<EncoderSensor>(m, "EncoderSensor",
+                            "One wheel-encoder odometry instance, scheduled "
+                            "and delivered like the IMU. Needs L2 or above; "
+                            "below L2 the model never writes wheel speeds "
+                            "and the rig refuses it by name.")
+      .def(py::init<>())
+      .def_readwrite("name", &EncoderSensor::name)
+      .def_readwrite("spec", &EncoderSensor::spec)
+      .def_readwrite("rate_hz", &EncoderSensor::rate_hz, "[Hz]")
+      .def_readwrite("phase", &EncoderSensor::phase, "[-]")
+      .def_readwrite("latency_s", &EncoderSensor::latency_s, "[s]")
+      .def_readwrite("latency_jitter_s", &EncoderSensor::latency_jitter_s,
+                     "[s]");
+
+  py::class_<AgentSensors>(
+      m, "AgentSensors",
+      "Everything one agent carries. Empty lists are the cheap opponent. "
+      "The list attributes copy on read, so assign whole lists rather than "
+      "appending to what you read back.")
+      .def(py::init<>())
+      .def_readwrite("lidars", &AgentSensors::lidars)
+      .def_readwrite("imus", &AgentSensors::imus)
+      .def_readwrite("encoders", &AgentSensors::encoders);
+
+  py::class_<ImuReading>(m, "ImuReading",
+                         "A delivered IMU message: the sample, which carries "
+                         "the instant it measured, plus when it became "
+                         "visible.")
+      .def_readonly("sample", &ImuReading::sample)
+      .def_readonly("stamp_time", &ImuReading::stamp_time, "[s]");
+
+  py::class_<OdometryReading>(m, "OdometryReading",
+                              "A delivered odometry message; see ImuReading.")
+      .def_readonly("sample", &OdometryReading::sample)
+      .def_readonly("stamp_time", &OdometryReading::stamp_time, "[s]");
+
+  py::class_<SensorRig>(
+      m, "SensorRig",
+      "Per-agent sensors running against a simulation they can only observe "
+      "(ADR-0047). An agent with a full suite drives bit for bit the "
+      "trajectory of its bare twin; sensors stay out of the manifest and "
+      "the configuration digest because they cannot change a trajectory. "
+      "Call collect() after every advance(); a sample becomes visible at "
+      "its instant plus latency plus jitter, and take_* drains while "
+      "latest_* keeps the newest.")
+      .def(py::init<const Simulation&, WorldFunction, std::uint64_t>(),
+           py::arg("sim"), py::arg("world") = WorldFunction{},
+           py::arg("seed") = 0,
+           // The rig holds a reference to the simulation for its lifetime.
+           py::keep_alive<1, 2>(),
+           "world is callable(agent, Pose, bearing) -> Hit, called once per "
+           "ray with the asking agent's index so the caller can apply the "
+           "self-skip; None is legal for a rig with no LiDARs. seed is the "
+           "rig's own: sensor streams derive per agent and per instance "
+           "from it, and the simulation's streams are never touched.")
+      .def("attach", &SensorRig::attach, py::arg("agent"), py::arg("sensors"),
+           "Before the first collect() only. Refuses by name a bad index, a "
+           "duplicate name, a bad schedule, a jitter exceeding its latency, "
+           "a LiDAR without a world, or an encoder below L2; a refused "
+           "attach leaves the rig unchanged.")
+      .def("collect", &SensorRig::collect,
+           "Read everything due up to the simulation's current time. Keeps "
+           "the GIL: the world may be a Python callable.")
+      .def("take_scans", &SensorRig::take_scans, py::arg("agent"),
+           py::arg("name"), "Deliveries since the last take, oldest first.")
+      .def("take_imu", &SensorRig::take_imu, py::arg("agent"), py::arg("name"))
+      .def("take_odometry", &SensorRig::take_odometry, py::arg("agent"),
+           py::arg("name"))
+      .def("latest_scan", &SensorRig::latest_scan, py::arg("agent"),
+           py::arg("name"), "The newest delivered scan, or None.")
+      .def("latest_imu", &SensorRig::latest_imu, py::arg("agent"),
+           py::arg("name"))
+      .def("latest_odometry", &SensorRig::latest_odometry, py::arg("agent"),
+           py::arg("name"));
 
   // ------------------------------------------------------------ manoeuvres
   py::class_<StepSteerSpec>(m, "StepSteerSpec")

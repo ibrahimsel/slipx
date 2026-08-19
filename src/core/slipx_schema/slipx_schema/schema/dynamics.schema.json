@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.4.0/dynamics.schema.json",
+  "$id": "https://slipx.dev/schema/0.5.0/dynamics.schema.json",
   "title": "SlipX vehicle dynamics parameters",
   "description": "dynamics.yaml: mass, inertia, geometry, tyre references and drivetrain. This is the file slipx_id emits (P2) and the file a registry entry consists of. SI units throughout, no exceptions: metres, kilograms, seconds, radians, newtons. Every bound below is a physical or competition bound, and none of them is a default. Silent defaulting is prohibited (SCH-02), so every field the physics needs is required.",
   "type": "object",

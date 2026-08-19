@@ -21,6 +21,29 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Schema 0.5.0: the sensor file is consumed** (ADR-0048). `sensors.yaml`
+  had said "NOTHING CONSUMES THIS YET" since 0.1.0; now it carries what the
+  sensor models actually take. Each entry may hold a typed block named
+  after its type (`lidar_2d`, `imu`, `wheel_encoder`) with that model's
+  full parameter set, strictly validated when present and refused by name
+  at build time when absent; the free-form `noise` object is gone, and
+  `latency.jitter_stddev` became `latency.jitter`, the half-width of the
+  uniform jitter the models implement. The 0.4.0 migration converts the
+  old value by the square root of three (variance-preserving, the same
+  physical quantity under a new parameterisation) and fails loudly on a
+  non-empty free noise object rather than guessing at keys that were never
+  defined. `slipx.sensors_for(car)` maps a loaded car's sensor file onto
+  `slipx.AgentSensors`, refusing by name a missing block, schedule or
+  latency field, and refusing `lidar_3d` outright until P4 rather than
+  substituting a simpler sensor; a car without a sensors file is the cheap
+  opponent. The sensor models and the rig are bound to Python
+  (`SensorRig`, `LidarSpec`, `ImuSpec`, `EncoderSpec` and their samples),
+  with the world as a `callable(agent, pose, bearing) -> Hit`, so the
+  whole chain from `sensors.yaml` to a motion-distorted scan runs from
+  Python; two identically seeded rigs observe identical streams, and the
+  sensored car's trajectory hash equals its bare twin's. The reference
+  car's sensor file is rewritten at 0.5.0 with the full parameter set,
+  provisional as ever.
 - **The sensor rig: per-agent sensors that observe and never perturb**
   (ADR-0047). `slipx/sim/sensor_rig.hpp`: a `SensorRig` holds a const
   reference to the simulation it watches, so an agent with a full sensor
