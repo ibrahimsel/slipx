@@ -93,6 +93,7 @@ Use [`template.md`](template.md) for a new record.
 | [0039](0039-the-loader-restates-tyres-at-the-cars-static-load.md) | The loader restates a tyre's coefficients at the car's static load | Proposed |
 | [0040](0040-the-fitter-reads-rosbag2-without-ros.md) | The fitter reads rosbag2 without ROS, and emits a car directory | Proposed |
 | [0041](0041-schema-0-4-0-opens-the-compound-vocabulary.md) | Schema 0.4.0 opens the compound vocabulary and ties a fit to its data | Proposed |
+| [0047](0047-sensors-are-a-rig-beside-the-simulation.md) | Sensors are a rig beside the simulation, configured per agent, and observation never perturbs | Proposed |
 
 ## Racing
 

@@ -47,6 +47,7 @@ configure_file(
 add_library(slipx_sim
   src/libc_identity.cpp
   src/manifest.cpp
+  src/sensor_rig.cpp
   src/simulation.cpp
 )
 add_library(slipx::sim ALIAS slipx_sim)

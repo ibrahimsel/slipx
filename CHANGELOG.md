@@ -21,6 +21,28 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The sensor rig: per-agent sensors that observe and never perturb**
+  (ADR-0047). `slipx/sim/sensor_rig.hpp`: a `SensorRig` holds a const
+  reference to the simulation it watches, so an agent with a full sensor
+  suite drives bit for bit the trajectory of its bare twin, and every
+  pre-existing reference hash is untouched by construction. Per agent, a
+  plain `AgentSensors` struct carries LiDARs, IMUs and wheel encoders with
+  their rates, phases and latencies; an empty one is the cheap opponent.
+  Schedules are exact ((k + phase) / rate, computed rather than
+  accumulated), truth is served by the first step at or after the instant,
+  and a sample becomes visible only at its instant plus a constant latency
+  plus a uniform jitter drawn once per message, the LiDAR model's own
+  transport semantics applied to the sensors that do not model transport.
+  The LiDAR's emitter pose is interpolated per ray from the recorded pose
+  history (shortest arc in yaw, asserted through the wrap seam), so motion
+  distortion emerges in multi-step scans; other agents are seen at step
+  resolution, which is a stated approximation. The world arrives as a
+  function from the asking agent, a pose and a bearing to a hit, so the
+  rig never learns what a track is and the caller applies the self-skip.
+  Streams derive per agent and per instance, a DNF'd car stops sensing
+  while its pending messages still arrive, and a wheel encoder below L2 is
+  refused by name, because a tier with no wheel speeds would report a
+  moving car as stationary forever.
 - **The CI leaderboard harness.** `slipx_leaderboard <dir> [master_seed]`
   runs a seeded round-robin of head-to-head matches on the shipped track
   and writes one event stream per match, `batch_manifest.json` and

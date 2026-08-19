@@ -1144,6 +1144,31 @@ computed, and the conformance script re-checked all six rows.)
   and 20 agents) with the multicast failure mode documented; multi-host agents
   with the simulator as sync authority.
   Done when: each has tests or, for the RMW decision, a recorded benchmark.
+  In progress. The sensors half's C++ machinery landed 2026-08-19 as the
+  sensor rig (ADR-0047): `slipx/sim/sensor_rig.hpp`, per-agent LiDAR, IMU
+  and encoder instances observing a simulation they structurally cannot
+  perturb (const reference, own seed, out of the manifest and the digest,
+  so no reference hash can move and none did). Exact schedules with
+  step-resolution truth, latency as a delivery time with the LiDAR's
+  uniform-jitter semantics, per-ray pose interpolation from recorded
+  history (shortest arc through the yaw seam, asserted analytically on a
+  kinematic car), per-agent and per-instance stream derivation, DNF stops
+  sampling while pending messages still deliver, and a wheel encoder below
+  L2 refused by name because those tiers never write wheel speeds and the
+  encoder would report a moving car as stationary. Building it surfaced
+  and fixed a partial-attach defect (an attach that refuses one sensor now
+  leaves the rig untouched). Mutation pass: 25 tried, 25 caught, two only
+  after tests were sharpened rather than mutants excused (the round-robin
+  lesson repeated: boundary-aligned schedules cannot tell a scheduled
+  instant from the step that served it, so the suite now carries
+  off-boundary sensors; and the ordering test's tiebreak initially agreed
+  with the alphabet). Not tried, as answer-preserving by construction:
+  removing the pending sort or the latest-wins comparison (deliveries
+  already arrive in stamp order under the flush rule) and over-retaining
+  pose history (memory, not answers). Remaining in this half: sensors.yaml
+  wired to these structs through the loader (schema 0.5.0, its own ADR)
+  and the Python surface; then the ROS halves, unblocked by the completed
+  environment install.
 - [x] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
   IN PROGRESS, staged 2026-08-19 as a session handoff; the code compiles
