@@ -100,3 +100,4 @@ Use [`template.md`](template.md) for a new record.
 |---|---|---|
 | [0042](0042-rollover-is-a-sim-event-that-freezes-the-agent.md) | Rollover is a sim-level event that freezes the agent | Proposed |
 | [0043](0043-contact-is-one-impulse-between-declared-footprints.md) | Contact is one planar impulse between declared footprints | Proposed |
+| [0044](0044-the-barrier-is-a-step-tagged-mailbox.md) | The barrier is a step-tagged mailbox, and a miss has three answers | Proposed |

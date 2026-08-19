@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -110,6 +111,19 @@ void freeze(VehicleState& s) {
   s.steer_rate = 0.0;
 }
 
+// The missed-step marker the input log carries for a frozen or timeout-DNF'd
+// step (ADR-0044). In-band NaN, and sound only because every command door
+// refuses NaN: the mailbox at post, the policy path below. Replay answers a
+// marked slot by applying that agent's own timeout policy.
+DriveInput miss_marker() {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  return DriveInput{nan, nan};
+}
+
+bool is_miss(const DriveInput& input) {
+  return std::isnan(input.steer_cmd) || std::isnan(input.accel_cmd);
+}
+
 }  // namespace
 
 Simulation::Simulation(SimulationConfig config) : config_(config) {
@@ -150,7 +164,14 @@ std::size_t Simulation::add_agent(AgentSpec spec) {
                                      config_.integrator);
   agent.state = spec.initial_state;
   agent.initial_state = spec.initial_state;
+  if (spec.policy && spec.mailbox) {
+    throw std::invalid_argument(
+        "slipx_sim: an agent has one command source; set a policy or a "
+        "mailbox, not both");
+  }
   agent.policy = std::move(spec.policy);
+  agent.mailbox = std::move(spec.mailbox);
+  agent.timeout_policy = spec.timeout_policy;
   agent.seed = derive_seed(config_.master_seed, index);
   agent.rng = Rng(agent.seed);
 
@@ -200,12 +221,10 @@ void Simulation::advance() {
 
   // Phase one: collect every command against the world as it is now. No agent
   // has moved yet, so no policy can see another agent's future. A DNF'd
-  // agent's policy is never called again; a neutral input holds its slot so
+  // agent's source is never asked again; a neutral input holds its slot so
   // the log stays rectangular and a replay lines up agent for agent.
   for (std::size_t i = 0; i < agents_.size(); ++i) {
-    Agent& a = agents_[i];
-    pending_inputs_[i] = (a.policy && !a.dnf) ? a.policy(a.state, t, a.rng)
-                                              : DriveInput{};
+    pending_inputs_[i] = resolve_command(agents_[i], t);
   }
 
   if (logging_inputs_) {
@@ -296,8 +315,57 @@ void Simulation::resolve_contacts() {
   }
 }
 
+// Resolve one agent's command for the step about to be computed: the
+// synchronous policy, or the mailbox with its miss answers (ADR-0044).
+DriveInput Simulation::resolve_command(Agent& a, double t) {
+  if (a.dnf) return DriveInput{};
+
+  if (a.mailbox) {
+    const bool wait_forever = a.timeout_policy == TimeoutPolicy::kWait;
+    const std::optional<DriveInput> command =
+        a.mailbox->take(steps_, wait_forever, config_.barrier_timeout);
+    if (command) return *command;
+    // A miss. kWait cannot reach here: its take waits until it can answer.
+    switch (a.timeout_policy) {
+      case TimeoutPolicy::kFreeze:
+        return miss_marker();
+      case TimeoutPolicy::kCoast:
+        return DriveInput{};
+      case TimeoutPolicy::kDnf:
+        dnf_timeout(a);
+        return miss_marker();   // the onset marker replay re-reads
+      case TimeoutPolicy::kWait:
+        break;
+    }
+    return DriveInput{};
+  }
+
+  if (a.policy) {
+    const DriveInput input = a.policy(a.state, t, a.rng);
+    if (is_miss(input)) {
+      // Refused loudly rather than integrated: a NaN command would poison
+      // every hash downstream, and NaN in the log is reserved as the
+      // missed-step marker (ADR-0044).
+      throw std::invalid_argument(
+          "slipx_sim: a policy returned a NaN command");
+    }
+    return input;
+  }
+  return DriveInput{};
+}
+
+void Simulation::dnf_timeout(Agent& a) {
+  DnfEvent event;
+  event.step = steps_ + 1;
+  event.time = static_cast<double>(event.step) * config_.dt;
+  event.cause = DnfCause::kTimeout;
+  a.dnf = event;
+  freeze(a.state);
+}
+
 void Simulation::step_agent(Agent& a, const DriveInput& input) {
-  if (a.dnf) return;   // frozen: the state no longer evolves
+  if (a.dnf) return;        // frozen: the state no longer evolves
+  if (is_miss(input)) return;   // a missed step: paused, not stepped
   a.model->step(a.state, input, config_.dt, &a.diagnostics);
 
   if (const std::optional<DnfCause> cause = rollover_signal(a.diagnostics)) {
@@ -426,6 +494,14 @@ void Simulation::reset() {
 }
 
 void Simulation::replay(const std::vector<DriveInput>& log) {
+  // replay(sim.input_log()) is the natural call and hands this function a
+  // reference to the member that reset() below is about to clear; without
+  // this copy the run would quietly replay an empty log.
+  if (&log == &input_log_) {
+    const std::vector<DriveInput> copy = log;
+    replay(copy);
+    return;
+  }
   if (agents_.empty()) return;
   if (log.size() % agents_.size() != 0) {
     throw std::invalid_argument(
@@ -437,10 +513,29 @@ void Simulation::replay(const std::vector<DriveInput>& log) {
   const std::size_t n_steps = log.size() / agents_.size();
   for (std::size_t step = 0; step < n_steps; ++step) {
     for (std::size_t i = 0; i < agents_.size(); ++i) {
+      Agent& a = agents_[i];
+      const DriveInput& input = log[step * agents_.size() + i];
+      // A NaN-tagged slot is the missed-step marker (ADR-0044): replay
+      // answers it with the agent's own timeout policy, which reproduces
+      // the recorded pause or the timeout-DNF at the recorded step. It can
+      // only appear for an agent configured to write it, and a log that
+      // says otherwise was recorded from a different scenario.
+      if (is_miss(input)) {
+        if (!a.mailbox || (a.timeout_policy != TimeoutPolicy::kFreeze &&
+                           a.timeout_policy != TimeoutPolicy::kDnf)) {
+          throw std::invalid_argument(
+              "slipx_sim: the input log marks a missed step for an agent "
+              "whose command source cannot miss; the log was recorded from "
+              "a different scenario");
+        }
+        if (a.timeout_policy == TimeoutPolicy::kDnf && !a.dnf) {
+          dnf_timeout(a);
+        }
+      }
       // The same per-agent path advance() takes, so a replayed roll rolls at
       // the recorded step and the frozen tail of the log (neutral inputs) is
       // skipped exactly as it was skipped when recorded.
-      step_agent(agents_[i], log[step * agents_.size() + i]);
+      step_agent(a, input);
     }
     resolve_contacts();
     ++steps_;
@@ -519,6 +614,15 @@ RunManifest Simulation::manifest() const {
     am.seed = a.seed;
     am.footprint_length = 2.0 * a.half_length;
     am.footprint_width = 2.0 * a.half_width;
+    if (a.mailbox) {
+      am.command_source = "mailbox";
+      am.timeout_policy = to_string(a.timeout_policy);
+      if (a.timeout_policy != TimeoutPolicy::kWait) {
+        m.timing_dependent_commands = true;
+      }
+    } else {
+      am.command_source = a.policy ? "policy" : "coast";
+    }
     if (a.dnf) {
       am.status = "dnf";
       am.dnf_cause = to_string(a.dnf->cause);

@@ -21,6 +21,21 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The barrier and its timeout policies** (ADR-0044). Commands can arrive
+  asynchronously through a step-tagged `CommandMailbox`, the one
+  synchronised doorway into the otherwise single-threaded simulation; the
+  tag is the acknowledgement, and a missing entry is answered by the
+  agent's `TimeoutPolicy`: wait (strict lockstep, timing cannot change the
+  trajectory), freeze (a pause that resumes where it stopped), coast, or
+  DNF (`DnfCause.Timeout`, ADR-0042's machinery). One hung agent can no
+  longer hang a race unless waiting is what was configured. A live run
+  with non-wait mailbox agents is decided partly by a wall clock, and its
+  manifest says plainly that bit-identity then holds only under replay
+  from the input log, where a missed step is recorded as a NaN-tagged
+  slot; NaN commands are refused at every door, which is what makes the
+  marker sound. The Python stepping calls release the GIL so a poster
+  thread can feed a waiting barrier. Also fixed in passing:
+  `sim.replay(sim.input_log())` used to clear the log it was replaying.
 - **Agent-to-agent contact** (ADR-0043). One planar impulse with
   restitution and Coulomb friction per touching pair per step, computed by
   a pure function in `slipx_core` (`slipx/contact.hpp`) and applied by the

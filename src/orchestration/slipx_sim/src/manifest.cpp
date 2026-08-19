@@ -90,6 +90,8 @@ std::string RunManifest::configuration_digest() const {
     h.update_u64(a.seed);
     h.update(a.footprint_length);
     h.update(a.footprint_width);
+    h.update(a.command_source);
+    h.update(a.timeout_policy);
   }
   h.update(compiler_id);
   h.update(compiler_version);
@@ -142,6 +144,10 @@ std::string RunManifest::to_json() const {
     o << "      \"footprint_length\": " << number(a.footprint_length)
       << ",\n";
     o << "      \"footprint_width\": " << number(a.footprint_width) << ",\n";
+    o << "      \"command_source\": " << quote(a.command_source) << ",\n";
+    if (a.command_source == "mailbox") {
+      o << "      \"timeout_policy\": " << quote(a.timeout_policy) << ",\n";
+    }
     o << "      \"status\": " << quote(a.status) << ",\n";
     if (a.status == "dnf") {
       o << "      \"dnf_cause\": " << quote(a.dnf_cause) << ",\n";
@@ -185,6 +191,17 @@ std::string RunManifest::to_json() const {
          "on the machine it ran on\",\n";
     o << "    \"across_platforms\": \"not guaranteed, and not meaningful for "
          "a validation run\"\n";
+  } else if (timing_dependent_commands) {
+    // Same register as the validation warning: this file is what somebody
+    // reads when a result did not reproduce. A run whose barrier misses
+    // were decided by a wall clock re-runs differently; what it promises is
+    // its input log (ADR-0044).
+    o << "    \"within_build\": \"bit-identical only when replayed from the "
+         "input log: this run has mailbox-driven agents with a non-wait "
+         "timeout policy, so a live re-run depends on external command "
+         "timing\",\n";
+    o << "    \"across_platforms\": \"not guaranteed; conformance is to a "
+         "stated tolerance\"\n";
   } else {
     o << "    \"within_build\": \"bit-identical for the same binary on the "
          "same C library\",\n";

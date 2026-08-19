@@ -957,10 +957,42 @@ computed, and the conformance script re-checked all six rows.)
   ignored, incident edge most-parallel, contact pass dropped from advance
   and from replay, frozen car given inverse mass, self-contact, second
   agent's footprint not required, footprints left out of the digest.
-- [ ] **M7.3** Lockstep barrier protocol with per-agent acknowledgement and a
+- [x] **M7.3** Lockstep barrier protocol with per-agent acknowledgement and a
   configurable timeout policy (freeze, coast or DNF), so one hung agent cannot
   hang a race.
   Done when: a deliberately hung agent exercises each policy in a test.
+  Done 2026-08-19, recorded as ADR-0044, and deliberately below the
+  transport: the protocol lives in `slipx_sim` so the ROS bridge and the
+  multi-host race inherit it instead of each reinventing it. Commands
+  arrive through a `CommandMailbox`, a thread-safe queue of step-tagged
+  entries and the one synchronised doorway into the still single-threaded
+  simulation; the tag is the acknowledgement (post = command, ack = alive,
+  hold my last one; tags strictly increase; stale entries are discarded at
+  the barrier). A miss is answered per agent: wait (strict lockstep, and a
+  test proves a dawdling poster thread cannot change one bit of the
+  trajectory), freeze (a pause that resumes where it stopped), coast, or
+  DNF through ADR-0042's machinery with its own cause. The wall-clock
+  `barrier_timeout` decides when a miss is ruled, so a live run with
+  non-wait mailbox agents is reproducible from its input log rather than
+  by re-running, and the manifest says which promise applies instead of
+  repeating one that no longer holds. A missed step is logged as a
+  NaN-tagged slot; replay answers it with the agent's own policy, and NaN
+  is refused at every command door, which is what makes the marker sound.
+  The Python stepping calls release the GIL so a poster thread can feed a
+  waiting barrier; a pytest proves it. Found and fixed in passing:
+  `sim.replay(sim.input_log())` handed replay a reference to the member
+  that reset() clears, and quietly replayed an empty log.
+  Mutation pass: 17 tried, 17 caught, after two test gaps the mutation
+  list itself exposed were closed first (a stale entry poisoning the queue
+  for later fresh entries, and the timeout budget never being exercised):
+  stale discard removed, miss silently holding the last command, posts
+  never updating the hold, NaN accepted at post, non-monotonic tags
+  accepted, freeze becoming coast, dnf never disqualifying, timeout-DNF
+  leaving the car moving, wrong cause, marked step integrated anyway,
+  replay ignoring the marker, replay accepting an impossible marker, NaN
+  policy command integrated, manifest never admitting timing dependence,
+  replay clearing the log it was handed, wait polling instead of waiting,
+  timeout budget ignored.
 - [ ] **M7.4** Prebuilt static scene BVH with a per-step dynamic agent
   overlay refit only.
   Done when: broadphase results match a brute-force reference in tests.

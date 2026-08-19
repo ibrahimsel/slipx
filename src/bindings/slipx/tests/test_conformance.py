@@ -300,6 +300,67 @@ def test_contact_crosses_the_boundary() -> None:
         sim.add_agent(half)
 
 
+def test_the_barrier_crosses_the_boundary() -> None:
+    # The barrier semantics are tested in C++ (test_barrier.cpp); here: the
+    # mailbox works from a Python thread while the simulation blocks on a
+    # Wait barrier, which is only possible because the stepping calls
+    # release the GIL, and the miss policies and manifest fields round-trip.
+    import threading
+
+    def spec_with(mailbox, policy):
+        spec = slipx.AgentSpec()
+        spec.tier = slipx.Tier.L1_Bicycle
+        spec.initial_state.vel_body.x = 4.0
+        spec.mailbox = mailbox
+        spec.timeout_policy = policy
+        return spec
+
+    steps = 200
+    mailbox = slipx.CommandMailbox()
+    sim = slipx.Simulation()
+    sim.add_agent(spec_with(mailbox, slipx.TimeoutPolicy.Wait))
+
+    def poster():
+        for s in range(steps):
+            mailbox.post(s, slipx.DriveInput(steer_cmd=0.03, accel_cmd=0.5))
+
+    thread = threading.Thread(target=poster)
+    thread.start()
+    sim.run(steps)  # blocks per step until the thread posts
+    thread.join()
+
+    twin = slipx.Simulation()
+    spec = slipx.AgentSpec()
+    spec.tier = slipx.Tier.L1_Bicycle
+    spec.initial_state.vel_body.x = 4.0
+    spec.policy = lambda state, time, rng: slipx.DriveInput(
+        steer_cmd=0.03, accel_cmd=0.5
+    )
+    twin.add_agent(spec)
+    twin.run(steps)
+    assert sim.trajectory_hash() == twin.trajectory_hash()
+
+    # A hung agent under the Dnf policy is out, with the cause named.
+    hung = slipx.Simulation()
+    hung.add_agent(spec_with(slipx.CommandMailbox(), slipx.TimeoutPolicy.Dnf))
+    hung.run(5)
+    assert not hung.agent_running(0)
+    assert hung.dnf(0).cause == slipx.DnfCause.Timeout
+    manifest = hung.manifest()
+    assert manifest.agents[0].command_source == "mailbox"
+    assert manifest.agents[0].timeout_policy == "dnf"
+    assert manifest.timing_dependent_commands
+    assert "replayed from the input log" in manifest.to_json()
+
+    # Protocol errors are refused by name.
+    box = slipx.CommandMailbox()
+    box.post(3, slipx.DriveInput())
+    with pytest.raises(ValueError, match="strictly increase"):
+        box.post(3, slipx.DriveInput())
+    with pytest.raises(ValueError, match="NaN"):
+        box.post(4, slipx.DriveInput(steer_cmd=float("nan")))
+
+
 def test_the_manifest_records_the_build_it_ran_on() -> None:
     # NFR-02 scopes bit-identity to a fixed (platform, compiler, flag set), so
     # a hash without that context is not evidence of anything.

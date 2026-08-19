@@ -51,6 +51,15 @@ struct AgentManifest {
   double footprint_length = 0.0;   //                                   [m]
   double footprint_width = 0.0;    //                                   [m]
 
+  // Where this agent's commands came from: "policy" (a synchronous
+  // callable), "coast" (no source at all) or "mailbox" (step-tagged
+  // asynchronous delivery, ADR-0044). For a mailbox agent, timeout_policy
+  // says what a missed step did: "wait", "freeze", "coast" or "dnf";
+  // empty otherwise. Configuration, in the digest: a race in which a hung
+  // car freezes is not the race in which it is disqualified.
+  std::string command_source = "policy";
+  std::string timeout_policy;
+
   // How the agent's run ended: "running", or "dnf" with the cause and the
   // step spelled out (ADR-0042). A result, not configuration: a frozen car
   // in a trajectory whose manifest does not say why would send an
@@ -89,6 +98,13 @@ struct RunManifest {
   double contact_restitution_min_speed = 0.0;  //                     [m/s]
 
   std::vector<AgentManifest> agents;
+
+  // True when any agent takes commands from a mailbox under a non-wait
+  // timeout policy (ADR-0044): a live re-run of such a race depends on a
+  // wall clock deciding barrier misses, so the determinism block below
+  // narrows its promise to replay from the input log. Derived from the
+  // agent fields above, so it is not folded into the digest a second time.
+  bool timing_dependent_commands = false;
 
   // ------------------------------------------------------------ the build
   std::string compiler_id;

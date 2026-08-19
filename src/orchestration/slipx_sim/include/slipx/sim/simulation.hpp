@@ -45,6 +45,7 @@
 #include "slipx/contact.hpp"
 #include "slipx/sense/rng.hpp"
 #include "slipx/sim/hash.hpp"
+#include "slipx/sim/mailbox.hpp"
 #include "slipx/sim/manifest.hpp"
 #include "slipx/vehicle_model.hpp"
 
@@ -67,12 +68,50 @@ using sense::derive_seed;
 using Policy = std::function<DriveInput(const VehicleState& state, double time,
                                         Rng& rng)>;
 
+// What the barrier does about a step whose command never arrived
+// (ADR-0044). Only meaningful for a mailbox-driven agent: a policy callable
+// is synchronous and cannot miss.
+enum class TimeoutPolicy {
+  // Block until the command arrives. Strict lockstep: one hung agent hangs
+  // the race, and in exchange the trajectory cannot depend on timing.
+  kWait,
+  // Do not step the agent this step; it resumes exactly where it paused
+  // when commands return. A pause for debugging and lenient practice, not
+  // physics: the car holds mid-corner speed in suspension while the world
+  // moves on.
+  kFreeze,
+  // Step with the neutral input, the same coasting an agent with no policy
+  // gets.
+  kCoast,
+  // The agent is out (ADR-0042's machinery, DnfCause::kTimeout): frozen in
+  // place, velocities zeroed, a stationary obstacle.
+  kDnf,
+};
+
+inline const char* to_string(TimeoutPolicy policy) {
+  switch (policy) {
+    case TimeoutPolicy::kWait: return "wait";
+    case TimeoutPolicy::kFreeze: return "freeze";
+    case TimeoutPolicy::kCoast: return "coast";
+    case TimeoutPolicy::kDnf: return "dnf";
+  }
+  return "unknown";
+}
+
 struct AgentSpec {
   std::string name = "car";
   Tier tier = Tier::L1_Bicycle;
   VehicleParams params{};
   VehicleState initial_state{};
   Policy policy{};   // empty means coast: zero steer, zero demand
+
+  // The asynchronous alternative to a policy (ADR-0044): commands arrive
+  // step-tagged through this mailbox, posted by another thread or, later, a
+  // transport. Setting both a policy and a mailbox is refused: an agent has
+  // one command source. When the entry for a step is missing, timeout_policy
+  // answers; it is meaningless without a mailbox and ignored there.
+  std::shared_ptr<CommandMailbox> mailbox{};
+  TimeoutPolicy timeout_policy = TimeoutPolicy::kWait;
 
   // Collision footprint (ADR-0043): an oriented rectangle, overall length by
   // overall width, centred on the wheelbase midpoint. Both zero, the
@@ -86,22 +125,26 @@ struct AgentSpec {
   double footprint_width = 0.0;    //                                    [m]
 };
 
-// Why an agent stopped racing (ADR-0042). Rollover is the first cause that
-// exists; the barrier timeout policies and race control will extend this.
+// Why an agent stopped racing (ADR-0042, ADR-0044); race control will
+// extend this.
 //
 // The two rollover values name the UNLOADED side: kRolloverLeft means both
 // left wheels reached zero vertical load, which is what happens in a hard
 // left turn (positive ay loads the right wheels), and the car is pivoting
-// about its right-hand contact patches.
+// about its right-hand contact patches. kTimeout is the kDnf answer to a
+// barrier miss: the agent's command did not arrive and its timeout policy
+// said that ends its run.
 enum class DnfCause {
   kRolloverLeft,
   kRolloverRight,
+  kTimeout,
 };
 
 inline const char* to_string(DnfCause cause) {
   switch (cause) {
     case DnfCause::kRolloverLeft: return "rollover: left wheels unloaded";
     case DnfCause::kRolloverRight: return "rollover: right wheels unloaded";
+    case DnfCause::kTimeout: return "barrier timeout: no command arrived";
   }
   return "unknown";
 }
@@ -174,6 +217,14 @@ struct SimulationConfig {
   // saying so. Recorded in the manifest and folded into the configuration
   // digest, because two runs that disagree here were different races.
   ContactParams contact{};
+
+  // How long the barrier waits, in wall-clock seconds, for a mailbox entry
+  // that has not arrived before ruling it a miss and applying the agent's
+  // timeout policy (ADR-0044). Zero means a poll. Ignored for kWait agents,
+  // whose barrier waits forever by definition. Wall clock, so a live run
+  // with non-wait mailbox agents is reproducible from its input log rather
+  // than by re-running; the manifest says which promise applies.
+  double barrier_timeout = 0.0;
 };
 
 // Everything a running simulation is, at one instant (SIM-08).
@@ -321,6 +372,8 @@ class Simulation {
     VehicleState initial_state;
     StepDiagnostics diagnostics;
     Policy policy;
+    std::shared_ptr<CommandMailbox> mailbox;
+    TimeoutPolicy timeout_policy = TimeoutPolicy::kWait;
     Rng rng;
     std::uint64_t seed = 0;
     TrajectoryHash hash;
@@ -336,10 +389,19 @@ class Simulation {
 
   void hash_states();
   void check_index(std::size_t i) const;
-  // One agent's share of a step: skip it if it is frozen, step it, then
-  // check its diagnostics for an event. Shared by advance() and replay() so
-  // a replayed roll rolls at the same step it was recorded at.
+  // One agent's share of a step: skip it if it is DNF'd or the input is the
+  // missed-step marker (NaN, ADR-0044), step it otherwise, then check its
+  // diagnostics for an event. Shared by advance() and replay() so a
+  // replayed roll rolls at the recorded step and a replayed pause pauses.
   void step_agent(Agent& a, const DriveInput& input);
+  // Resolve one agent's command for the step about to be computed: the
+  // policy callable, or the mailbox with its timeout policy (ADR-0044). May
+  // set the agent DNF (kDnf on a miss); returns the input to log and apply,
+  // NaN-tagged for a frozen step.
+  DriveInput resolve_command(Agent& a, double t);
+  // A timeout-DNF, shared by the live path and replay so both freeze the
+  // agent at the same step with the same cause.
+  void dnf_timeout(Agent& a);
   // The contact pass (ADR-0043), after every agent has moved: one impulse
   // per touching footprinted pair, pairs in ascending index order, one
   // pass. Shared by advance() and replay() for the same reason step_agent

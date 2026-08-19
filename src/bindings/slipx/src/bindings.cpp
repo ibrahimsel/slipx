@@ -520,6 +520,10 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("footprint_length", &AgentManifest::footprint_length,
                     "declared collision footprint, zero when none [m]")
       .def_readonly("footprint_width", &AgentManifest::footprint_width)
+      .def_readonly("command_source", &AgentManifest::command_source,
+                    "'policy', 'coast' or 'mailbox'")
+      .def_readonly("timeout_policy", &AgentManifest::timeout_policy,
+                    "for mailbox agents; empty otherwise")
       .def_readonly("status", &AgentManifest::status,
                     "'running', or 'dnf' with the cause and step below. A "
                     "result, not configuration: excluded from the "
@@ -545,6 +549,11 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("contact_friction", &RunManifest::contact_friction)
       .def_readonly("contact_restitution_min_speed",
                     &RunManifest::contact_restitution_min_speed)
+      .def_readonly("timing_dependent_commands",
+                    &RunManifest::timing_dependent_commands,
+                    "True when barrier misses were decided by a wall clock: "
+                    "such a run is bit-identical only when replayed from "
+                    "its input log, and the determinism block says so.")
       .def_readonly("agents", &RunManifest::agents)
       .def_readonly("compiler_id", &RunManifest::compiler_id)
       .def_readonly("compiler_version", &RunManifest::compiler_version)
@@ -597,7 +606,11 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readwrite("schema_version", &SimulationConfig::schema_version)
       .def_readwrite("contact", &SimulationConfig::contact,
                      "agent-to-agent contact constants (ADR-0043); they "
-                     "apply between agents that declare a footprint");
+                     "apply between agents that declare a footprint")
+      .def_readwrite("barrier_timeout", &SimulationConfig::barrier_timeout,
+                     "wall-clock seconds the barrier waits for a missing "
+                     "mailbox entry before ruling a miss; zero polls; "
+                     "ignored for Wait agents, whose barrier waits forever");
 
   py::class_<AgentSpec>(m, "AgentSpec")
       .def(py::init<>())
@@ -615,7 +628,13 @@ PYBIND11_MODULE(_slipx, m) {
           "it. The car schema carries this as geometry.length.")
       .def_readwrite("footprint_width", &AgentSpec::footprint_width,
                      "collision footprint width, overall [m]; see "
-                     "footprint_length");
+                     "footprint_length")
+      .def_readwrite("mailbox", &AgentSpec::mailbox,
+                     "asynchronous command source; an agent has one source, "
+                     "so a policy and a mailbox together are refused")
+      .def_readwrite("timeout_policy", &AgentSpec::timeout_policy,
+                     "what a missed step does; meaningless without a "
+                     "mailbox");
 
   // ---------------------------------------------------------------- events
   py::enum_<DnfCause>(
@@ -623,9 +642,45 @@ PYBIND11_MODULE(_slipx, m) {
       "Why an agent stopped racing. The rollover values name the UNLOADED "
       "side: RolloverLeft means both left wheels reached zero vertical load, "
       "which is what a hard left turn does (positive ay loads the right "
-      "wheels).")
+      "wheels). Timeout is a barrier miss whose policy said the run ends.")
       .value("RolloverLeft", DnfCause::kRolloverLeft)
-      .value("RolloverRight", DnfCause::kRolloverRight);
+      .value("RolloverRight", DnfCause::kRolloverRight)
+      .value("Timeout", DnfCause::kTimeout);
+
+  // --------------------------------------------------------------- barrier
+  py::enum_<TimeoutPolicy>(
+      m, "TimeoutPolicy",
+      "What the barrier does about a step whose command never arrived. Only "
+      "meaningful for a mailbox-driven agent; a policy callable cannot "
+      "miss.")
+      .value("Wait", TimeoutPolicy::kWait,
+             "block until it arrives: strict lockstep, timing cannot change "
+             "the trajectory, and one hung agent hangs the race")
+      .value("Freeze", TimeoutPolicy::kFreeze,
+             "do not step the agent this step; it resumes where it paused")
+      .value("Coast", TimeoutPolicy::kCoast,
+             "step with the neutral input, like an agent with no policy")
+      .value("Dnf", TimeoutPolicy::kDnf,
+             "the agent is out: frozen in place, a stationary obstacle");
+
+  py::class_<CommandMailbox, std::shared_ptr<CommandMailbox>>(
+      m, "CommandMailbox",
+      "The barrier's doorway: a thread-safe queue of step-tagged commands "
+      "into an otherwise single-threaded simulation. The tag is the "
+      "acknowledgement: post(step, input) delivers a command for that step, "
+      "ack(step) says 'alive, hold my last one'. Tags strictly increase; "
+      "the simulation takes the entry tagged with exactly the step it is "
+      "about to compute, and anything else is a miss answered by the "
+      "agent's TimeoutPolicy.")
+      .def(py::init<>())
+      .def("post", &CommandMailbox::post, py::arg("step"), py::arg("input"),
+           py::call_guard<py::gil_scoped_release>(),
+           "Refuses NaN (reserved as the log's missed-step marker) and "
+           "non-increasing tags, by name.")
+      .def("ack", &CommandMailbox::ack, py::arg("step"),
+           py::call_guard<py::gil_scoped_release>(),
+           "Acknowledge a step with no new command: hold the last one. "
+           "Before anything was posted, the held command is a coast.");
 
   py::class_<DnfEvent>(
       m, "DnfEvent",
@@ -652,14 +707,22 @@ PYBIND11_MODULE(_slipx, m) {
       .def(py::init<SimulationConfig>(), py::arg("config") = SimulationConfig{})
       .def("add_agent", &Simulation::add_agent, py::arg("spec"),
            "Returns the agent's index. No upper bound on the count.")
-      .def("advance", &Simulation::advance, "One step for every agent.")
-      .def("run", &Simulation::run, py::arg("steps"))
+      // The GIL is released while stepping, so a Python thread can post
+      // into a mailbox while a Wait barrier blocks; pybind reacquires it
+      // whenever a Python policy is actually invoked.
+      .def("advance", &Simulation::advance,
+           py::call_guard<py::gil_scoped_release>(),
+           "One step for every agent.")
+      .def("run", &Simulation::run, py::arg("steps"),
+           py::call_guard<py::gil_scoped_release>())
       .def("run_for", &Simulation::run_for, py::arg("duration"),
+           py::call_guard<py::gil_scoped_release>(),
            "Rounds to whole steps: a partial step would be a second step size.")
       .def("reset", &Simulation::reset,
            "Back to the initial states, clock, hashes and random streams. Does "
            "not rebuild the models, so a reset run is the same run.")
       .def("replay", &Simulation::replay, py::arg("log"),
+           py::call_guard<py::gil_scoped_release>(),
            "Re-run from a recorded input sequence, ignoring the policies. What "
            "a leaderboard appeal does when the policies are gone.")
       .def_property_readonly("agent_count", &Simulation::agent_count)

@@ -148,6 +148,31 @@ written before contact existed still reproduces bit for bit. A DNF'd car
 keeps its footprint and is immovable: the wreck stays on track and other
 cars bounce off it.
 
+### The barrier: asynchronous commands and what a miss does
+
+Instead of a policy, an agent can take commands through a
+`CommandMailbox`: a thread-safe queue of step-tagged entries, the doorway
+for a controller living on another thread (and, later, another machine).
+The tag is the acknowledgement: `post(step, input)` delivers a command for
+that step, `ack(step)` says "alive, hold my last one", tags strictly
+increase, and the simulation takes the entry tagged with exactly the step
+it is about to compute. Anything else is a miss, and the agent's
+`TimeoutPolicy` answers it:
+
+| Policy | A missed step means |
+|---|---|
+| `Wait` (default) | Block until it arrives. Strict lockstep: timing cannot change the trajectory, and one hung agent hangs the race. |
+| `Freeze` | The agent is not stepped; it resumes exactly where it paused. A debugging pause, not physics. |
+| `Coast` | Stepped with the neutral input, like an agent with no policy. |
+| `Dnf` | Out (`DnfCause.Timeout`): frozen in place, a stationary obstacle. |
+
+`config.barrier_timeout` is how many wall-clock seconds the barrier waits
+before ruling a miss (zero polls). A run with non-wait mailbox agents is
+decided partly by that wall clock, so its manifest narrows the determinism
+promise: bit-identical **when replayed from its input log**, and the
+stepping calls release the GIL so a Python poster thread can feed a
+waiting barrier. See ADR-0044 for the design and its costs.
+
 ### Rollover, the first discrete event
 
 At L2, a step whose diagnostics show both wheels of one side at zero vertical
