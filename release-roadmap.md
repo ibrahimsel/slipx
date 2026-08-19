@@ -1,14 +1,16 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-19, end of a long session that built M7.1 through
-M7.6 (rollover events, contact, the barrier, the broadphase with the
-20-agent target renegotiated to over 7x, race control on the pinned
-ruleset, the MCAP event stream; ADR-0042 to ADR-0046) and closed M5.9 and
-M5.12. M7.8 is STAGED but unfinished; its entry says exactly what remains
-and is where the next session starts. After it, the buildable remainder of
-M7 is the in-process fraction of M7.7 (per-agent sensor configuration from
-sensors.yaml; the race_sync client, the RMW benchmark and multi-host need
-the ROS environment, like M5.7). Earlier the same day, four user decisions
+Last updated: 2026-08-19, the session after the M7.1-M7.6 one: M7.8 landed
+(the leaderboard harness's tests and mutation pass; the code itself was
+staged the session before), and the WSL environment check found the user's
+apt install completed, so ROS 2 Jazzy with ackermann-msgs, colcon and
+rmw-zenoh-cpp plus g++-11, clang-18, ninja and Python tooling are all
+present: M5.7 and the ROS halves of M7.7 are UNBLOCKED, and M7.7 is the
+next task. In the session before, M7.1 through M7.6 were built (rollover
+events, contact, the barrier, the broadphase with the 20-agent target
+renegotiated to over 7x, race control on the pinned ruleset, the MCAP
+event stream; ADR-0042 to ADR-0046) and M5.9 and M5.12 closed.
+Earlier the same day, four user decisions
 were recorded: the 20-agent performance target waits for M7.4's broadphase
 before any renegotiation (since executed, see M5.12); the WSL environment
 gets ROS 2 and the extra compilers installed by the user; the 0.3.0, 0.4.0
@@ -398,8 +400,9 @@ from a car file and visible. Everything below is release engineering.
 
 Status: in-progress; M5.1 to M5.6, M5.8, M5.9 and M5.12 done (the 20-agent
 performance target renegotiated to over 7x on 2026-08-19 after M7.4's
-broadphase was measured, per the standing decision), M5.7 blocked on the
-environment, M5.10 the external gate, M5.11 deferred to the end of M7. Size:
+broadphase was measured, per the standing decision), M5.7 unblocked late
+on 2026-08-19 (the ROS 2 install completed) and now buildable, M5.10 the
+external gate, M5.11 deferred to the end of M7. Size:
 extra large (many weeks). Release: 0.3.0 at the end. Hash impact: none
 expected in `slipx_core`, and none observed; sensors and scene live above
 it. Determinism constraints extend to every new layer: seeded per-agent RNG
@@ -573,6 +576,10 @@ directories and must respect the downward dependency order
   (since reset) WSL distribution; the bridge is built once it lands. The WSL
   reset also removed pip, venv support and the Python headers, so the
   bindings cannot build in WSL until the same install completes.
+  Unblocked later on 2026-08-19: the install has completed and was
+  verified (ackermann_msgs under /opt/ros/jazzy, colcon, rmw-zenoh-cpp,
+  g++-11, clang-18, ninja, python3 pip/venv/headers). The bridge can now
+  be built; the exit condition stays external (somebody else's stack).
 - [x] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
   that validate the simulator, explicitly not a competitive stack.
   Done when: both run a lap on the shipped track headlessly in CI.
@@ -927,8 +934,8 @@ because parameter sets compound and racing features do not.
 
 ## M7. P3: racing
 
-Status: in-progress; M7.1 to M7.6 done, M7.9 decided (deferred). Size:
-extra large (many weeks). Release:
+Status: in-progress; M7.1 to M7.6 and M7.8 done, M7.9 decided (deferred).
+Size: extra large (many weeks). Release:
 0.5.0 at the end. Hash impact: contact and rollover enter `slipx_core`
 numerical paths; expect deliberate hash movements, recorded per the standing
 discipline. (M7.1 moved none: detection reads diagnostics the core already
@@ -1137,7 +1144,7 @@ computed, and the conformance script re-checked all six rows.)
   and 20 agents) with the multicast failure mode documented; multi-host agents
   with the simulator as sync authority.
   Done when: each has tests or, for the RMW decision, a recorded benchmark.
-- [ ] **M7.8** CI leaderboard harness with seeded scenario batches.
+- [x] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
   IN PROGRESS, staged 2026-08-19 as a session handoff; the code compiles
   and runs but its tests and mutation pass have NOT landed, so this stays
@@ -1170,6 +1177,34 @@ computed, and the conformance script re-checked all six rows.)
   entry and the M7.8 tick with the mutation list. No design questions are
   open; ADR-0046 already covers the layer and the stream doctrine covers
   the consumption rule, so no new ADR is expected.
+  Done 2026-08-19, the next session, exactly per the staged plan and with
+  no design change. `tests/test_leaderboard.cpp` (8 cases) plus a
+  `Leaderboard.Run` ctest case mirroring `Benchmarks.Run`, so the tool
+  itself runs in CI. The four settled cases hold; the seed case asserts
+  on the parsed events rather than the bytes, because the recorded seed
+  metadata would make the bytes differ even if the seed never reached
+  the racing. Beyond them: the counting and ordering rules are pinned
+  against synthetic parsed streams (wins mapped through the stream's own
+  entrant names, with the winner as agent 1 on purpose; the full ordering
+  including both tiebreaks; a stream with a round won but no match won
+  still abandoned), the manifest and every stream carry the independently
+  recomputed derive_seed(master, index) with the alternating slot
+  reaching the round-start events, and an unwritable directory throws
+  with the write's own message, so the refusal cannot be laundered
+  through a later failure.
+  Mutation pass: 19 tried, 17 caught, one of them only after the test was
+  sharpened rather than the mutant excused. Dropping the round-wins
+  tiebreak escaped because the engineered tiebreak agreed with the
+  alphabetical fallback; the fixture now makes the round-wins order
+  oppose the name order and says so. Two escapes, both recorded as
+  non-defects. Dropping the read-back's could-not-read throw is a guard
+  no in-process test can reach (a file the process just wrote is readable
+  by the same process; the guard defends against out-of-process
+  interference, the M5.1 escape's reasoning). Computing standings from
+  memory instead of the read-back files is observationally equivalent
+  exactly because the suite pins result.rows against standings recomputed
+  from the files: the mutant survives only while memory and files agree,
+  and any divergence fails that test whichever side the harness used.
 - [x] **M7.9** **DECISION**: governance. If a competition adopts SlipX,
   ownership of the ruleset implementation becomes contested; decide before,
   not after.

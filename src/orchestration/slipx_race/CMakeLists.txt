@@ -51,9 +51,9 @@ target_compile_definitions(slipx_race_demo PRIVATE
 slipx_apply_determinism_flags(slipx_race_demo)
 install(TARGETS slipx_race_demo EXPORT slipxTargets)
 
-# The CI leaderboard harness (M7.8, IN PROGRESS: compiles and runs, but its
-# test suite and mutation pass have not landed yet; see the roadmap's M7.8
-# entry before relying on it).
+# The CI leaderboard harness: a seeded round-robin whose standings are
+# computed from the event streams read back from disk, so a batch is
+# reproducible from its manifest and seeds alone.
 add_executable(slipx_leaderboard tools/leaderboard_main.cpp)
 target_link_libraries(slipx_leaderboard PRIVATE slipx::race)
 target_compile_definitions(slipx_leaderboard PRIVATE
@@ -62,4 +62,8 @@ slipx_apply_determinism_flags(slipx_leaderboard)
 
 if(SLIPX_BUILD_TESTS AND BUILD_TESTING)
   add_subdirectory(tests)
+  # The harness end to end, the way CI would run it (mirrors Benchmarks.Run).
+  add_test(NAME Leaderboard.Run
+           COMMAND slipx_leaderboard ${CMAKE_CURRENT_BINARY_DIR}/leaderboard_run)
+  set_tests_properties(Leaderboard.Run PROPERTIES TIMEOUT 600)
 endif()

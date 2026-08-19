@@ -21,6 +21,24 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The CI leaderboard harness.** `slipx_leaderboard <dir> [master_seed]`
+  runs a seeded round-robin of head-to-head matches on the shipped track
+  and writes one event stream per match, `batch_manifest.json` and
+  `leaderboard.json`. Standings are computed from the parsed event
+  streams and from nothing else: `race::standings` takes streams, the
+  harness reads its own files back from disk rather than trusting memory,
+  and the ordering is total (match wins, then round wins, then name), so
+  two leaderboards compare with equality. Every scenario's seed derives
+  from the master seed and the scenario's position, the left grid slot
+  alternates per repetition, and the manifest records all of it, so a
+  batch is reproducible from its manifest and seeds alone: the same batch
+  writes the same stream bytes, asserted rather than promised, and a
+  different master seed demonstrably changes the racing, not just the
+  recorded metadata. A match whose round budget runs out undecided counts
+  as abandoned for both cars and a win for neither, because the rulebook
+  has no rule for a race that never ends. The tool's canned entrants
+  carry seeded steering jitter so the seed reaches the outcome, and the
+  harness runs end to end in CI as `Leaderboard.Run`.
 - **The race event stream is MCAP.** Every race-control outcome travels as
   a JSON message on `/race/events` in an MCAP file the race layer writes
   itself (a two-hundred-line hand-rolled encoder, for the manifest
