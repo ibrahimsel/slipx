@@ -21,6 +21,26 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The transport, measured, and a racing default decided** (ADR-0052).
+  `python -m slipx_ros.rmw_bench` runs the same fully sensored lockstep
+  race (a bridge process plus one client process per agent) over Fast-DDS
+  as Jazzy ships it, Fast-DDS against a discovery server, and rmw_zenoh
+  against its router, at 6 and 20 agents. Measured on the development
+  machine, repeatable within one per cent: all three carry a 20-agent
+  race at about 200 barrier turns per second, so the transport choice is
+  about venue survival rather than speed; zenoh costs 5 to 12 per cent
+  against as-shipped Fast-DDS while removing the multicast dependence by
+  construction, and the discovery server repeatably costs more (42 per
+  cent at 6 agents) while hiding the node graph from ordinary tooling.
+  The documented default for race days is therefore rmw_zenoh; a bench
+  machine needs nothing. The multicast failure mode, the recommendation
+  and the support matrix live in `docs/reference/ros-bridge.md`; the
+  numbers are loopback numbers and say so. Multi-host lockstep needed no
+  new mechanism (the announcement and the stamped commands are ordinary
+  topics, and only the simulator advances); the router-mediated
+  cross-process test exercises exactly the code path a second host adds a
+  wire to, and a two-machine measurement rides with the first external
+  team connection.
 - **Lockstep racing over ROS: race_sync** (ADR-0051). The bridge gains a
   lockstep mode in which the simulator is the sync authority: it announces
   the next step index on `/race_sync/step` (latched, so a late joiner

@@ -1,13 +1,17 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-19, the session after the M7.1-M7.6 one: M7.8 landed
-(the leaderboard harness's tests and mutation pass; the code itself was
-staged the session before), and M7.7's sensors half landed as two slices,
-the sensor rig (ADR-0047) and the sensors.yaml wiring with schema 0.5.0
-(ADR-0048). The WSL environment check found the user's apt install
-completed, so ROS 2 Jazzy with ackermann-msgs, colcon and rmw-zenoh-cpp
-plus g++-11, clang-18, ninja and Python tooling are all present: M5.7 and
-the ROS halves of M7.7 are UNBLOCKED and are the next task. In the session before, M7.1 through M7.6 were built (rollover
+Last updated: 2026-08-20. The session that started at M7.8 finished every
+buildable task in M7: the leaderboard harness's tests and mutation pass
+(M7.8), the sensor rig (ADR-0047), sensors.yaml wired through schema
+0.5.0 (ADR-0048), the racing world composed in slipx_sim (ADR-0049), the
+ROS 2 bridge (ADR-0050, M5.7 built with its external exit condition
+still open), lockstep racing through race_sync (ADR-0051), and the RMW
+benchmark with the race-day default decided (ADR-0052), which ticked
+M7.7. What remains in M5 through M7 is external or deliberate: the three
+exit gates (M5.10, M6.8, M7.10, the user's outreach), M6.7 ("not now"),
+M7.9 (deferred until adoption), and the 0.3.0/0.4.0/0.5.0 releases, cut
+together with the user per the 2026-08-19 decision. M8 is next and is
+blocked by the gates. In the session before, M7.1 through M7.6 were built (rollover
 events, contact, the barrier, the broadphase with the 20-agent target
 renegotiated to over 7x, race control on the pinned ruleset, the MCAP
 event stream; ADR-0042 to ADR-0046) and M5.9 and M5.12 closed.
@@ -604,9 +608,13 @@ directories and must respect the downward dependency order
   step, IMU axes crossed, frame ids not the mount, the input log off,
   the grid unspaced, the mode not validation). Not tried: hardcoding
   real_time_factor, which changes only how long the wall clock takes to
-  agree with the same trajectory. The tick still waits for the external
+  agree with the same trajectory. The support matrix the task names is
+  published in docs/reference/ros-bridge.md (Jazzy tested; rolling
+  expected, untested), alongside the transport recommendation of
+  ADR-0052. The tick still waits for the external
   exit condition: an existing F1TENTH stack connecting with a remap
-  file, which is the outreach the user runs.
+  file, which is the outreach the user runs; the two-machine lockstep
+  measurement rides with it.
 - [x] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
   that validate the simulator, explicitly not a competitive stack.
   Done when: both run a lap on the shipped track headlessly in CI.
@@ -961,7 +969,9 @@ because parameter sets compound and racing features do not.
 
 ## M7. P3: racing
 
-Status: in-progress; M7.1 to M7.6 and M7.8 done, M7.9 decided (deferred).
+Status: in-progress; M7.1 to M7.8 done, M7.9 decided (deferred); what
+remains is the external gate (M7.10) and the release (M7.11, cut with the
+user per the 2026-08-19 decision).
 Size: extra large (many weeks). Release:
 0.5.0 at the end. Hash impact: contact and rollover enter `slipx_core`
 numerical paths; expect deliberate hash movements, recorded per the standing
@@ -1164,13 +1174,35 @@ computed, and the conformance script re-checked all six rows.)
   last type, the reader trusting any record length). One test needed
   sharpening first: the schema JSON legitimately names "other", so the
   absence scan looks for the sentinel form, not the key.
-- [ ] **M7.7** Per-agent sensor configuration (cheap opponents run 2D or no
+- [x] **M7.7** Per-agent sensor configuration (cheap opponents run 2D or no
   sensors); `race_sync` client library implementing the barrier, linkable
   into a student control node with under ten lines of change; RMW default
   benchmarked and decided (`rmw_zenoh` versus Fast-DDS discovery server, at 6
   and 20 agents) with the multicast failure mode documented; multi-host agents
   with the simulator as sync authority.
   Done when: each has tests or, for the RMW decision, a recorded benchmark.
+  Ticked 2026-08-20, with the last two halves. The RMW benchmark
+  (`python -m slipx_ros.rmw_bench`, ADR-0052) runs the same fully
+  sensored lockstep race over as-shipped Fast-DDS, Fast-DDS with a
+  discovery server, and rmw_zenoh, at 6 and 20 agents, one client
+  process per agent; measured on the 7800X3D under WSL2 and repeatable
+  within one per cent, all three carry 20 agents at about 200 barrier
+  turns per second, zenoh costs 5 to 12 per cent against multicast
+  Fast-DDS while removing the multicast dependence, and the discovery
+  server repeatably costs more (42 per cent at 6 agents) besides its
+  super-client tooling wart, so the documented race-day default is
+  rmw_zenoh and the multicast failure mode is documented from its
+  mechanism in docs/reference/ros-bridge.md (loopback cannot exhibit
+  it, and the numbers say they are loopback numbers). Multi-host needed
+  no new mechanism (ADR-0051: the announcement and the stamped commands
+  are ordinary topics and only the simulator advances); the
+  router-mediated cross-process benchmark row runs as a test, which is
+  the exact code path a second host adds a physical wire to, and the
+  measured steps field is the simulator's own count so a short loop
+  cannot report a clean row. Benchmark-harness mutation pass: 3 tried,
+  3 caught (the loop stepping short, the rate inverted, the clients in
+  the wrong namespace). The genuinely two-machine measurement rides
+  with M5.7's external exit condition and is noted there, not here.
   In progress. The sensors half's C++ machinery landed 2026-08-19 as the
   sensor rig (ADR-0047): `slipx/sim/sensor_rig.hpp`, per-agent LiDAR, IMU
   and encoder instances observing a simulation they structurally cannot

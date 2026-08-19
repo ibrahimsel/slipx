@@ -24,6 +24,7 @@ the lookup material; it does not teach the subject.
 | [The tyre model](tyre-model.md) | The MF-lite derivation: the shape function, load sensitivity, where `B` comes from, the friction ellipse, and what was dropped and why. |
 | [The Python API](python-api.md) | Loading a car, stepping a model, the orchestrator, recording a run, the manifest. |
 | [Performance](performance.md) | Measured step cost and real-time factors, the machine they were measured on, and which of the three targets are currently missed. |
+| [The ROS 2 bridge](ros-bridge.md) | Topics and QoS per agent, live against lockstep, the multicast failure mode and the measured transport recommendation, multi-host, the support matrix. |
 
 ## Three things that are true everywhere in this directory
 
