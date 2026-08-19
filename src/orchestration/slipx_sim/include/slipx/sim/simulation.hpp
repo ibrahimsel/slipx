@@ -42,6 +42,7 @@
 #include <string>
 #include <vector>
 
+#include "slipx/contact.hpp"
 #include "slipx/sense/rng.hpp"
 #include "slipx/sim/hash.hpp"
 #include "slipx/sim/manifest.hpp"
@@ -72,6 +73,17 @@ struct AgentSpec {
   VehicleParams params{};
   VehicleState initial_state{};
   Policy policy{};   // empty means coast: zero steer, zero demand
+
+  // Collision footprint (ADR-0043): an oriented rectangle, overall length by
+  // overall width, centred on the wheelbase midpoint. Both zero, the
+  // default, means the agent declares no footprint and touches nothing, so
+  // a scenario without footprints reproduces bit for bit what it produced
+  // before contact existed. The car schema carries these as
+  // geometry.length and geometry.width. Setting one without the other is
+  // refused: a rectangle with one dimension is not a smaller footprint, it
+  // is a mistake.
+  double footprint_length = 0.0;   //                                    [m]
+  double footprint_width = 0.0;    //                                    [m]
 };
 
 // Why an agent stopped racing (ADR-0042). Rollover is the first cause that
@@ -154,6 +166,14 @@ struct SimulationConfig {
   // values compress a long run. Ignored in deterministic mode, where there is
   // no clock to be fast or slow against.
   double real_time_factor = 1.0;
+
+  // Agent-to-agent contact (ADR-0043): one impulse per touching pair per
+  // step, restitution and Coulomb friction, applied between steps to agents
+  // that declare a footprint. The defaults are plausible for foam bumpers on
+  // plastic shells and are fitted to nothing; see contact.hpp, which keeps
+  // saying so. Recorded in the manifest and folded into the configuration
+  // digest, because two runs that disagree here were different races.
+  ContactParams contact{};
 };
 
 // Everything a running simulation is, at one instant (SIM-08).
@@ -305,6 +325,13 @@ class Simulation {
     std::uint64_t seed = 0;
     TrajectoryHash hash;
     std::optional<DnfEvent> dnf;
+
+    // Cached from the spec at add_agent (ADR-0043). Zero half-extents mean
+    // no footprint: the agent is skipped by the contact pass entirely.
+    double half_length = 0.0;
+    double half_width = 0.0;
+    double centre_offset = 0.0;   // wheelbase midpoint ahead of the CoG [m]
+    bool has_footprint() const { return half_length > 0.0; }
   };
 
   void hash_states();
@@ -313,6 +340,12 @@ class Simulation {
   // check its diagnostics for an event. Shared by advance() and replay() so
   // a replayed roll rolls at the same step it was recorded at.
   void step_agent(Agent& a, const DriveInput& input);
+  // The contact pass (ADR-0043), after every agent has moved: one impulse
+  // per touching footprinted pair, pairs in ascending index order, one
+  // pass. Shared by advance() and replay() for the same reason step_agent
+  // is. With no footprints declared this touches nothing, which is what
+  // keeps every pre-contact trajectory bit-identical.
+  void resolve_contacts();
   // Validation mode only; reads no clock in deterministic mode.
   void pace();
 

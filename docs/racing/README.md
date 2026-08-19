@@ -51,6 +51,7 @@ sit.
 |---|---|---|
 | 5 | [The racing line](05-the-racing-line.md) | Why is the shortest path not the fastest? |
 | 6 | [Speed and the g-g diagram](06-speed-and-the-gg-diagram.md) | How fast can I go, and where do I brake? |
+| 17 | [A collision is an impulse](17-a-collision-is-an-impulse.md) | What does touching another car actually do? |
 
 **Part three: getting the numbers**
 

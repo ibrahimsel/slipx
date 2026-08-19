@@ -45,6 +45,12 @@ struct AgentManifest {
   std::string params_digest;     // hash of the parameter set actually used
   std::uint64_t seed = 0;        // this agent's derived stream seed
 
+  // The declared collision footprint, zero when none (ADR-0043).
+  // Configuration, not result: an agent that could be hit was in a
+  // different race from one that could not.
+  double footprint_length = 0.0;   //                                   [m]
+  double footprint_width = 0.0;    //                                   [m]
+
   // How the agent's run ended: "running", or "dnf" with the cause and the
   // step spelled out (ADR-0042). A result, not configuration: a frozen car
   // in a trajectory whose manifest does not say why would send an
@@ -75,6 +81,13 @@ struct RunManifest {
   // determinism block below says so instead of repeating a promise that does
   // not hold for it.
   std::string run_mode = "deterministic";
+
+  // The contact constants (ADR-0043). Configuration like dt is: two runs
+  // that disagree here were different races, so they are in the digest.
+  double contact_restitution = 0.0;         //                          [-]
+  double contact_friction = 0.0;            //                          [-]
+  double contact_restitution_min_speed = 0.0;  //                     [m/s]
+
   std::vector<AgentManifest> agents;
 
   // ------------------------------------------------------------ the build

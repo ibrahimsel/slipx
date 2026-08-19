@@ -1466,6 +1466,109 @@ def fig_cross_tier_crossover():
 
     f.save("cross-tier-crossover.svg")
 
+# ======================================================= 19. contact impulse
+
+def fig_contact_impulse():
+    """SCHEMATIC: the geometry of a glancing contact.
+
+    Two footprints at the moment of impact: the contact point, the normal and
+    tangent directions, the friction cone that bounds the impulse, and the
+    lever arm that turns the impulse into a yaw moment. Geometry, not a
+    model; the assertions below keep the picture honest about its own
+    construction.
+    """
+    f = Fig(720, 430, "A glancing contact: normal, tangent, friction cone "
+                      "and lever arm")
+    f.head("The anatomy of a contact",
+           "One impulse J at one point decides everything the collision "
+           "does. Top view; the cars are drawn at the instant of impact.")
+
+    # The struck car: axis-aligned, so its edges are exact numbers the
+    # assertions can use.
+    bx, by, bw, bh = 430, 200, 150, 80
+    f.rot_rect(bx, by, bw, bh, 0)
+    f.text(bx, by - bh / 2 - 12, "the struck car", "ts", "middle")
+
+    # Contact point on the struck car's lower screen edge, forward of centre
+    # is to the right.
+    px, py = 380.0, float(by + bh / 2)
+    assert abs(py - (by + bh / 2)) < 1e-9, "P must lie on the edge"
+    assert bx - bw / 2 <= px <= bx + bw / 2, "P must lie within the face"
+
+    # The striking car, angled, its LEADING corner exactly at P: the centre
+    # is computed back from the corner rather than eyeballed, and the
+    # leading corner is the one whose whole body trails below-left of it, so
+    # the two rectangles kiss instead of interpenetrating.
+    ang = -35.0
+    aw, ah = 150, 80
+    th = math.radians(ang)
+    cx_off = (aw / 2) * math.cos(th) - (-ah / 2) * math.sin(th)
+    cy_off = (aw / 2) * math.sin(th) + (-ah / 2) * math.cos(th)
+    acx, acy = px - cx_off, py - cy_off
+    corner = (acx + cx_off, acy + cy_off)
+    assert abs(corner[0] - px) < 1e-9 and abs(corner[1] - py) < 1e-9
+    assert cy_off < 0, ("the leading corner must sit above the centre, or "
+                        "the striking car pokes through the struck one")
+    f.rot_rect(acx, acy, aw, ah, ang)
+    f.text(acx - 60, acy + 62, "the striking car", "ts")
+
+    # Its closing velocity, along its own heading.
+    vdir = (math.cos(th), math.sin(th))
+    f.line(acx - 10 * vdir[0], acy - 10 * vdir[1],
+           acx + 62 * vdir[0], acy + 62 * vdir[1], "a2", arrow=True)
+    f.text(acx + 70 * vdir[0] + 6, acy + 70 * vdir[1] + 12,
+           "closing velocity", "k2")
+
+    # Normal and tangent at P. The normal is perpendicular to the struck
+    # face, pointing into the struck car (up-screen).
+    f.line(px, py, px, py - 64, "a1", arrow=True)
+    f.text(px - 16, py - 52, "n", "k1")
+    f.line(px, py, px + 62, py, "a2 thin", arrow=True)
+    f.text(px + 54, py + 18, "t", "k2")
+    f.circle(px, py, 3.4, "a1f")
+    f.text(px - 95, py + 2, "contact point", "ts", "end")
+
+    # The friction cone: the impulse must lie within atan(mu) of the normal.
+    mu = 0.5
+    half = math.atan(mu)
+    for s in (-1.0, 1.0):
+        f.line(px, py, px + 84 * math.sin(half) * s, py - 84 * math.cos(half),
+               "mut dot")
+    f.text(px - 84 * math.sin(half) - 8, py - 84 * math.cos(half) + 4,
+           "friction cone, atan(" + MU + ")", "ts", "end")
+
+    # The impulse, inside the cone: mostly normal, some friction.
+    j_ang = math.radians(15.0)
+    assert j_ang < half, "the drawn impulse must respect its own cone"
+    jx, jy = px + 58 * math.sin(j_ang), py - 58 * math.cos(j_ang)
+    f.line(px, py, jx, jy, "ok", arrow=True)
+    f.text(jx + 6, jy - 4, "J", "k3")
+
+    # The lever arm from the struck car's CoG to P, and the yaw it buys.
+    f.circle(bx, by, 3.0, "a2f")
+    f.text(bx + 4, by + 22, "CoG", "ts")
+    f.line(bx, by, px, py, "mut dash")
+    f.text((bx + px) / 2 - 4, (by + py) / 2 - 6, "r", "ts")
+
+    # The induced rotation, drawn about the CoG it acts on. Screen y grows
+    # downward, so the cross product of r = P - CoG and J (both in screen
+    # coordinates) being positive means a visually clockwise turn; asserted,
+    # then drawn that way (the arc helper's angle grows clockwise on
+    # screen).
+    rxs, rys = px - bx, py - by
+    jxs, jys = jx - px, jy - py
+    assert rxs * jys - rys * jxs > 0, "the drawn couple must match the arc"
+    f.arc(bx, by, 24, 185, 355, "a1", arrow=True)
+    f.text(bx + bw / 2 + 10, by + 2, "yaw rate change = (r &#215; J) / I"
+           + sub("zz"), "k1")
+
+    f.text(44, 398, "J = &#8747;F dt", "t")
+    f.text(150, 398, "&#916;v = J / m", "t")
+    f.text(268, 398, "one arrow, applied at one point, equal and opposite "
+                     "on the two cars", "ts")
+    f.save("contact-impulse.svg")
+
+
 def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
@@ -1477,7 +1580,7 @@ def main():
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
                fig_speed_profile,
                fig_differential_speeds, fig_torque_speed, fig_servo_step,
-               fig_cross_tier_crossover):
+               fig_cross_tier_crossover, fig_contact_impulse):
         fn()
     print("done")
 

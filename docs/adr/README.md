@@ -99,3 +99,4 @@ Use [`template.md`](template.md) for a new record.
 | # | Decision | Status |
 |---|---|---|
 | [0042](0042-rollover-is-a-sim-event-that-freezes-the-agent.md) | Rollover is a sim-level event that freezes the agent | Proposed |
+| [0043](0043-contact-is-one-impulse-between-declared-footprints.md) | Contact is one planar impulse between declared footprints | Proposed |

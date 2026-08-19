@@ -63,9 +63,10 @@ python3 examples/ghost_race_figure.py /tmp/race
 ```
 
 A ghost race is not a race, and the code says so in more places than this one.
-SlipX has no contact model and no race control until P3, so the cars cannot
-touch, cannot be held up and cannot be overtaken in any sense that costs the
-car ahead anything, and nothing decides a winner. What twenty of them lapping
+These cars declare no collision footprints (contact exists between agents
+that declare one, ADR-0043) and there is no race control until P3, so they
+cannot touch, cannot be held up and cannot be overtaken in any sense that
+costs the car ahead anything, and nothing decides a winner. What twenty of them lapping
 at once does demonstrate is that the pieces compose: the track geometry, the
 projection, the controllers, the vehicle models and the lap counters, in one
 orchestrated deterministic run.

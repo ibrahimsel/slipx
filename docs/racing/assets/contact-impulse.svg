@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="430" viewBox="0 0 720 430" role="img" aria-label="A glancing contact: normal, tangent, friction cone and lever arm">
+<title>A glancing contact: normal, tangent, friction cone and lever arm</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+  </marker>
+</defs>
+<style>
+  :root {
+    --paper:#ffffff; --fg:#14181d; --muted:#5b6672; --grid:#e3e7ec;
+    --accent:#c2410c; --accent2:#1d4ed8; --ok:#15803d; --warn:#a16207;
+    --body:#cfd6de; --road:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#11161c; --fg:#e8ecf1; --muted:#93a0ad; --grid:#2a323b;
+      --accent:#fb923c; --accent2:#7aa7ff; --ok:#4ade80; --warn:#eab308;
+      --body:#2b333c; --road:#1a2027;
+    }
+  }
+  .card { fill: var(--paper); }
+  .grid { stroke: var(--grid); stroke-width: 1; fill: none; }
+  .axis { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  .mut  { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .fg   { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+  .body { fill: var(--body); stroke: var(--muted); stroke-width: 1.1; }
+  .road { fill: var(--road); stroke: var(--grid); stroke-width: 1.1; }
+  .a1   { stroke: var(--accent);  stroke-width: 2.2; fill: none; }
+  .a2   { stroke: var(--accent2); stroke-width: 2.2; fill: none; }
+  .ok   { stroke: var(--ok);      stroke-width: 2.2; fill: none; }
+  .a1f  { fill: var(--accent);  stroke: none; }
+  .a2f  { fill: var(--accent2); stroke: none; }
+  .okf  { fill: var(--ok);      stroke: none; }
+  .dash { stroke-dasharray: 7 5; }
+  .dot  { stroke-dasharray: 2 4; }
+  .thin { stroke-width: 1.2; }
+  text  { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .t    { font-size: 13px; }
+  .ts   { font-size: 11.5px; fill: var(--muted); }
+  .tb   { font-size: 15px; font-weight: 600; }
+  .tm   { font-size: 12px; fill: var(--muted); }
+  .k1   { font-size: 12px; fill: var(--accent); }
+  .k2   { font-size: 12px; fill: var(--accent2); }
+  .k3   { font-size: 12px; fill: var(--ok); }
+  .sb   { font-size: 0.72em; }
+</style>
+<rect class="card" x="0" y="0" width="720" height="430" rx="10"/>
+<text class="tb" x="22.00" y="28.00">The anatomy of a contact</text>
+<text class="tm" x="22.00" y="47.00">One impulse J at one point decides everything the collision does. Top view; the cars are drawn at the instant of impact.</text>
+<rect class="body" x="355.00" y="160.00" width="150" height="80" rx="3" transform="rotate(0 430.00 200.00)"/>
+<text class="ts" x="430.00" y="148.00" text-anchor="middle">the struck car</text>
+<rect class="body" x="266.51" y="275.78" width="150" height="80" rx="3" transform="rotate(-35.0 341.51 315.78)"/>
+<text class="ts" x="281.51" y="377.78">the striking car</text>
+<line class="a2" x1="333.32" y1="321.52" x2="392.29" y2="280.22" marker-end="url(#ah)"/>
+<text class="k2" x="404.85" y="287.63">closing velocity</text>
+<line class="a1" x1="380.00" y1="240.00" x2="380.00" y2="176.00" marker-end="url(#ah)"/>
+<text class="k1" x="364.00" y="188.00">n</text>
+<line class="a2 thin" x1="380.00" y1="240.00" x2="442.00" y2="240.00" marker-end="url(#ah)"/>
+<text class="k2" x="434.00" y="258.00">t</text>
+<circle class="a1f" cx="380.00" cy="240.00" r="3.40"/>
+<text class="ts" x="285.00" y="242.00" text-anchor="end">contact point</text>
+<line class="mut dot" x1="380.00" y1="240.00" x2="342.43" y2="164.87"/>
+<line class="mut dot" x1="380.00" y1="240.00" x2="417.57" y2="164.87"/>
+<text class="ts" x="334.43" y="168.87" text-anchor="end">friction cone, atan(&#956;)</text>
+<line class="ok" x1="380.00" y1="240.00" x2="395.01" y2="183.98" marker-end="url(#ah)"/>
+<text class="k3" x="401.01" y="179.98">J</text>
+<circle class="a2f" cx="430.00" cy="200.00" r="3.00"/>
+<text class="ts" x="434.00" y="222.00">CoG</text>
+<line class="mut dash" x1="430.00" y1="200.00" x2="380.00" y2="240.00"/>
+<text class="ts" x="401.00" y="214.00">r</text>
+<path class="a1" d="M 406.09 197.91 A 24.00 24.00 0 0 1 453.91 197.91" marker-end="url(#ah)"/>
+<text class="k1" x="515.00" y="202.00">yaw rate change = (r &#215; J) / I<tspan class="sb" dy="3">zz</tspan></text>
+<text class="t" x="44.00" y="398.00">J = &#8747;F dt</text>
+<text class="t" x="150.00" y="398.00">&#916;v = J / m</text>
+<text class="ts" x="268.00" y="398.00">one arrow, applied at one point, equal and opposite on the two cars</text>
+</svg>

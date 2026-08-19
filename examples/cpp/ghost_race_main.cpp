@@ -118,8 +118,8 @@ int main(int argc, char** argv) {
   std::printf("  provenance %s, and no parameter set here has been measured "
               "against a car\n",
               track.manifest().provenance_label.c_str());
-  std::printf("  no contact model, no race control: these are %zu time "
-              "trials sharing a track\n\n", config.agents);
+  std::printf("  no collision footprints, no race control: these are %zu "
+              "time trials sharing a track\n\n", config.agents);
 
   std::printf("  %-6s %8s %9s %9s %9s %8s\n", "car", "target", "lap 1",
               "lap 2", "best", "margin");

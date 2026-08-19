@@ -12,6 +12,7 @@ workflow runs the same conformance run against the same reference file.
 from __future__ import annotations
 
 import importlib.util
+import math
 import os
 import subprocess
 import sys
@@ -252,6 +253,51 @@ def test_a_rollover_event_crosses_the_boundary() -> None:
     assert manifest.agents[0].dnf_cause == "rollover: left wheels unloaded"
     assert manifest.agents[0].dnf_step == event.step
     assert '"status": "dnf"' in manifest.to_json()
+
+
+def test_contact_crosses_the_boundary() -> None:
+    # The physics is tested in C++ (test_contact.cpp, test_contact_sim.cpp);
+    # here: the footprint fields and contact constants round-trip, a
+    # footprinted pair does not pass through, and the manifest records both.
+    # The footprint comes from the car file's own geometry block, which is
+    # where a real scenario should take it from.
+    car = slipx.load_reference_car()
+    geometry = car.spec.raw["dynamics"]["geometry"]
+
+    config = slipx.SimulationConfig()
+    # 0.25 is exactly representable, so the JSON assertion below can match
+    # the literal (the manifest prints 17 significant digits, and 0.3 would
+    # print as 0.29999999999999999).
+    config.contact.restitution = 0.25
+
+    def spec_at(x: float, yaw: float) -> slipx.AgentSpec:
+        spec = slipx.AgentSpec()
+        spec.tier = slipx.Tier.L1_Bicycle
+        spec.initial_state.pos.x = x
+        spec.initial_state.yaw = yaw
+        spec.initial_state.vel_body.x = 5.0
+        spec.footprint_length = geometry["length"]
+        spec.footprint_width = geometry["width"]
+        return spec
+
+    sim = slipx.Simulation(config)
+    sim.add_agent(spec_at(0.0, 0.0))
+    sim.add_agent(spec_at(4.0, math.pi))
+    sim.run_for(1.0)
+
+    gap = sim.state(1).pos.x - sim.state(0).pos.x
+    assert gap > geometry["length"] - 1e-9, "footprinted cars passed through"
+
+    manifest = sim.manifest()
+    assert manifest.agents[0].footprint_length == geometry["length"]
+    assert manifest.contact_restitution == 0.25
+    assert '"contact_restitution": 0.25' in manifest.to_json()
+
+    # One dimension without the other is refused by name, not defaulted.
+    half = spec_at(0.0, 0.0)
+    half.footprint_width = 0.0
+    with pytest.raises(ValueError, match="footprint"):
+        sim.add_agent(half)
 
 
 def test_the_manifest_records_the_build_it_ran_on() -> None:

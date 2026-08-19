@@ -119,6 +119,22 @@ Simulation::Simulation(SimulationConfig config) : config_(config) {
   if (config_.hash_stride == 0) {
     throw std::invalid_argument("slipx_sim: hash_stride must be at least 1");
   }
+  // Written as negations so a NaN, which compares false against everything,
+  // is refused rather than smuggled into every collision of the run.
+  if (!(config_.contact.restitution >= 0.0 &&
+        config_.contact.restitution <= 1.0)) {
+    throw std::invalid_argument(
+        "slipx_sim: contact.restitution must be in [0, 1]");
+  }
+  if (!(config_.contact.friction >= 0.0)) {
+    throw std::invalid_argument(
+        "slipx_sim: contact.friction must not be negative");
+  }
+  if (!(config_.contact.restitution_min_speed >= 0.0)) {
+    throw std::invalid_argument(
+        "slipx_sim: contact.restitution_min_speed must not be negative "
+        "[m/s]");
+  }
 }
 
 std::size_t Simulation::add_agent(AgentSpec spec) {
@@ -137,6 +153,25 @@ std::size_t Simulation::add_agent(AgentSpec spec) {
   agent.policy = std::move(spec.policy);
   agent.seed = derive_seed(config_.master_seed, index);
   agent.rng = Rng(agent.seed);
+
+  // The collision footprint (ADR-0043). Both dimensions or neither: one
+  // without the other is not a smaller footprint, it is a mistake, and it
+  // is named rather than defaulted (the same rule the loader lives by).
+  if (!(spec.footprint_length >= 0.0) || !(spec.footprint_width >= 0.0)) {
+    throw std::invalid_argument(
+        "slipx_sim: footprint_length and footprint_width must not be "
+        "negative [m]");
+  }
+  if ((spec.footprint_length > 0.0) != (spec.footprint_width > 0.0)) {
+    throw std::invalid_argument(
+        "slipx_sim: a collision footprint needs both footprint_length and "
+        "footprint_width; set both [m] or neither (no footprint)");
+  }
+  agent.half_length = 0.5 * spec.footprint_length;
+  agent.half_width = 0.5 * spec.footprint_width;
+  // The footprint is the car's body, and a car's body is centred between
+  // its axles, not on its CoG.
+  agent.centre_offset = 0.5 * (spec.params.lf - spec.params.lr);
 
   agents_.push_back(std::move(agent));
   // Sized once, here, so that advance() never allocates.
@@ -183,10 +218,82 @@ void Simulation::advance() {
     step_agent(agents_[i], pending_inputs_[i]);
   }
 
+  // Phase three: contact, between the steps rather than inside them.
+  resolve_contacts();
+
   ++steps_;
   hash_states();
 
   pace();
+}
+
+// The contact pass (ADR-0043). One impulse per touching pair per step,
+// pairs visited in ascending index order, one pass and no convergence loop:
+// an impulse applied to pair (0,1) is visible to pair (0,2) in the same
+// step, which is order-dependent but deterministic, and the order is the
+// agent numbering the manifest records.
+void Simulation::resolve_contacts() {
+  const auto body_of = [](const Agent& a) {
+    ContactBody b;
+    b.cog = a.state.pos.xy();
+    b.yaw = a.state.yaw;
+    const double c = std::cos(a.state.yaw);
+    const double s = std::sin(a.state.yaw);
+    b.velocity = Vec2{c * a.state.vel_body.x - s * a.state.vel_body.y,
+                      s * a.state.vel_body.x + c * a.state.vel_body.y};
+    b.yaw_rate = a.state.rates.z;
+    // A DNF'd car is an immovable obstacle: zero inverse mass is the
+    // standard spelling of "no impulse moves this" (ADR-0042, ADR-0043).
+    if (!a.dnf) {
+      b.inv_mass = 1.0 / a.model->params().mass;
+      b.inv_izz = 1.0 / a.model->params().izz;
+    }
+    b.centre_offset = a.centre_offset;
+    b.half_length = a.half_length;
+    b.half_width = a.half_width;
+    return b;
+  };
+
+  // Applies the world-frame deltas to the state. Only called for a touched,
+  // running agent: a frozen agent's state must stay byte-identical, and
+  // round-tripping its velocity through the world frame would not.
+  const auto apply = [](Agent& a, const Vec2& dv, double dw, const Vec2& dp) {
+    const double c = std::cos(a.state.yaw);
+    const double s = std::sin(a.state.yaw);
+    const double vx_w = c * a.state.vel_body.x - s * a.state.vel_body.y + dv.x;
+    const double vy_w = s * a.state.vel_body.x + c * a.state.vel_body.y + dv.y;
+    a.state.vel_body.x = c * vx_w + s * vy_w;
+    a.state.vel_body.y = -s * vx_w + c * vy_w;
+    a.state.rates.z += dw;
+    a.state.pos.x += dp.x;
+    a.state.pos.y += dp.y;
+  };
+
+  for (std::size_t i = 0; i < agents_.size(); ++i) {
+    if (!agents_[i].has_footprint()) continue;
+    for (std::size_t j = i + 1; j < agents_.size(); ++j) {
+      if (!agents_[j].has_footprint()) continue;
+      Agent& a = agents_[i];
+      Agent& b = agents_[j];
+      if (a.dnf && b.dnf) continue;   // two frozen cars have nothing to say
+
+      const ContactBody body_a = body_of(a);
+      const ContactBody body_b = body_of(b);
+      const ContactGeometry geometry = rectangle_contact(body_a, body_b);
+      if (!geometry.touching) continue;
+
+      const ContactImpulse impulse =
+          resolve_contact(body_a, body_b, geometry, config_.contact);
+      if (!a.dnf) {
+        apply(a, impulse.delta_velocity_a, impulse.delta_yaw_rate_a,
+              impulse.delta_position_a);
+      }
+      if (!b.dnf) {
+        apply(b, impulse.delta_velocity_b, impulse.delta_yaw_rate_b,
+              impulse.delta_position_b);
+      }
+    }
+  }
 }
 
 void Simulation::step_agent(Agent& a, const DriveInput& input) {
@@ -335,6 +442,7 @@ void Simulation::replay(const std::vector<DriveInput>& log) {
       // skipped exactly as it was skipped when recorded.
       step_agent(agents_[i], log[step * agents_.size() + i]);
     }
+    resolve_contacts();
     ++steps_;
     hash_states();
   }
@@ -397,6 +505,9 @@ RunManifest Simulation::manifest() const {
   m.integrator = to_string(config_.integrator);
   m.master_seed = config_.master_seed;
   m.run_mode = to_string(config_.mode);
+  m.contact_restitution = config_.contact.restitution;
+  m.contact_friction = config_.contact.friction;
+  m.contact_restitution_min_speed = config_.contact.restitution_min_speed;
 
   m.agents.reserve(agents_.size());
   m.agent_trajectory_hashes.reserve(agents_.size());
@@ -406,6 +517,8 @@ RunManifest Simulation::manifest() const {
     am.tier = to_string(a.model->tier());
     am.params_digest = params_digest(a.model->params());
     am.seed = a.seed;
+    am.footprint_length = 2.0 * a.half_length;
+    am.footprint_width = 2.0 * a.half_width;
     if (a.dnf) {
       am.status = "dnf";
       am.dnf_cause = to_string(a.dnf->cause);

@@ -127,6 +127,27 @@ stop reproducing.
 `slipx.hold_speed(state, target)` is a proportional speed controller, and
 `slipx.step_steer(spec)` is the canonical step-steer policy.
 
+### Contact
+
+Agents that declare a collision footprint can hit each other: one planar
+impulse with restitution and Coulomb friction per touching pair per step,
+plausible and deterministic, fitted to nothing (ADR-0043). Declare the
+footprint from the car file's own geometry block, and tune the constants on
+the config if you must:
+
+```python
+geometry = car.spec.raw["dynamics"]["geometry"]
+agent.footprint_length = geometry["length"]
+agent.footprint_width = geometry["width"]
+config.contact.restitution = 0.3        # plausible, not fitted
+```
+
+Both dimensions or neither: one without the other is refused. An agent with
+no footprint (the default) touches nothing, which is why every scenario
+written before contact existed still reproduces bit for bit. A DNF'd car
+keeps its footprint and is immovable: the wreck stays on track and other
+cars bounce off it.
+
 ### Rollover, the first discrete event
 
 At L2, a step whose diagnostics show both wheels of one side at zero vertical

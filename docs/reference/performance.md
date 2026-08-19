@@ -72,9 +72,10 @@ The benchmark measures load, and its scenario is chosen to be a fixed amount
 of work rather than a plausible race. Every agent holds a constant 0.02 rad of
 steering and a 4 m/s speed demand, which is a 16.2 m circle: the cars leave
 the track within two seconds and none of them ever reads the LiDAR the case is
-named after. They start 0.3 m apart along one line, so with no contact model
-they overlap from the first step and pass through each other and through the
-walls. All twenty trajectories are the same trajectory, offset.
+named after. They start 0.3 m apart along one line and declare no collision
+footprints, so they overlap from the first step and pass through each other
+and through the walls. All twenty trajectories are the same trajectory,
+offset.
 
 None of that changes what the numbers mean, because the cost of a step does
 not depend on where the car is. It does mean a reader should not take "20

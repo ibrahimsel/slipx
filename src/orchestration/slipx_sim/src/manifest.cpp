@@ -80,11 +80,16 @@ std::string RunManifest::configuration_digest() const {
   // Two runs in different modes are not comparable, whatever else matches:
   // one is a function of its inputs and the other of a machine's scheduler.
   h.update(run_mode);
+  h.update(contact_restitution);
+  h.update(contact_friction);
+  h.update(contact_restitution_min_speed);
   for (const AgentManifest& a : agents) {
     h.update(a.name);
     h.update(a.tier);
     h.update(a.params_digest);
     h.update_u64(a.seed);
+    h.update(a.footprint_length);
+    h.update(a.footprint_width);
   }
   h.update(compiler_id);
   h.update(compiler_version);
@@ -117,6 +122,11 @@ std::string RunManifest::to_json() const {
     << ",\n";
   o << "    \"integrator\": " << quote(integrator) << ",\n";
   o << "    \"master_seed\": " << number(master_seed) << ",\n";
+  o << "    \"contact_restitution\": " << number(contact_restitution)
+    << ",\n";
+  o << "    \"contact_friction\": " << number(contact_friction) << ",\n";
+  o << "    \"contact_restitution_min_speed\": "
+    << number(contact_restitution_min_speed) << ",\n";
   o << "    \"ground_truth_enabled\": "
     << (ground_truth_enabled ? "true" : "false") << "\n";
   o << "  },\n";
@@ -129,6 +139,9 @@ std::string RunManifest::to_json() const {
     o << "      \"tier\": " << quote(a.tier) << ",\n";
     o << "      \"params_digest\": " << quote(a.params_digest) << ",\n";
     o << "      \"seed\": " << number(a.seed) << ",\n";
+    o << "      \"footprint_length\": " << number(a.footprint_length)
+      << ",\n";
+    o << "      \"footprint_width\": " << number(a.footprint_width) << ",\n";
     o << "      \"status\": " << quote(a.status) << ",\n";
     if (a.status == "dnf") {
       o << "      \"dnf_cause\": " << quote(a.dnf_cause) << ",\n";

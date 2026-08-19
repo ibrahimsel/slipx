@@ -517,6 +517,9 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("tier", &AgentManifest::tier)
       .def_readonly("params_digest", &AgentManifest::params_digest)
       .def_readonly("seed", &AgentManifest::seed)
+      .def_readonly("footprint_length", &AgentManifest::footprint_length,
+                    "declared collision footprint, zero when none [m]")
+      .def_readonly("footprint_width", &AgentManifest::footprint_width)
       .def_readonly("status", &AgentManifest::status,
                     "'running', or 'dnf' with the cause and step below. A "
                     "result, not configuration: excluded from the "
@@ -536,6 +539,12 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("steps", &RunManifest::steps)
       .def_readonly("integrator", &RunManifest::integrator)
       .def_readonly("master_seed", &RunManifest::master_seed)
+      .def_readonly("contact_restitution", &RunManifest::contact_restitution,
+                    "the contact constants are configuration, like dt: two "
+                    "runs that disagree here were different races")
+      .def_readonly("contact_friction", &RunManifest::contact_friction)
+      .def_readonly("contact_restitution_min_speed",
+                    &RunManifest::contact_restitution_min_speed)
       .def_readonly("agents", &RunManifest::agents)
       .def_readonly("compiler_id", &RunManifest::compiler_id)
       .def_readonly("compiler_version", &RunManifest::compiler_version)
@@ -563,13 +572,32 @@ PYBIND11_MODULE(_slipx, m) {
            "that finished still reports its result.");
 
   // ------------------------------------------------------------ simulation
+  py::class_<ContactParams>(
+      m, "ContactParams",
+      "The collision constants: plausible for foam bumpers on plastic "
+      "shells, identified from nothing, and every document that touches "
+      "contact keeps saying so. What IS promised is determinism, momentum "
+      "conservation, the friction cone and mirror symmetry.")
+      .def(py::init<>())
+      .def_readwrite("restitution", &ContactParams::restitution,
+                     "0 is a dead stop, 1 an elastic bounce [-]")
+      .def_readwrite("friction", &ContactParams::friction,
+                     "Coulomb friction at the contact [-]")
+      .def_readwrite("restitution_min_speed",
+                     &ContactParams::restitution_min_speed,
+                     "below this closing speed nothing bounces; an "
+                     "anti-jitter device, not physics [m/s]");
+
   py::class_<SimulationConfig>(m, "SimulationConfig")
       .def(py::init<>())
       .def_readwrite("dt", &SimulationConfig::dt, "fixed step [s], default 1 kHz")
       .def_readwrite("integrator", &SimulationConfig::integrator)
       .def_readwrite("master_seed", &SimulationConfig::master_seed)
       .def_readwrite("hash_stride", &SimulationConfig::hash_stride)
-      .def_readwrite("schema_version", &SimulationConfig::schema_version);
+      .def_readwrite("schema_version", &SimulationConfig::schema_version)
+      .def_readwrite("contact", &SimulationConfig::contact,
+                     "agent-to-agent contact constants (ADR-0043); they "
+                     "apply between agents that declare a footprint");
 
   py::class_<AgentSpec>(m, "AgentSpec")
       .def(py::init<>())
@@ -579,7 +607,15 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readwrite("initial_state", &AgentSpec::initial_state)
       .def_readwrite("policy", &AgentSpec::policy,
                      "callable(state, time, rng) -> DriveInput. Must be a pure "
-                     "function of those three if the run is to replay.");
+                     "function of those three if the run is to replay.")
+      .def_readwrite(
+          "footprint_length", &AgentSpec::footprint_length,
+          "collision footprint length, overall [m]. Both zero (the default) "
+          "means no footprint: the agent touches nothing and nothing touches "
+          "it. The car schema carries this as geometry.length.")
+      .def_readwrite("footprint_width", &AgentSpec::footprint_width,
+                     "collision footprint width, overall [m]; see "
+                     "footprint_length");
 
   // ---------------------------------------------------------------- events
   py::enum_<DnfCause>(

@@ -21,6 +21,20 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Agent-to-agent contact** (ADR-0043). One planar impulse with
+  restitution and Coulomb friction per touching pair per step, computed by
+  a pure function in `slipx_core` (`slipx/contact.hpp`) and applied by the
+  orchestrator between steps. Contact exists between agents that declare a
+  rectangular footprint (`AgentSpec.footprint_length/width`, the car
+  file's own `geometry.length/width`); an agent that declares none touches
+  nothing, so every pre-contact scenario reproduces bit for bit, asserted
+  in the suite and re-checked against the published rows. The constants
+  are plausible for foam bumpers and fitted to nothing, and every document
+  that touches them says so; what is promised instead is determinism,
+  momentum conservation, the friction cone and mirror symmetry, all held
+  by the invariant tests. A DNF'd car keeps its footprint and is
+  immovable. The manifest records footprints and contact constants in the
+  configuration digest. Tutorial article 17 explains the model.
 - **Rollover is a discrete event that ends an agent's run** (ADR-0042). The
   orchestrator reads each step's diagnostics, and both wheels of one side at
   zero vertical load is a DNF: the policy is never called again, the pose

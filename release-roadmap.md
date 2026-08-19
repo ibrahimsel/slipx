@@ -916,11 +916,47 @@ computed, and the conformance script re-checked all six rows.)
   stepping, policy still called, snapshot and restore each dropping the
   event, step off by one, exact zero never firing, replay bypassing
   detection, manifest not told, JSON dnf fields for running agents).
-- [ ] **M7.2** Agent-to-agent contact as a planar impulse with restitution,
+- [x] **M7.2** Agent-to-agent contact as a planar impulse with restitution,
   Coulomb friction and resulting yaw moment. Plausible and deterministic, not
   fitted to data, and the docs keep saying so.
   Done when: momentum conservation and mirror symmetry hold in the invariant
   suite; determinism holds across runs.
+  Done 2026-08-19, recorded as ADR-0043. The mathematics is a pure
+  header-only function pair in `slipx_core` (`contact.hpp`: SAT geometry
+  with a clipped-incident-edge contact point, then one impulse with
+  restitution, a Coulomb cone and a positional projection); the orchestrator
+  applies it between steps, one pass per touching pair in ascending index
+  order, no convergence loop. Contact exists between agents that declare a
+  footprint (the car file's `geometry.length/width`); declaring none means
+  touching nothing, which is what keeps every pre-contact trajectory
+  bit-identical, asserted in-suite (footprinted single agent and distant
+  pair against their bare twins) and re-checked against the published rows.
+  Restitution and friction live in `SimulationConfig.contact`, labelled
+  plausible everywhere they appear, folded into the configuration digest
+  along with per-agent footprints. A DNF'd car enters the impulse with zero
+  inverse mass: the wreck is immovable and collidable, closing the loop
+  ADR-0042 opened. Momentum (linear and angular), the friction cone and
+  bit-exact mirror symmetry hold in the invariant tests at both the pure
+  and the run level; a below-threshold closing speed does not bounce (an
+  anti-jitter device, documented as one). Article 17 and its render-checked
+  figure explain the model; the ghost race's wording moved from "no contact
+  model" to "no footprints declared".
+  Mutation pass: 18 tried, 18 caught, one of them only after the test was
+  sharpened rather than the mutant excused. Applying the (exactly zero)
+  deltas to a frozen car escaped at first: the difference is confined to
+  signed-zero bit patterns from round-tripping a zero velocity through the
+  world frame, and the original scenario's geometry laundered them back to
+  +0.0. Working out where a -0.0 survives (a broadside hit on a wreck whose
+  yaw has negative cosine) turned the escape into a catch; the frozen-car
+  test now rams the wreck side-on in that quadrant on purpose and says so.
+  The other seventeen: normal never flipped, restitution dropped, friction
+  cone unclamped, angular effective-mass term dropped (caught by the
+  eccentric restitution law, not by momentum, which survives it), projection
+  sign flipped, projection overshooting, kissing counted as touching,
+  restitution threshold dropped, contact point as endpoint, centre offset
+  ignored, incident edge most-parallel, contact pass dropped from advance
+  and from replay, frozen car given inverse mass, self-contact, second
+  agent's footprint not required, footprints left out of the digest.
 - [ ] **M7.3** Lockstep barrier protocol with per-agent acknowledgement and a
   configurable timeout policy (freeze, coast or DNF), so one hung agent cannot
   hang a race.

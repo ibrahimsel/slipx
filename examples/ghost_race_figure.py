@@ -203,8 +203,9 @@ def main():
     parts.append(
         f'<text class="tm" x="24" y="58">{count} cars, {len(lap_times[0])} '
         f'laps of paddock_stadium, recorded by examples/cpp/ghost_race_main'
-        f'.cpp. They cannot touch: there is no contact model, so this is '
-        f'{count} time trials sharing a track and a clock, not a race.</text>')
+        f'.cpp. They cannot touch: no car declares a collision footprint, so '
+        f'this is {count} time trials sharing a track and a clock, not a '
+        f'race.</text>')
 
     # ------------------------------------------------------------ the track
     track = View(24, 76, 700, 560, bounds)

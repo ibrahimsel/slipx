@@ -4,9 +4,10 @@
 // Twenty cars driving the shipped track at once. A ghost race, not a race.
 //
 // The distinction is the whole point of this file, so it is stated before
-// anything else. There is no contact model in SlipX yet, and no race control:
-// the cars here cannot touch, cannot be held up, cannot be overtaken in any
-// sense that costs the car in front anything, and nothing decides who won.
+// anything else. These cars declare no collision footprints (ADR-0043), and
+// there is no race control: the cars here cannot touch, cannot be held up,
+// cannot be overtaken in any sense that costs the car in front anything, and
+// nothing decides who won.
 // What they are is twenty independent time trials sharing a clock, a track
 // and a lockstep barrier. That is a demonstration that the pieces built in P1
 // compose to more than one car, and it is not a race result.
@@ -18,9 +19,9 @@
 // "does it drive".
 //
 // The grid is spaced around the lap rather than lined up along one straight,
-// because with no contact model a line of cars 0.3 m apart is twenty cars
-// occupying the same metre of tarmac, which looks like a start and is not
-// one.
+// because for cars that cannot touch a line of cars 0.3 m apart is twenty
+// cars occupying the same metre of tarmac, which looks like a start and is
+// not one.
 //
 // Header-only and in examples/ for the same reason the reference stack is:
 // nothing in the library depends on it and nothing should.
