@@ -591,6 +591,26 @@ const std::optional<DnfEvent>& Simulation::dnf(std::size_t i) const {
   return agents_[i].dnf;
 }
 
+bool Simulation::has_footprint(std::size_t i) const {
+  check_index(i);
+  return agents_[i].has_footprint();
+}
+
+double Simulation::footprint_half_length(std::size_t i) const {
+  check_index(i);
+  return agents_[i].half_length;
+}
+
+double Simulation::footprint_half_width(std::size_t i) const {
+  check_index(i);
+  return agents_[i].half_width;
+}
+
+double Simulation::footprint_centre_offset(std::size_t i) const {
+  check_index(i);
+  return agents_[i].centre_offset;
+}
+
 std::string Simulation::agent_trajectory_hash(std::size_t i) const {
   check_index(i);
   return agents_[i].hash.hex();

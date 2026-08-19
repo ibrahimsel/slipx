@@ -95,6 +95,7 @@ Use [`template.md`](template.md) for a new record.
 | [0041](0041-schema-0-4-0-opens-the-compound-vocabulary.md) | Schema 0.4.0 opens the compound vocabulary and ties a fit to its data | Proposed |
 | [0047](0047-sensors-are-a-rig-beside-the-simulation.md) | Sensors are a rig beside the simulation, configured per agent, and observation never perturbs | Proposed |
 | [0048](0048-schema-0-5-0-makes-the-sensor-file-buildable.md) | Schema 0.5.0 makes the sensor file carry what the sensor models consume | Proposed |
+| [0049](0049-the-racing-world-is-composed-in-slipx-sim.md) | The racing world is composed once, in slipx_sim, from the walls and the footprints | Proposed |
 
 ## Racing
 

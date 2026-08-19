@@ -78,6 +78,7 @@ from ._slipx import (  # noqa: F401
     Rng,
     RunManifest,
     Scan,
+    SceneTrack,
     SensorRig,
     Simulation,
     SimulationConfig,
@@ -85,6 +86,7 @@ from ._slipx import (  # noqa: F401
     StepSteerSpec,
     Tier,
     TimeoutPolicy,
+    TrackWorld,
     TyreCoefficients,
     TrajectoryHash,
     Vec3,
@@ -112,6 +114,7 @@ from .cars import (
     to_vehicle_params,
 )
 from .sensors import sensors_for
+from .tracks import load_scene_track
 from .version import __version__
 
 # Recording a run and emitting it (SINK-01 to SINK-05, ADR-0028). Standard
@@ -153,6 +156,7 @@ __all__ = [
     "Rng",
     "RunManifest",
     "Scan",
+    "SceneTrack",
     "SensorRig",
     "Simulation",
     "SimulationConfig",
@@ -160,6 +164,7 @@ __all__ = [
     "StepSteerSpec",
     "Tier",
     "TimeoutPolicy",
+    "TrackWorld",
     "TyreCoefficients",
     "TrajectoryHash",
     "Vec3",
@@ -175,6 +180,7 @@ __all__ = [
     "hold_speed",
     "load_car",
     "load_reference_car",
+    "load_scene_track",
     "make_conformance_run",
     "make_mf_lite",
     "mf_lite_fy",

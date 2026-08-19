@@ -11,3 +11,6 @@ slipx_add_test(test_events slipx::sim)
 slipx_add_test(test_contact_sim slipx::sim)
 slipx_add_test(test_barrier slipx::sim)
 slipx_add_test(test_sensor_rig slipx::sim)
+slipx_add_test(test_track_world slipx::sim)
+target_compile_definitions(test_track_world PRIVATE
+  SLIPX_EXAMPLE_TRACK_DIR="${CMAKE_SOURCE_DIR}/examples/tracks/paddock_stadium")

@@ -215,6 +215,66 @@ def test_an_encoder_below_l2_is_refused_by_name():
         rig.attach(0, sensors)
 
 
+def test_the_native_track_world_feeds_the_rig():
+    # The whole racing chain without a single Python call per ray
+    # (ADR-0049): a validated track directory, the reference car's tyre
+    # pairs, two footprinted cars, and the scan sees the opponent ahead
+    # nearer than the wall while the side rays see the corridor.
+    from pathlib import Path
+
+    track_dir = (
+        Path(__file__).resolve().parents[4]
+        / "examples" / "tracks" / "paddock_stadium"
+    )
+    car = slipx.load_reference_car()
+    pairs = [
+        (car.spec.tyre_front.compound, car.spec.tyre_front.surface),
+        (car.spec.tyre_rear.compound, car.spec.tyre_rear.surface),
+    ]
+    track = slipx.load_scene_track(track_dir, pairs)
+    assert track.closed
+    assert track.length > 20.0
+
+    sim = slipx.Simulation()
+    for x in (-4.0, -2.0):
+        spec = l2_agent(car, speed=0.0)
+        spec.initial_state.pos.x = x
+        spec.initial_state.pos.y = -3.0
+        spec.footprint_length = 0.50
+        spec.footprint_width = 0.30
+        sim.add_agent(spec)
+
+    world = slipx.TrackWorld(track, sim, max_range=30.0)
+    rig = slipx.SensorRig(sim, world, seed=3)
+    rig.attach(0, slipx.sensors_for(car))
+    for _ in range(40):
+        sim.advance()
+        rig.collect()
+
+    scan = rig.latest_scan(0, "scan")
+    assert scan is not None
+    forward = min(
+        (ray for ray in scan.rays if ray.valid), key=lambda r: abs(r.angle)
+    )
+    left = min(
+        (ray for ray in scan.rays if ray.valid),
+        key=lambda r: abs(r.angle - 1.5707963),
+    )
+    assert forward.range == pytest.approx(1.75, abs=0.1)
+    assert left.range == pytest.approx(0.75, abs=0.1)
+
+
+def test_the_wrong_surface_is_refused_with_both_names():
+    from pathlib import Path
+
+    track_dir = (
+        Path(__file__).resolve().parents[4]
+        / "examples" / "tracks" / "paddock_stadium"
+    )
+    with pytest.raises(Exception, match="carpet"):
+        slipx.load_scene_track(track_dir, [("slick", "asphalt")])
+
+
 def test_attach_after_collect_is_refused():
     sim = slipx.Simulation()
     spec = slipx.AgentSpec()

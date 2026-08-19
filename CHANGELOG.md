@@ -21,6 +21,22 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The racing world, composed once** (ADR-0049). `slipx/sim/track_world.hpp`:
+  a `TrackWorld` answers a rig's ray with the nearer of the track's walls
+  (the grid-accelerated cast the benchmarks measure) and the nearest other
+  car (the agent overlay of ADR-0045), the asking car skipped. The boxes
+  are exactly the footprints the contact pass collides, axle-centred, so
+  what a LiDAR sees touching is what the physics says is touching; a car
+  with no footprint is invisible to sensors as it is untouchable by
+  bumpers, one rule rather than two, and a wreck keeps its box. The
+  overlay refits once per simulation step, so rays within a step see one
+  consistent world; agents added after the world is built are refused at
+  the next cast, because a world missing a car is an invisible obstacle.
+  `slipx_sim` now depends on `slipx_scene`, the edge ADR-0037 anticipated.
+  Bound to Python as `slipx.TrackWorld` with `slipx.load_scene_track`
+  (validated through `slipx_schema`, surface-to-tyre refusal on both
+  sides), and a `SensorRig` built from one keeps every ray native: the
+  whole 20-agent sensing path costs no Python per ray.
 - **Schema 0.5.0: the sensor file is consumed** (ADR-0048). `sensors.yaml`
   had said "NOTHING CONSUMES THIS YET" since 0.1.0; now it carries what the
   sensor models actually take. Each entry may hold a typed block named

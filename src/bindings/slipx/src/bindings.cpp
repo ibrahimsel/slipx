@@ -43,9 +43,11 @@
 #include "slipx/sim/hash.hpp"
 #include "slipx/sim/manifest.hpp"
 #include "slipx/sim/manoeuvres.hpp"
+#include "slipx/scene/track.hpp"
 #include "slipx/sense/rng.hpp"
 #include "slipx/sim/sensor_rig.hpp"
 #include "slipx/sim/simulation.hpp"
+#include "slipx/sim/track_world.hpp"
 #include "slipx/tyre.hpp"
 #include "slipx/vehicle_model.hpp"
 #include "slipx/version.hpp"
@@ -947,6 +949,64 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("sample", &OdometryReading::sample)
       .def_readonly("stamp_time", &OdometryReading::stamp_time, "[s]");
 
+  // The scene's track and the composed racing world (ADR-0049), bound just
+  // far enough to build both from a directory the Python loader has
+  // already validated; slipx.load_scene_track is the friendly entrance.
+  py::class_<scene::Track>(
+      m, "SceneTrack",
+      "The scene's track: geometry plus a declared surface. Build one with "
+      "slipx.load_scene_track, which validates the directory through "
+      "slipx_schema first; this static build is the raw seam it uses.")
+      .def_static(
+          "build",
+          [](const std::string& centreline_csv, const std::string& name,
+             const std::string& surface, bool closed,
+             const std::string& geometry_source,
+             const std::string& geometry_licence,
+             const std::string& provenance_label,
+             const std::vector<std::pair<std::string, std::string>>& tyres) {
+            scene::Centreline geometry =
+                scene::Centreline::from_file(centreline_csv);
+            scene::TrackManifest manifest;
+            manifest.name = name;
+            manifest.surface = surface;
+            manifest.closed = closed;
+            manifest.geometry_source = geometry_source;
+            manifest.geometry_licence = geometry_licence;
+            manifest.provenance_label = provenance_label;
+            std::vector<scene::TyrePair> pairs;
+            pairs.reserve(tyres.size());
+            for (const auto& tyre : tyres) {
+              pairs.push_back(scene::TyrePair{tyre.first, tyre.second});
+            }
+            return scene::Track::build(geometry, manifest, pairs);
+          },
+          py::arg("centreline_csv"), py::arg("name"), py::arg("surface"),
+          py::arg("closed"), py::arg("geometry_source"),
+          py::arg("geometry_licence"), py::arg("provenance_label"),
+          py::arg("tyre_pairs"),
+          "tyre_pairs is the list of (compound, surface) pairs the cars "
+          "bring; the build refuses a surface no tyre was identified on.")
+      .def_property_readonly("length", &scene::Track::length, "[m]")
+      .def_property_readonly("closed", &scene::Track::is_closed);
+
+  py::class_<TrackWorld>(
+      m, "TrackWorld",
+      "The world a racing sensor rig sees (ADR-0049): the nearer of the "
+      "track's walls and the simulation's other cars, the asker skipped, "
+      "the boxes exactly the footprints the contact pass collides, refit "
+      "once per step. Hand it to SensorRig and rays never cross into "
+      "Python. max_range bounds every cast: set it to the longest range "
+      "any sensor will ask for.")
+      .def(py::init<const scene::Track&, const Simulation&, double>(),
+           py::arg("track"), py::arg("sim"), py::arg("max_range"),
+           py::keep_alive<1, 2>(), py::keep_alive<1, 3>(),
+           "Build after the last add_agent: a world missing a car refuses "
+           "to answer rather than hiding an obstacle.")
+      .def("__call__", &TrackWorld::operator(), py::arg("agent"),
+           py::arg("origin"), py::arg("bearing"),
+           "One ray, answered the way the rig would see it.");
+
   py::class_<SensorRig>(
       m, "SensorRig",
       "Per-agent sensors running against a simulation they can only observe "
@@ -956,6 +1016,17 @@ PYBIND11_MODULE(_slipx, m) {
       "Call collect() after every advance(); a sample becomes visible at "
       "its instant plus latency plus jitter, and take_* drains while "
       "latest_* keeps the newest.")
+      // The native-world overload first, so a TrackWorld binds by type
+      // rather than being wrapped as a Python callable and paying an
+      // interpreter round trip per ray.
+      .def(py::init([](const Simulation& sim, const TrackWorld& world,
+                       std::uint64_t seed) {
+             return new SensorRig(sim, world.function(), seed);
+           }),
+           py::arg("sim"), py::arg("world"), py::arg("seed") = 0,
+           py::keep_alive<1, 2>(), py::keep_alive<1, 3>(),
+           "Native world (ADR-0049): rays never enter Python. The rig keeps "
+           "both the simulation and the world alive.")
       .def(py::init<const Simulation&, WorldFunction, std::uint64_t>(),
            py::arg("sim"), py::arg("world") = WorldFunction{},
            py::arg("seed") = 0,

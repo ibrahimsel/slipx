@@ -340,6 +340,17 @@ class Simulation {
   // still running.
   const std::optional<DnfEvent>& dnf(std::size_t i) const;
 
+  // The collision footprint the agent declared (ADR-0043), read-only, for
+  // whoever composes queries over the same boxes the contact pass collides
+  // (the track world does). Zeroes, and has_footprint false, when none was
+  // declared: such an agent touches nothing and is invisible to sensors,
+  // one rule rather than two.
+  bool has_footprint(std::size_t i) const;
+  double footprint_half_length(std::size_t i) const;   //                 [m]
+  double footprint_half_width(std::size_t i) const;    //                 [m]
+  // How far the box centre (the wheelbase midpoint) sits ahead of the CoG.
+  double footprint_centre_offset(std::size_t i) const; //                 [m]
+
   // Every contact the most recent step resolved, in pair order. Cleared and
   // refilled by each advance (and by each replayed step), so a consumer
   // polls it between steps; keeping history is the consumer's job.

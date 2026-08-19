@@ -1,6 +1,8 @@
 # slipx_sim: orchestration.
 #
-# Depends on slipx_core and nothing else. It is allowed I/O and allocation,
+# Depends on slipx_core, slipx_sense (the seeded generator and the sensor
+# models, ADR-0037/0047) and slipx_scene (the track world where sensing
+# meets geometry, ADR-0049). It is allowed I/O and allocation,
 # which the core is not: writing a manifest is its job precisely so that the
 # core never has to know what a file is.
 
@@ -49,6 +51,7 @@ add_library(slipx_sim
   src/manifest.cpp
   src/sensor_rig.cpp
   src/simulation.cpp
+  src/track_world.cpp
 )
 add_library(slipx::sim ALIAS slipx_sim)
 
@@ -59,7 +62,7 @@ target_include_directories(slipx_sim PUBLIC
 )
 # slipx::sense for the seeded generator, which lives at the lowest layer
 # above the core that needs it (ADR-0037).
-target_link_libraries(slipx_sim PUBLIC slipx::core slipx::sense)
+target_link_libraries(slipx_sim PUBLIC slipx::core slipx::sense slipx::scene)
 target_compile_features(slipx_sim PUBLIC cxx_std_17)
 slipx_apply_determinism_flags(slipx_sim)
 

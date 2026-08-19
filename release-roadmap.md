@@ -1193,6 +1193,22 @@ computed, and the conformance script re-checked all six rows.)
   scratchpad harness now writes with an explicit encoding.
   Still open in M7.7: the race_sync client, the RMW benchmark and
   multi-host agents, all ROS work and now unblocked.
+  Groundwork for the ROS bridge landed the same day (ADR-0049): the
+  TrackWorld in slipx_sim composes the walls and the simulation's own
+  footprints into the rig's world function (nearer-of-wall-and-car, asker
+  skipped, boxes exactly the contact pass's, refit once per step, a world
+  missing a car refuses to answer), with slipx_sim gaining the
+  slipx_scene dependency ADR-0037 anticipated. Bound natively to Python
+  (`slipx.TrackWorld`, `slipx.load_scene_track`; a SensorRig built from
+  one keeps every ray out of the interpreter, which is what makes the
+  bridge's 20-agent sensing viable). Mutation pass: 13 tried, 13 caught
+  first time (comparison flipped, either branch dropped, self-skip
+  dropped, centre offset dropped, negated and axis-swapped, the wreck's
+  box deactivated, footprints never gathered, refit frozen after the
+  first step, the missing-car guard dropped, either cast unbounded).
+  Not tried, answer-preserving by construction: refitting more often
+  than once per step (states cannot change between the rays of one
+  collect).
 - [x] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
   IN PROGRESS, staged 2026-08-19 as a session handoff; the code compiles
