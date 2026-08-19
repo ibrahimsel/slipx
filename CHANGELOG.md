@@ -21,6 +21,24 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **`slipx-id`, one command from bags to a car directory** (ADR-0040). The
+  fitter reads rosbag2 recordings directly, without ROS: sqlite3 storage
+  with the standard library, MCAP through the existing extra, CDR decoded by
+  hand for exactly the message set the manoeuvre library records, and a
+  topic whose type it does not speak refused by name. A session file names
+  the car's bench constants, the topics, the bags and the provenance; the
+  emitted car directory carries per-parameter residuals, the SHA-256 of
+  every bag consumed, and loads straight back through `slipx.load_car`.
+  Emission refuses without a populated provenance block, and anything no
+  stage identified stays provisional with a note instead of becoming a
+  quiet number.
+- **Schema 0.4.0** (ADR-0041): the tyre compound becomes a community
+  vocabulary like surfaces already were (an identification tool fits tyres
+  a two-word enum never anticipated); provenance gains an optional `data`
+  block naming and digesting the recordings a fit consumed; and the
+  registry's acceptance bar is now code,
+  `slipx_schema.rules.check_registry_submission`. Every 0.3.0 document is
+  already a valid 0.4.0 document and the migrations are identities.
 - **`slipx_id`, the identification package** (ADR-0038): the staged fits of
   the manoeuvre library, a deterministic Levenberg-Marquardt on the standard
   library alone, and the synthetic self-test that round-trips every MF-lite

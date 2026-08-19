@@ -429,3 +429,66 @@ def check_tyre_plausibility(tyre: Dict[str, Any], file: str) -> List[Warning_]:
                 )
 
     return warnings
+
+
+# ---------------------------------------------------------------- registry
+#
+# The acceptance bar for a parameter set submitted to the community registry
+# (P2, ADR-0041). Deliberately stricter than what a local fit needs: locally,
+# an identified set without a validation report is a work in progress; in the
+# registry it is a claim other people will tune against, so the report, the
+# residuals and the data digests stop being optional.
+
+
+def check_registry_submission(provenance: Dict[str, Any]) -> List[FieldError]:
+    """Errors that make a provenance document unacceptable to the registry.
+
+    Takes the provenance document (the ``provenance.yaml`` mapping) and
+    returns one named error per missing obligation. An empty list means the
+    document clears the bar; it does not mean the numbers are good, which is
+    what review and the validation report are for.
+    """
+    errors: List[FieldError] = []
+
+    def missing(path: str, message: str) -> None:
+        errors.append(
+            FieldError(
+                path=path,
+                message=message + " (required for registry submission)",
+                file="provenance.yaml",
+                requirement="SCH-06",
+            )
+        )
+
+    if provenance.get("label") != "identified":
+        missing(
+            "label",
+            f"label is {provenance.get('label')!r}; the registry accepts "
+            f"identified sets only. A provisional set is a guess with "
+            f"paperwork, and a measured set without a fit has no residuals "
+            f"to review",
+        )
+    if not str(provenance.get("contributor", "")).strip():
+        missing("contributor", "no contributor is named")
+    residuals = provenance.get("residuals")
+    if not isinstance(residuals, dict) or not residuals:
+        missing(
+            "residuals",
+            "no per-parameter residuals; an identified parameter without a "
+            "residual is a provisional parameter with a better title",
+        )
+    if not str(provenance.get("validation_report", "")).strip():
+        missing(
+            "validation_report",
+            "no validation report is attached; the registry exists so that "
+            "other people can tune against these numbers, and the report is "
+            "the evidence they hold together on the car that produced them",
+        )
+    data = provenance.get("data")
+    if not isinstance(data, list) or not data:
+        missing(
+            "data",
+            "the recordings the fit consumed are not named and digested; a "
+            "parameter set the registry cannot tie to its data is a story",
+        )
+    return errors

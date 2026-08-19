@@ -432,8 +432,9 @@ def fit_mu_x0(
     resistances: FitReport,
     k_mu: float,
     window: Tuple[float, float],
-) -> float:
-    """Peak longitudinal friction from a traction-limited window.
+) -> Tuple[float, float]:
+    """Peak longitudinal friction from a traction-limited window, with a
+    spread.
 
     The caller names the window, because telling a traction plateau from a
     current-limit plateau is a judgement about the run (the procedure doc
@@ -442,6 +443,12 @@ def fit_mu_x0(
     demonstrated. Without a window that actually saturates, the honest
     output is "not observable on this surface", which the caller expresses
     by not calling this.
+
+    Returns ``(mu_x0, spread)``: an envelope estimate has no Gauss-Newton
+    interval, so the spread of the top decile of in-use friction inside the
+    window stands in for one. On a plateau it is small; a window that was
+    not really a plateau shows up as a wide spread rather than a confident
+    number.
     """
     bench = rec.bench
     radius = bench.wheel_radius
@@ -451,7 +458,7 @@ def fit_mu_x0(
     ax = rec.channel("imu.ax")
     fz_nom_rear = bench.static_rear_per_tyre
 
-    best = 0.0
+    in_use: List[float] = []
     for i, t in enumerate(front[0].times):
         if not window[0] <= t <= window[1]:
             continue
@@ -463,11 +470,77 @@ def fit_mu_x0(
         fz = 0.5 * (rl_z + rr_z)
         if fz <= 0.0:
             continue
-        in_use = force_per_tyre / (fz ** (1.0 - k_mu) * fz_nom_rear**k_mu)
-        best = max(best, in_use)
-    if best <= 0.0:
+        in_use.append(force_per_tyre / (fz ** (1.0 - k_mu) * fz_nom_rear**k_mu))
+    if not in_use or max(in_use) <= 0.0:
         raise ValueError("no delivered force in the stated window")
-    return best
+    top = sorted(in_use, reverse=True)[: max(3, len(in_use) // 10)]
+    return top[0], top[0] - top[-1]
+
+
+def fit_esc(
+    rec: ManoeuvreRecording,
+    resistances: FitReport,
+    *,
+    min_speed: float = 0.3,
+) -> FitReport:
+    """The ESC's torque-speed curve from the launch: stall torque, free
+    speed, and the flat cap that binds at low speed.
+
+    The delivered force against speed walks the three regimes of the
+    straight-line procedure: a plateau (the cap: the current limit, or the
+    tyre, whichever binds lower), the knee, and the falling line whose
+    intercepts are the stall torque and the free speed. Which cap was
+    identified is the caller's judgement, exactly as for ``fit_mu_x0``: the
+    curve cannot tell a current limit from a traction limit by itself.
+
+    The curve is identified at the session's pack state: open-circuit
+    voltage above nominal scales the whole curve up, and without pack
+    telemetry the fit cannot separate that scale from the stall torque. Run
+    the launch on a pack near its nominal voltage, or read the stall torque
+    as including the session's voltage ratio; the procedure doc lists sag
+    across a session as a failure mode for the same reason.
+    """
+    bench = rec.bench
+    radius = bench.wheel_radius
+    roll_resist = resistances.value("roll_resist")
+    drag_coeff = resistances.value("drag_coeff")
+    front = [rec.channel("wheel.FL"), rec.channel("wheel.FR")]
+    ax = rec.channel("imu.ax")
+
+    samples: List[Tuple[float, float]] = []
+    for i, t in enumerate(front[0].times):
+        v = radius * 0.5 * (front[0].values[i] + front[1].values[i])
+        if v < min_speed:
+            continue
+        a = ax.value_at(t)
+        if a < 0.0:
+            continue  # braking or coasting at the end of the run
+        resist = roll_resist * bench.weight + drag_coeff * v * v
+        samples.append((v, bench.mass * a + resist))
+    if len(samples) < 20:
+        raise ValueError(
+            "not enough launch samples above the speed floor for an ESC fit"
+        )
+
+    top_force = max(force for _, force in samples)
+    top_speed = max(v for v, _ in samples)
+
+    def residuals(values: Sequence[float]) -> List[float]:
+        stall_force, free_speed, cap = values
+        out = []
+        for v, force in samples:
+            curve = stall_force * (1.0 - v / free_speed)
+            out.append(min(cap, curve) - force)
+        return out
+
+    fit = levenberg_marquardt(
+        residuals,
+        [1.5 * top_force, 2.0 * top_speed, top_force],
+        ("stall_force", "free_speed", "cap_force"),
+        lower=[top_force, top_speed, 0.5 * top_force],
+        upper=[50.0 * top_force, 50.0 * top_speed, 1.2 * top_force],
+    )
+    return fit
 
 
 # -------------------------------------------------------------- transient

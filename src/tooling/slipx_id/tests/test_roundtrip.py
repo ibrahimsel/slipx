@@ -67,7 +67,7 @@ def pipeline():
 
     launch = synthetic.launch(params, duration=5.0)
     c_kappa = stages.fit_c_kappa(launch, resistances, lateral.k_mu)
-    mu_x0 = stages.fit_mu_x0(
+    mu_x0, _spread = stages.fit_mu_x0(
         launch, resistances, lateral.k_mu, window=(0.5, 3.0)
     )
 

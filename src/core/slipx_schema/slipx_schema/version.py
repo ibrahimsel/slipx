@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 #: The schema version this package implements and writes.
-SCHEMA_VERSION = "0.3.0"
+SCHEMA_VERSION = "0.4.0"
 
 
 @dataclass(frozen=True, order=True)

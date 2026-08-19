@@ -1,4 +1,4 @@
-# Copyright 2026 The SlipX Authors
+﻿# Copyright 2026 The SlipX Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Migrations between known minor versions (SCH-01).
@@ -115,3 +115,15 @@ for _kind in _KINDS_0_1_0 + ("track",):
 # And the step before it, for the same reason: so that a track file carrying
 # any older version at all is read and then judged on its contents.
 register("track", 1)(_identity)
+
+
+# ------------------------------------------------------------- 0.3.0 -> 0.4.0
+#
+# 0.4.0 loosened the tyre compound from a two-value enum to the same
+# pattern-constrained vocabulary surfaces already use, and added the optional
+# provenance `data` block naming the recordings a fit consumed (ADR-0041).
+# A loosening and an optional addition move no field, so the step is the
+# identity for every kind: every 0.3.0 document is already a valid 0.4.0 one.
+
+for _kind in _KINDS_0_1_0 + ("track",):
+    register(_kind, 3)(_identity)

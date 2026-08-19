@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.3.0/provenance.schema.json",
+  "$id": "https://slipx.dev/schema/0.4.0/provenance.schema.json",
   "title": "SlipX parameter provenance",
   "description": "Where a set of numbers came from (NFR-08, SCH-06).\n\nThis file is required, and its label is printed by tooling rather than only documented, because the failure mode it prevents is specific and observed: a plausible-looking number enters a config file, nobody records that it was guessed, and six months later somebody is tuning a controller against it in good faith. No parameter set in SlipX has been validated against a real car; until an outside contributor supplies a fitted set with a validation report, the honest phrasing is 'physically structured and identifiable', not 'validated'.",
   "type": "object",
@@ -61,6 +61,21 @@
       "description": "Path or URL to the replay validation report (ID-04): measured inputs through the fitted model, with divergence in yaw rate, lateral acceleration and speed.",
       "type": "string",
       "maxLength": 500
+    },
+    "data": {
+      "description": "The recordings the fit consumed, named and digested, so a parameter set is tied to its data rather than to a story about it. Required by the registry's submission check (0.4.0); optional for a local fit.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "url": { "type": "string", "maxLength": 500 }
+        }
+      }
     },
     "notes": {
       "type": "string",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.3.0/track.schema.json",
+  "$id": "https://slipx.dev/schema/0.4.0/track.schema.json",
   "title": "SlipX track manifest",
   "description": "track.yaml: everything about a track that is not its geometry (ADR-0034).\n\nThe geometry itself is a centreline CSV in the four-column form of the TUM racetrack database, read unextended, and this file sits beside it. The split is deliberate: a file that is TUM compatible until it is not would be rejected by every other tool in the ecosystem, so anything the format cannot carry is carried here instead.\n\nWhat this file must NOT carry is friction. A track declares a surface identifier; the surface pairs with a tyre compound to select a tyre file, and that file holds mu_y0, mu_x0 and the load sensitivity (ADR-0010). A friction number here would be a second source for the parameter the whole identification programme exists to measure, supplied by a track author who measured nothing.\n\nSlipX ships no third-party track geometry. A track for a real venue is converted into place by a tool that records where it came from and under what terms (ADR-0035), which is why the geometry block is required rather than nice to have.",
   "type": "object",

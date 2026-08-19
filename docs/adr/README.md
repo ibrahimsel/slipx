@@ -91,3 +91,5 @@ Use [`template.md`](template.md) for a new record.
 | [0037](0037-sensing-never-sees-the-scene.md) | Sensing never sees the scene, and the seeded RNG moves down to meet it | Proposed |
 | [0038](0038-the-fitter-is-staged-and-depends-on-nothing-new.md) | The fitter is staged, fits what each manoeuvre identifies, and depends on nothing new | Proposed |
 | [0039](0039-the-loader-restates-tyres-at-the-cars-static-load.md) | The loader restates a tyre's coefficients at the car's static load | Proposed |
+| [0040](0040-the-fitter-reads-rosbag2-without-ros.md) | The fitter reads rosbag2 without ROS, and emits a car directory | Proposed |
+| [0041](0041-schema-0-4-0-opens-the-compound-vocabulary.md) | Schema 0.4.0 opens the compound vocabulary and ties a fit to its data | Proposed |

@@ -100,6 +100,8 @@ Changelog = "https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md"
 # The P0 exit gate, reachable without building anything: run the canonical
 # step steer and print its trajectory hash.
 slipx-conformance = "slipx.conformance:main"
+# P2: bags in, a car directory with residuals and provenance out (ADR-0040).
+slipx-id = "slipx_id.cli:main"
 
 [tool.scikit-build]
 cmake.version = ">=3.20"

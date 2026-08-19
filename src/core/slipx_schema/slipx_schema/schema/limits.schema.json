@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://slipx.dev/schema/0.3.0/limits.schema.json",
+  "$id": "https://slipx.dev/schema/0.4.0/limits.schema.json",
   "title": "SlipX actuator and electrical limits",
   "description": "limits.yaml: what the car cannot exceed, and the actuator hardware fitted. Kept separate from dynamics.yaml because these are a property of the hardware, and swapping a servo, an ESC or a battery changes this file and nothing else.\n\nThe steering, esc and electrical blocks are consumed from L2 (CORE-08 to CORE-10); below that the drivetrain block is the whole actuator model. Every block is optional at the schema level because a migration cannot invent values; a tier that needs an absent field refuses by name rather than defaulting (ADR-0030).",
   "type": "object",

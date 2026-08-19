@@ -140,19 +140,20 @@ def test_provenance_is_required(track_factory) -> None:
 
 
 def test_a_newer_minor_is_refused(track_factory) -> None:
-    path = track_factory(lambda d: d.update(schema_version="0.4.0"))
+    path = track_factory(lambda d: d.update(schema_version="0.5.0"))
 
-    with pytest.raises(SchemaVersionError, match="0.4.0"):
+    with pytest.raises(SchemaVersionError, match="0.5.0"):
         load_track(path)
 
 
 def test_an_older_minor_migrates_forward(track_factory) -> None:
-    # 0.3.0 added the track kind and changed no field of any kind that already
-    # existed, so the step is the identity and a file that names an older
-    # version is read and then judged on its contents.
+    # Neither 0.3.0 (which added the track kind) nor 0.4.0 (which loosened
+    # the compound vocabulary, ADR-0041) changed any track field, so the
+    # steps are identities and a file naming an older version is read and
+    # then judged on its contents.
     path = track_factory(lambda d: d.update(schema_version="0.2.0"))
 
-    assert load_track(path).schema_version == "0.3.0"
+    assert load_track(path).schema_version == "0.4.0"
 
 
 # --------------------------------------------------- the surface to tyre check

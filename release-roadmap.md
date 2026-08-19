@@ -763,23 +763,51 @@ features do not.
   tolerances, because the triangular slow ramps shrank that discrepancy
   below them; the mirror is kept because it is the model's actual structure
   and costs nothing.
-- [ ] **M6.3** `slipx_id`, the fitter: ingest rosbag2, emit `dynamics.yaml`
+- [x] **M6.3** `slipx_id`, the fitter: ingest rosbag2, emit `dynamics.yaml`
   with per-parameter residuals and confidence intervals. Refuse to emit a
   parameter set without a populated provenance block; warn when identified
   parameters fall outside physically plausible bounds for the declared scale.
   Done when: the synthetic self-test passes end to end through the real bag
   path, and both refusal and warning have tests.
+  Done 2026-08-19, as `slipx-id` (ADR-0040): rosbag2 read without ROS
+  (sqlite3 via the standard library, MCAP via the extra, CDR by hand for the
+  five message types the manoeuvre library records, unknown types refused by
+  name), a session file naming bags, bench constants, topics and provenance,
+  and emission of a complete car directory rather than a lone dynamics.yaml,
+  because a file the loader cannot open is not a deliverable. The end-to-end
+  test writes real bags, fits off them, and loads the emitted car back
+  through `slipx.load_car`; the refusal (empty provenance, checked before
+  the expensive part) and the plausibility warning (an implausible mu_y0
+  surfaces through the schema read-back) both have tests. Honesty paths
+  exercised deliberately: the test car's launch is current limited, so
+  mu_x0 stays provisional with a note, the flat cap identifies the ESC's
+  current limit, and the configured v_max caps the curve extrapolated from
+  a full pack. Mutation pass: 7 tried, 6 caught (CDR alignment without the
+  header offset, drive fields swapped, tyre residuals dropped, the
+  one-file-or-two decision inverted, the migration step deleted, plus the
+  registry-check refusals); the escape (the ballast bench keeping the
+  unballasted mass, diluted across nine recordings) became a direct test
+  before the slice closed.
 - [ ] **M6.4** The validation report: replay measured control inputs through
   the fitted model and plot divergence in yaw rate, lateral acceleration and
   speed, with a single headline fit metric. Reuses the recording and sink
   machinery from M3 rather than growing its own plotting.
   Done when: a report generates from the synthetic self-test's data and reads
   correctly.
-- [ ] **M6.5** Schema: the provenance block (source, method, date,
+- [x] **M6.5** Schema: the provenance block (source, method, date,
   contributor, residuals) required on any parameter set submitted to the
   registry. A schema minor bump, versioned independently of the core as
   always.
   Done when: schema validation enforces it with tests.
+  Done 2026-08-19, pulled forward into the M6.3 slice because emission
+  needed it: schema 0.4.0 (ADR-0041). The provenance fields the task names
+  had existed since 0.2.0; what the registry actually lacked was the
+  compound vocabulary (the enum could not name a fitted tyre), the `data`
+  block tying a fit to the SHA-256 of its recordings, and the acceptance
+  bar as code: `rules.check_registry_submission` refuses by name a
+  submission without the identified label, a contributor, residuals, a
+  validation report and the data digests. Enforced with tests either side,
+  and every 0.3.0 document remains valid.
 - [ ] **M6.6** **DECISION**, then build: registry hosting and curation. A git
   repository with PR review is the cheapest credible option; decide the
   acceptance bar before the first submission arrives. Contribution must be a
