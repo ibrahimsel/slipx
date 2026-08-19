@@ -1,8 +1,11 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-15 (ghost race demo and the performance-doc correction
-noted under M5.8; no task status changed). Published version: `0.2.0` (PyPI,
-tag `v0.2.0`).
+Last updated: 2026-08-19 (four user decisions recorded: the 20-agent
+performance target waits for M7.4's broadphase before any renegotiation; the
+WSL environment gets ROS 2 and the extra compilers installed by the user; the
+0.3.0, 0.4.0 and 0.5.0 releases are cut together after M7 rather than at each
+milestone end; the registry is a separate repository whose content is staged
+in this tree). Published version: `0.2.0` (PyPI, tag `v0.2.0`).
 Current tree: L2 is complete (drivetrain, battery, servo and differentials),
 the sink layer writes MCAP, Rerun and SVG, and every figure is generated from
 `slipx_core`. M4 shipped that as `0.2.0`; M5 is in progress and is the rest of
@@ -555,6 +558,10 @@ directories and must respect the downward dependency order
   existing F1TENTH stack connecting, which is somebody else's stack. Unblocks
   with a ROS 2 Jazzy installation; the design work behind it does not depend
   on the rest of M5 and can be done at any point.
+  Unblocking agreed 2026-08-19: the user runs the ROS 2 Jazzy install in the
+  (since reset) WSL distribution; the bridge is built once it lands. The WSL
+  reset also removed pip, venv support and the Python headers, so the
+  bindings cannot build in WSL until the same install completes.
 - [x] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
   that validate the simulator, explicitly not a competitive stack.
   Done when: both run a lap on the shipped track headlessly in CI.
@@ -671,6 +678,11 @@ directories and must respect the downward dependency order
   the bottom of a broad minimum. Closing it means a different acceleration
   structure, which is an ADR and the racing phase's broadphase, or a
   deliberate renegotiation of the target. Both are the user's call.
+  Decided 2026-08-19 by the user: broadphase first. M7.4's BVH is in scope
+  anyway, so the 20-agent figure is re-measured when it lands; only if it
+  still misses 10x is the target renegotiated to the measured number, with
+  the reason recorded in `docs/reference/performance.md`. M5.9 and M5.12 stay
+  unticked until that re-measurement.
   Mutation pass: 28 tried, 23 caught. Two escapes were real holes and are now
   tests. No case distinguished the front tyre from the rear one in the
   friction budget, because the reference car has its CoG mid-wheelbase and the
@@ -693,6 +705,10 @@ directories and must respect the downward dependency order
 - [ ] **M5.11** Release 0.3.0, following the M4 release checklist (docs set,
   README audit, version bump, TestPyPI rehearsal, tag, publish).
   Done when: published and installable.
+  Decided 2026-08-19 by the user: feature work through M7 lands first, and
+  the 0.3.0, 0.4.0 and 0.5.0 releases are cut together with the user at the
+  end, each from the commit that completed its milestone or as one combined
+  release, to be settled then. The same decision applies to M6.10 and M7.11.
 
 ## M6. P2: identification and the registry
 
@@ -738,6 +754,10 @@ features do not.
   separate act of altruism.
   Done when: `slipx_registry` exists with a contribution workflow and the
   acceptance bar written down.
+  Decided 2026-08-19 by the user: a separate repository with PR review. Its
+  full content (layout, README, schema-validating CI, the acceptance bar) is
+  prepared in this tree under a staging directory; the user creates the
+  GitHub repository and pushes it.
 - [ ] **M6.7** **DECISION**: buy a chassis. Materially changes the honesty of
   the launch claim; the SRS recommends yes. The first credible in-house
   parameter set is worth more than its cost.
