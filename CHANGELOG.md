@@ -21,6 +21,12 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The registry, staged.** `registry/` holds the future `slipx_registry`
+  repository's full content: the contribution flow (a by-product of
+  running `slipx-id`, not a separate act), the acceptance bar in prose
+  pointing at the bar in code, and a CI runner the self-test exercises
+  against its own emitted car. It leaves this tree when the repository is
+  created.
 - **The validation report.** `validation:` bags in a session file replay
   through the emitted car and produce `validation.svg` beside it: measured
   against replayed yaw rate, lateral acceleration and encoder speed, with

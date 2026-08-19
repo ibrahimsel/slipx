@@ -836,6 +836,17 @@ features do not.
   full content (layout, README, schema-validating CI, the acceptance bar) is
   prepared in this tree under a staging directory; the user creates the
   GitHub repository and pushes it.
+  Staged 2026-08-19 under `registry/`: the README (what an entry is, the
+  contribution flow as a by-product of `slipx-id`, the acceptance bar in
+  prose pointing at the bar in code), `tools/check_submission.py` (a thin
+  runner over `rules.check_registry_submission` plus the
+  validation-report-file check), the CI workflow that runs it over every
+  entry on every pull request, the licence, and an empty `cars/`. The
+  self-test proves the flow: the end-to-end suite copies its own emitted
+  car in as an entry, the check accepts it, and deleting the validation
+  report gets it refused by name. Remains before the box is ticked: the
+  user creates the `slipx_registry` repository and pushes this directory,
+  which then leaves this tree.
 - [ ] **M6.7** **DECISION**: buy a chassis. Materially changes the honesty of
   the launch claim; the SRS recommends yes. The first credible in-house
   parameter set is worth more than its cost.

@@ -317,3 +317,58 @@ def test_the_validation_report_closes_the_loop(emitted) -> None:
     )
     assert provenance["validation_report"] == "validation.svg"
     assert "IDENTIFIED" in path.read_text(encoding="utf-8")
+
+
+def test_the_registry_check_accepts_the_emitted_car(emitted, tmp_path) -> None:
+    # The staged registry's CI runner, pointed at the self-test's own
+    # emission: the whole contribution flow in one assertion. The report is
+    # (re)generated first because the provenance promises it.
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    from slipx_id import report
+    from slipx_id.rosbag import read_recording
+
+    outcome, result, spec = emitted
+    recordings = [
+        read_recording(bag, spec.bench, topic_map=spec.topics)
+        for bag in spec.validation
+    ]
+    report.generate(
+        result.directory,
+        recordings,
+        result.directory / "validation.svg",
+        date="2026-08-19",
+    )
+
+    entry = tmp_path / "cars" / "selftest__bag_path_car__carpet"
+    shutil.copytree(result.directory, entry)
+
+    repo_root = Path(__file__).resolve().parents[4]
+    script = repo_root / "registry" / "tools" / "check_submission.py"
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        str(repo_root / p)
+        for p in ("src/bindings/slipx", "src/core/slipx_schema")
+    )
+    accepted = subprocess.run(
+        [sys.executable, str(script), str(entry)],
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert "IDENTIFIED" in accepted.stdout
+
+    # And the bar refuses when the report goes missing, by name.
+    (entry / "validation.svg").unlink()
+    refused = subprocess.run(
+        [sys.executable, str(script), str(entry)],
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert refused.returncode == 1
+    assert "validation_report" in refused.stdout
