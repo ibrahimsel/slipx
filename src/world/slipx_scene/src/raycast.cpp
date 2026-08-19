@@ -376,10 +376,13 @@ RayHit Walls::cast(double x, double y, double bearing, double max_range) const {
   const Segment* const segments = segments_.data();
   const std::uint32_t visit = visit_;
 
-  double travelled = start_t;
-  while (travelled <= leave) {
+  const auto scan_cell = [&](std::ptrdiff_t qx, std::ptrdiff_t qy) {
+    if (qx < 0 || qy < 0 || qx >= static_cast<std::ptrdiff_t>(nx_) ||
+        qy >= static_cast<std::ptrdiff_t>(ny_)) {
+      return;
+    }
     const std::size_t cell =
-        static_cast<std::size_t>(cy) * nx_ + static_cast<std::size_t>(cx);
+        static_cast<std::size_t>(qy) * nx_ + static_cast<std::size_t>(qx);
     for (std::uint32_t k = starts[cell]; k < starts[cell + 1]; ++k) {
       const std::uint32_t index = items[k];
       if (stamps[index] == visit) continue;
@@ -394,6 +397,20 @@ RayHit Walls::cast(double x, double y, double bearing, double max_range) const {
         best.left_wall = segment_left_[index] != 0u;
       }
     }
+  };
+
+  // How close to a cell corner a crossing has to be before the walk stops
+  // trusting itself about which side of the corner the ray went. Distances
+  // along a ray carry a few ulps of error, well under 1e-12 m at any range a
+  // LiDAR reaches, so a nanometre is a comfortable thousand times wider than
+  // the arithmetic can wobble and a thousand times narrower than anything
+  // physical. Widening the window only adds segment tests; it can never
+  // change a correct answer.
+  constexpr double kCornerMargin = 1e-9;
+
+  double travelled = start_t;
+  while (travelled <= leave) {
+    scan_cell(cx, cy);
 
     // The distance at which the ray leaves this cell, which is where the next
     // one begins.
@@ -411,6 +428,25 @@ RayHit Walls::cast(double x, double y, double bearing, double max_range) const {
     // cells, a car in a 1.5 m corridor sees a wall in the first two or three,
     // and without this the traversal walks the other thirty for nothing.
     if (best.hit && best_range <= exit_t) break;
+
+    // A crossing this close to a cell corner is the one place the walk can
+    // disagree with the intersection arithmetic about what the ray touches.
+    // The walk never steps diagonally: through an exact corner it visits one
+    // of the two cells sharing that corner and skips the other, and which one
+    // is decided by whether next_x or next_y rounded smaller, a coin the C
+    // library tosses. A segment registered only in the skipped cell, hit
+    // exactly at the corner, is then a wall the definition sees and the index
+    // does not. Found on a C library whose cos(-pi/4) and -sin(-pi/4) agree
+    // to the last bit, so a diagonal ray from integer coordinates ties
+    // exactly; the fix is to test both cells whenever the tie is close enough
+    // that the two computations could be talking about the same corner. The
+    // subtraction is written twice rather than through fabs so that an
+    // infinity (an axis-parallel ray never crosses one family of boundaries)
+    // compares itself out instead of turning into a NaN.
+    if (next_y - next_x <= kCornerMargin && next_x - next_y <= kCornerMargin) {
+      scan_cell(cx + step_x, cy);
+      scan_cell(cx, cy + step_y);
+    }
 
     if (next_x < next_y) {
       cx += step_x;

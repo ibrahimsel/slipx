@@ -210,6 +210,43 @@ TEST(Walls, TheShippedStadiumIsTheWidthItClaims) {
 // second one would pass a tolerance-based test and be wrong in the way that
 // matters, which is a wall that is not there.
 
+// A diagonal ray from integer coordinates through the outer wall corner at
+// (-1, -1) crosses a grid cell corner exactly, on any C library whose
+// cos(-pi/4) and -sin(-pi/4) agree to the last bit (MSVC's UCRT does; glibc
+// happens to differ by one ulp, which is the only reason the sweep below
+// never caught this on Linux). The walk must not step around the cell that
+// holds the wall: whatever the definition says, the index must say too.
+TEST(Walls, ARayThroughACellCornerAgreesWithBruteForce) {
+  const Walls walls(square());
+  constexpr double kQuarter = kPi / 4.0;
+
+  // The same approach replayed at all four corners of the outer square, at
+  // several distances out along each diagonal.
+  for (int k = 1; k <= 5; ++k) {
+    const double starts[][2] = {
+        {-1.0 - k, -1.0 + k},  // towards (-1,-1)
+        {11.0 + k, -1.0 + k},  // towards (11,-1)
+        {-1.0 - k, 11.0 - k},  // towards (-1,11)
+        {11.0 + k, 11.0 - k},  // towards (11,11)
+    };
+    const double towards[] = {-kQuarter, -3.0 * kQuarter, kQuarter,
+                              3.0 * kQuarter};
+    for (int c = 0; c < 4; ++c) {
+      const RayHit fast =
+          walls.cast(starts[c][0], starts[c][1], towards[c], 30.0);
+      const RayHit slow = walls.cast_brute_force(starts[c][0], starts[c][1],
+                                                 towards[c], 30.0);
+      ASSERT_EQ(fast.hit, slow.hit)
+          << "corner " << c << " offset " << k << " bearing " << towards[c];
+      if (slow.hit) {
+        EXPECT_DOUBLE_EQ(fast.range, slow.range)
+            << "corner " << c << " offset " << k;
+        EXPECT_EQ(fast.left_wall, slow.left_wall);
+      }
+    }
+  }
+}
+
 TEST(Walls, TheIndexAgreesWithBruteForceOnTheSquare) {
   const Walls walls(square());
 

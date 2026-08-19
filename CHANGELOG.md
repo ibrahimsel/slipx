@@ -21,6 +21,17 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Fixed: a LiDAR ray through a grid cell corner could miss the wall it
+  hits, on Windows.** The raycast index's grid walk never steps diagonally;
+  through an exact corner it visits one of the two cells sharing it, and
+  which one depends on the last bit of the C library's `cos` and `sin`.
+  MSVC's UCRT rounds `cos(-π/4)` and `-sin(-π/4)` to the same double, the
+  walk tied, stepped around the cell holding the wall, and reported open
+  space where brute force reports a wall at exactly the corner; glibc rounds
+  the pair one ulp apart, which is the only reason no Linux test ever saw
+  it. The walk now tests both corner-adjacent cells whenever a crossing
+  lands within a nanometre of a cell corner, which can only add hits the
+  intersection test already approves.
 - **`slipx_scene`, the track.** A centreline loads from the four-column form
   of the TUM racetrack database, read unextended, with arc length derived
   rather than read. Everything about a track that is not geometry lives in a
