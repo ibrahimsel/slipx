@@ -44,6 +44,15 @@ struct AgentManifest {
   std::string tier;              // e.g. "L1_Bicycle"
   std::string params_digest;     // hash of the parameter set actually used
   std::uint64_t seed = 0;        // this agent's derived stream seed
+
+  // How the agent's run ended: "running", or "dnf" with the cause and the
+  // step spelled out (ADR-0042). A result, not configuration: a frozen car
+  // in a trajectory whose manifest does not say why would send an
+  // adjudicator hunting for a bug that is actually an event. Excluded from
+  // configuration_digest for the same reason the trajectory hashes are.
+  std::string status = "running";
+  std::string dnf_cause;         // empty while running
+  std::uint64_t dnf_step = 0;    // meaningless while running
 };
 
 struct RunManifest {

@@ -1,6 +1,7 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-19 (four user decisions recorded: the 20-agent
+Last updated: 2026-08-19 (M7 opened: M7.1 rollover-as-an-event done,
+ADR-0042. Earlier the same day, four user decisions recorded: the 20-agent
 performance target waits for M7.4's broadphase before any renegotiation; the
 WSL environment gets ROS 2 and the extra compilers installed by the user; the
 0.3.0, 0.4.0 and 0.5.0 releases are cut together after M7 rather than at each
@@ -883,15 +884,38 @@ because parameter sets compound and racing features do not.
 
 ## M7. P3: racing
 
-Status: not-started. Size: extra large (many weeks). Release: 0.5.0 at the
-end. Hash impact: contact and rollover enter `slipx_core` numerical paths;
-expect deliberate hash movements, recorded per the standing discipline.
+Status: in-progress; M7.1 done. Size: extra large (many weeks). Release:
+0.5.0 at the end. Hash impact: contact and rollover enter `slipx_core`
+numerical paths; expect deliberate hash movements, recorded per the standing
+discipline. (M7.1 moved none: detection reads diagnostics the core already
+computed, and the conformance script re-checked all six rows.)
 
-- [ ] **M7.1** Rollover detection as a discrete event that halts the agent
+- [x] **M7.1** Rollover detection as a discrete event that halts the agent
   (DNF); no flight or landing simulation. The static rollover threshold
   already exists in `load_transfer.hpp`; this makes it an event.
   Done when: a CoG sweep above the threshold produces the event
   deterministically and the event carries the cause.
+  Done 2026-08-19, recorded as ADR-0042. Detection lives in `slipx_sim`,
+  after each step, from that step's own diagnostics: both wheels of one
+  side at zero vertical load, which the core's clamp writes as a literal
+  zero. A single lifted wheel is deliberately not the signal (that is
+  three-wheeling, routine near the limit); NaN below L2 means those tiers
+  cannot roll, stated as their limitation. The DNF freezes the pose and
+  zeroes the velocities, so the car reads as the stationary obstacle M7.2
+  will collide with; the event carries cause, step and time, survives
+  snapshot/restore, reproduces under replay, and the manifest reports the
+  outcome per agent outside the configuration digest. The CoG sweep is
+  asserted against the closed form: the event fires within 15 per cent of
+  g t / 2h, monotonically earlier with height. Probing the scenario paid
+  for itself: on the default tyre the car slides rather than rolls (as the
+  docs promise), drive thrust props up the rear inner wheel so a powered
+  car three-wheels indefinitely, and at car-park speed the steering runs
+  out before the threshold, so the rollable scenario is a sticky compound,
+  coasting, from 6 m/s. Mutation pass: 13 tried, 13 caught (cause side
+  swap, single-wheel signal, diagonal pairing, freeze dropped, frozen agent
+  stepping, policy still called, snapshot and restore each dropping the
+  event, step off by one, exact zero never firing, replay bypassing
+  detection, manifest not told, JSON dnf fields for running agents).
 - [ ] **M7.2** Agent-to-agent contact as a planar impulse with restitution,
   Coulomb friction and resulting yaw moment. Plausible and deterministic, not
   fitted to data, and the docs keep saying so.

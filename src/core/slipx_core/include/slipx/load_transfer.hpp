@@ -88,8 +88,8 @@ struct WheelLoads {
   // condition and it is reported rather than silently clamped, because it is
   // the point past which the quasi-static model has stopped describing a car
   // that still has four wheels on the ground. Detecting rollover as an event
-  // and halting the agent is CORE-14 and belongs to slipx_scene in P3; what
-  // the core owes that decision is this flag.
+  // and halting the agent is the orchestrator's job (ADR-0042); what the
+  // core owes that decision is this flag and the clamped per-wheel loads.
   bool wheel_lifted = false;
 };
 
@@ -235,9 +235,9 @@ inline WheelLoads quasi_static_loads(const VehicleParams& p, double ax,
 // This is the static threshold and not a rollover event. It says nothing about
 // whether the car goes over, which depends on how long the lateral
 // acceleration is held and on the roll inertia; detecting rollover and halting
-// the agent is CORE-14, in P3. Nor does it mean the car reaches this value:
-// on a low-friction surface the tyres let go first, at ay = mu g, which is the
-// usual and much safer outcome at 1/10 scale.
+// the agent is the orchestrator's job (ADR-0042). Nor does it mean the car
+// reaches this value: on a low-friction surface the tyres let go first, at
+// ay = mu g, which is the usual and much safer outcome at 1/10 scale.
 inline double static_rollover_threshold(const VehicleParams& p) {
   const double front = kGravity * p.track_front / (2.0 * p.h_cog);
   const double rear = kGravity * p.track_rear / (2.0 * p.h_cog);

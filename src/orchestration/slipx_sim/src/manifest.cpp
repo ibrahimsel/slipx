@@ -129,6 +129,11 @@ std::string RunManifest::to_json() const {
     o << "      \"tier\": " << quote(a.tier) << ",\n";
     o << "      \"params_digest\": " << quote(a.params_digest) << ",\n";
     o << "      \"seed\": " << number(a.seed) << ",\n";
+    o << "      \"status\": " << quote(a.status) << ",\n";
+    if (a.status == "dnf") {
+      o << "      \"dnf_cause\": " << quote(a.dnf_cause) << ",\n";
+      o << "      \"dnf_step\": " << number(a.dnf_step) << ",\n";
+    }
     o << "      \"trajectory_hash\": "
       << quote(i < agent_trajectory_hashes.size()
                    ? agent_trajectory_hashes[i]

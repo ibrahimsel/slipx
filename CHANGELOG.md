@@ -21,6 +21,16 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Rollover is a discrete event that ends an agent's run** (ADR-0042). The
+  orchestrator reads each step's diagnostics, and both wheels of one side at
+  zero vertical load is a DNF: the policy is never called again, the pose
+  freezes where the event found it, the velocities read zero, and the car
+  stays in the world as a stationary obstacle. The event carries its cause
+  (which side unloaded), survives snapshot and restore, reproduces under
+  replay, and the manifest reports each agent's outcome. There is no flight
+  or landing simulation. Below L2 the loads are NaN and nothing can roll,
+  which is a stated limitation of those tiers. The core is untouched: no
+  reference hash moved, re-checked under the conformance script.
 - **The registry, staged.** `registry/` holds the future `slipx_registry`
   repository's full content: the contribution flow (a by-product of
   running `slipx-id`, not a separate act), the acceptance bar in prose

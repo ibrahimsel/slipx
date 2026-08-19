@@ -516,7 +516,15 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("name", &AgentManifest::name)
       .def_readonly("tier", &AgentManifest::tier)
       .def_readonly("params_digest", &AgentManifest::params_digest)
-      .def_readonly("seed", &AgentManifest::seed);
+      .def_readonly("seed", &AgentManifest::seed)
+      .def_readonly("status", &AgentManifest::status,
+                    "'running', or 'dnf' with the cause and step below. A "
+                    "result, not configuration: excluded from the "
+                    "configuration digest.")
+      .def_readonly("dnf_cause", &AgentManifest::dnf_cause,
+                    "empty while running")
+      .def_readonly("dnf_step", &AgentManifest::dnf_step,
+                    "meaningless while running");
 
   py::class_<RunManifest>(
       m, "RunManifest",
@@ -573,6 +581,33 @@ PYBIND11_MODULE(_slipx, m) {
                      "callable(state, time, rng) -> DriveInput. Must be a pure "
                      "function of those three if the run is to replay.");
 
+  // ---------------------------------------------------------------- events
+  py::enum_<DnfCause>(
+      m, "DnfCause",
+      "Why an agent stopped racing. The rollover values name the UNLOADED "
+      "side: RolloverLeft means both left wheels reached zero vertical load, "
+      "which is what a hard left turn does (positive ay loads the right "
+      "wheels).")
+      .value("RolloverLeft", DnfCause::kRolloverLeft)
+      .value("RolloverRight", DnfCause::kRolloverRight);
+
+  py::class_<DnfEvent>(
+      m, "DnfEvent",
+      "The discrete event that ended an agent's run. After it, the agent's "
+      "policy is never called again, its pose is frozen where the event "
+      "found it, and its velocities read zero: a stationary obstacle, not a "
+      "car frozen mid-flight.")
+      .def_readonly("step", &DnfEvent::step,
+                    "the first step at which the state was frozen")
+      .def_readonly("time", &DnfEvent::time, "step * dt [s]")
+      .def_readonly("cause", &DnfEvent::cause)
+      .def("__repr__", [](const DnfEvent& e) {
+        std::ostringstream o;
+        o << "DnfEvent(step=" << e.step << ", time=" << e.time << ", cause='"
+          << to_string(e.cause) << "')";
+        return o.str();
+      });
+
   py::class_<Simulation>(
       m, "Simulation",
       "N agents, one fixed step, in lockstep. Every policy sees the world as "
@@ -608,6 +643,12 @@ PYBIND11_MODULE(_slipx, m) {
            py::return_value_policy::reference_internal)
       .def("rng", &Simulation::rng, py::arg("index"),
            py::return_value_policy::reference_internal)
+      .def("agent_running", &Simulation::agent_running, py::arg("index"),
+           "False once the agent has DNF'd. A DNF'd agent freezes in place "
+           "and stays in the world as a stationary obstacle.")
+      .def("dnf", &Simulation::dnf, py::arg("index"),
+           "The DnfEvent that ended the agent's run, or None while it is "
+           "still running.")
       .def("trajectory_hash", &Simulation::trajectory_hash)
       .def("agent_trajectory_hash", &Simulation::agent_trajectory_hash,
            py::arg("index"))

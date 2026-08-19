@@ -76,6 +76,40 @@ std::string params_digest(const VehicleParams& p) {
   return h.hex();
 }
 
+// The rollover signal (ADR-0042): both wheels of one side at zero vertical
+// load in the step's diagnostics. The loads come from the core's clamped
+// load pass, which writes a literal zero for a lifted wheel, so the
+// comparison is exact; <= only guards against a representation that cannot
+// occur. Below L2 the entries are NaN, every comparison is false, and tiers
+// without load transfer never roll.
+//
+// A single wheel at zero is deliberately not the signal: that is
+// three-wheeling, which is routine near the limit at whichever axle lifts
+// first. A car carried entirely on one side's contact patches is the static
+// rollover condition proper.
+std::optional<DnfCause> rollover_signal(const StepDiagnostics& d) {
+  if (d.fz[kFrontLeft] <= 0.0 && d.fz[kRearLeft] <= 0.0) {
+    return DnfCause::kRolloverLeft;
+  }
+  if (d.fz[kFrontRight] <= 0.0 && d.fz[kRearRight] <= 0.0) {
+    return DnfCause::kRolloverRight;
+  }
+  return std::nullopt;
+}
+
+// A DNF'd car is a stationary obstacle, and its recorded state has to say
+// so: position and yaw keep the value the event found them at, and the
+// motion states are zeroed, because a constant position alongside a nonzero
+// velocity is a recording that contradicts itself. The kinetic energy the
+// car had leaves the record here; that is the roll and slide this model
+// does not simulate (ADR-0042).
+void freeze(VehicleState& s) {
+  s.vel_body = Vec3{};
+  s.rates = Vec3{};
+  for (double& w : s.omega_w) w = 0.0;
+  s.steer_rate = 0.0;
+}
+
 }  // namespace
 
 Simulation::Simulation(SimulationConfig config) : config_(config) {
@@ -130,10 +164,13 @@ void Simulation::advance() {
   const double t = time();
 
   // Phase one: collect every command against the world as it is now. No agent
-  // has moved yet, so no policy can see another agent's future.
+  // has moved yet, so no policy can see another agent's future. A DNF'd
+  // agent's policy is never called again; a neutral input holds its slot so
+  // the log stays rectangular and a replay lines up agent for agent.
   for (std::size_t i = 0; i < agents_.size(); ++i) {
     Agent& a = agents_[i];
-    pending_inputs_[i] = a.policy ? a.policy(a.state, t, a.rng) : DriveInput{};
+    pending_inputs_[i] = (a.policy && !a.dnf) ? a.policy(a.state, t, a.rng)
+                                              : DriveInput{};
   }
 
   if (logging_inputs_) {
@@ -141,16 +178,32 @@ void Simulation::advance() {
                       pending_inputs_.end());
   }
 
-  // Phase two: everybody moves.
+  // Phase two: everybody still racing moves.
   for (std::size_t i = 0; i < agents_.size(); ++i) {
-    Agent& a = agents_[i];
-    a.model->step(a.state, pending_inputs_[i], config_.dt, &a.diagnostics);
+    step_agent(agents_[i], pending_inputs_[i]);
   }
 
   ++steps_;
   hash_states();
 
   pace();
+}
+
+void Simulation::step_agent(Agent& a, const DriveInput& input) {
+  if (a.dnf) return;   // frozen: the state no longer evolves
+  a.model->step(a.state, input, config_.dt, &a.diagnostics);
+
+  if (const std::optional<DnfCause> cause = rollover_signal(a.diagnostics)) {
+    DnfEvent event;
+    // steps_ has not been incremented for this advance yet; the event names
+    // the step count as the caller will see it, i.e. the first step at which
+    // the state is frozen.
+    event.step = steps_ + 1;
+    event.time = static_cast<double>(event.step) * config_.dt;
+    event.cause = *cause;
+    a.dnf = event;
+    freeze(a.state);
+  }
 }
 
 // Soft real time, and only in validation mode.
@@ -199,6 +252,7 @@ SimulationSnapshot Simulation::snapshot() const {
     one.diagnostics = a.diagnostics;
     one.rng = a.rng.save();
     one.hash_state = a.hash.value();
+    one.dnf = a.dnf;
     out.agents.push_back(one);
   }
   return out;
@@ -222,6 +276,7 @@ void Simulation::restore(const SimulationSnapshot& snapshot) {
     a.diagnostics = one.diagnostics;
     a.rng.restore(one.rng);
     a.hash.restore(one.hash_state);
+    a.dnf = one.dnf;
   }
 
   steps_ = snapshot.steps;
@@ -256,6 +311,7 @@ void Simulation::reset() {
     a.diagnostics = StepDiagnostics{};
     a.rng = Rng(a.seed);
     a.hash = TrajectoryHash{};
+    a.dnf.reset();
   }
   steps_ = 0;
   input_log_.clear();
@@ -274,9 +330,10 @@ void Simulation::replay(const std::vector<DriveInput>& log) {
   const std::size_t n_steps = log.size() / agents_.size();
   for (std::size_t step = 0; step < n_steps; ++step) {
     for (std::size_t i = 0; i < agents_.size(); ++i) {
-      Agent& a = agents_[i];
-      a.model->step(a.state, log[step * agents_.size() + i], config_.dt,
-                    &a.diagnostics);
+      // The same per-agent path advance() takes, so a replayed roll rolls at
+      // the recorded step and the frozen tail of the log (neutral inputs) is
+      // skipped exactly as it was skipped when recorded.
+      step_agent(agents_[i], log[step * agents_.size() + i]);
     }
     ++steps_;
     hash_states();
@@ -306,6 +363,16 @@ const VehicleModel& Simulation::model(std::size_t i) const {
 Rng& Simulation::rng(std::size_t i) {
   check_index(i);
   return agents_[i].rng;
+}
+
+bool Simulation::agent_running(std::size_t i) const {
+  check_index(i);
+  return !agents_[i].dnf.has_value();
+}
+
+const std::optional<DnfEvent>& Simulation::dnf(std::size_t i) const {
+  check_index(i);
+  return agents_[i].dnf;
 }
 
 std::string Simulation::agent_trajectory_hash(std::size_t i) const {
@@ -339,6 +406,11 @@ RunManifest Simulation::manifest() const {
     am.tier = to_string(a.model->tier());
     am.params_digest = params_digest(a.model->params());
     am.seed = a.seed;
+    if (a.dnf) {
+      am.status = "dnf";
+      am.dnf_cause = to_string(a.dnf->cause);
+      am.dnf_step = a.dnf->step;
+    }
     m.agents.push_back(std::move(am));
     m.agent_trajectory_hashes.push_back(a.hash.hex());
   }

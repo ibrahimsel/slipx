@@ -208,6 +208,52 @@ def test_replay_from_the_input_log_is_bit_identical() -> None:
     assert sim.trajectory_hash() == original
 
 
+def test_a_rollover_event_crosses_the_boundary() -> None:
+    # The physics of the event is tested in C++ (test_events.cpp); what is
+    # tested here is the boundary: the event arrives as a DnfEvent with its
+    # cause as an enum, None means still running, and the manifest carries
+    # the outcome. The scenario is the C++ suite's rollable one: a sticky
+    # tyre, the CoG raised until the threshold is inside what the tyres can
+    # sustain, and a steering ramp while coasting from speed, because drive
+    # thrust props up the rear inner wheel and a powered car three-wheels
+    # instead of rolling.
+    sim = slipx.Simulation()
+    spec = slipx.AgentSpec()
+    spec.tier = slipx.Tier.L2_DoubleTrack
+    spec.params.h_cog = 0.18
+    spec.params.tyre_front.mu_y0 = 1.6
+    spec.params.tyre_front.mu_x0 = 1.7
+    spec.params.tyre_rear.mu_y0 = 1.6
+    spec.params.tyre_rear.mu_x0 = 1.7
+    spec.initial_state.vel_body.x = 6.0
+
+    def policy(state, time, rng):
+        return slipx.DriveInput(steer_cmd=min(0.15 * time, 0.40), accel_cmd=0.0)
+
+    spec.policy = policy
+    sim.add_agent(spec)
+
+    assert sim.agent_running(0)
+    assert sim.dnf(0) is None
+
+    sim.run_for(2.0)
+
+    assert not sim.agent_running(0)
+    event = sim.dnf(0)
+    assert event.cause == slipx.DnfCause.RolloverLeft
+    assert event.time == event.step * sim.dt
+    assert "rollover" in repr(event)
+    # Frozen in place as a stationary obstacle: the pose stays, the motion
+    # states read zero.
+    assert sim.state(0).speed() == 0.0
+
+    manifest = sim.manifest()
+    assert manifest.agents[0].status == "dnf"
+    assert manifest.agents[0].dnf_cause == "rollover: left wheels unloaded"
+    assert manifest.agents[0].dnf_step == event.step
+    assert '"status": "dnf"' in manifest.to_json()
+
+
 def test_the_manifest_records_the_build_it_ran_on() -> None:
     # NFR-02 scopes bit-identity to a fixed (platform, compiler, flag set), so
     # a hash without that context is not evidence of anything.

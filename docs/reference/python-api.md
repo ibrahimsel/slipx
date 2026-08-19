@@ -115,6 +115,7 @@ the step, so a result cannot depend on the order agents were added in.
 | `model(i)`, `rng(i)` | |
 | `time`, `step_count`, `dt`, `agent_count` | `time` is `steps × dt`, never an accumulated sum. |
 | `trajectory_hash()`, `agent_trajectory_hash(i)` | |
+| `agent_running(i)`, `dnf(i)` | Rollover ends an agent's run; `dnf(i)` is the `DnfEvent` that ended it, or `None`. See below. |
 | `manifest()` | See below. |
 | `set_input_logging(True)`, `input_log()`, `replay(log)` | Re-run from a recorded input sequence, ignoring the policies: what a leaderboard appeal does when the policies are gone. |
 
@@ -125,6 +126,18 @@ stop reproducing.
 
 `slipx.hold_speed(state, target)` is a proportional speed controller, and
 `slipx.step_steer(spec)` is the canonical step-steer policy.
+
+### Rollover, the first discrete event
+
+At L2, a step whose diagnostics show both wheels of one side at zero vertical
+load ends that agent's run: the agent is DNF, its policy is never called
+again, its pose freezes where the event found it and its velocities read
+zero, so it stays in the world as a stationary obstacle. `dnf(i)` returns the
+event, which carries the cause (`DnfCause.RolloverLeft` names the unloaded
+side), the step and the time; the manifest records the outcome per agent.
+There is no flight or landing simulation, and nothing un-freezes an agent
+short of `reset()`. Below L2 the per-wheel loads are NaN and no car can roll,
+which is a stated limitation of those tiers.
 
 ## Recording a run
 

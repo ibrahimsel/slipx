@@ -38,6 +38,7 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,37 @@ struct AgentSpec {
   VehicleParams params{};
   VehicleState initial_state{};
   Policy policy{};   // empty means coast: zero steer, zero demand
+};
+
+// Why an agent stopped racing (ADR-0042). Rollover is the first cause that
+// exists; the barrier timeout policies and race control will extend this.
+//
+// The two rollover values name the UNLOADED side: kRolloverLeft means both
+// left wheels reached zero vertical load, which is what happens in a hard
+// left turn (positive ay loads the right wheels), and the car is pivoting
+// about its right-hand contact patches.
+enum class DnfCause {
+  kRolloverLeft,
+  kRolloverRight,
+};
+
+inline const char* to_string(DnfCause cause) {
+  switch (cause) {
+    case DnfCause::kRolloverLeft: return "rollover: left wheels unloaded";
+    case DnfCause::kRolloverRight: return "rollover: right wheels unloaded";
+  }
+  return "unknown";
+}
+
+// The discrete event that ended an agent's run. Carries its cause, because a
+// DNF whose reason has to be reconstructed from the trajectory is a DNF that
+// will be argued about.
+struct DnfEvent {
+  // The value step_count() returned after the advance that produced the
+  // event, so the event names the first step at which the state was frozen.
+  std::uint64_t step = 0;
+  double time = 0.0;   // step * dt                                       [s]
+  DnfCause cause = DnfCause::kRolloverLeft;
 };
 
 // How a run treats the wall clock.
@@ -136,6 +168,10 @@ struct AgentSnapshot {
   StepDiagnostics diagnostics;
   Rng::State rng;
   std::uint64_t hash_state = 0;
+  // Whether, and how, the agent's run had already ended. Without this a
+  // restore could resurrect a rolled car, and a snapshot taken after an
+  // event would restore into a run that disagrees with its own manifest.
+  std::optional<DnfEvent> dnf;
 };
 
 struct SimulationSnapshot {
@@ -201,6 +237,21 @@ class Simulation {
   const VehicleModel& model(std::size_t i) const;
   Rng& rng(std::size_t i);
 
+  // ------------------------------------------------------------- events
+  //
+  // Rollover ends an agent's run (ADR-0042): after any step whose
+  // diagnostics show both wheels of one side at zero vertical load, the
+  // agent is DNF. Its policy is never called again, its model never steps
+  // again, its pose freezes where the event found it and its velocities are
+  // zeroed, so it remains in the world as a stationary obstacle. Below L2
+  // the per-wheel loads are NaN and no agent can roll, which is a stated
+  // limitation of those tiers rather than of the detection.
+  bool agent_running(std::size_t i) const;
+
+  // The event that ended the agent's run, or an empty optional while it is
+  // still running.
+  const std::optional<DnfEvent>& dnf(std::size_t i) const;
+
   std::string trajectory_hash() const;
   std::string agent_trajectory_hash(std::size_t i) const;
 
@@ -253,10 +304,15 @@ class Simulation {
     Rng rng;
     std::uint64_t seed = 0;
     TrajectoryHash hash;
+    std::optional<DnfEvent> dnf;
   };
 
   void hash_states();
   void check_index(std::size_t i) const;
+  // One agent's share of a step: skip it if it is frozen, step it, then
+  // check its diagnostics for an event. Shared by advance() and replay() so
+  // a replayed roll rolls at the same step it was recorded at.
+  void step_agent(Agent& a, const DriveInput& input);
   // Validation mode only; reads no clock in deterministic mode.
   void pace();
 
