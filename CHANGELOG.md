@@ -104,12 +104,13 @@ re-checked, not re-measured.
   or landing simulation. Below L2 the loads are NaN and nothing can roll,
   which is a stated limitation of those tiers. The core is untouched: no
   reference hash moved, re-checked under the conformance script.
-- **The registry, staged.** `registry/` holds the future `slipx_registry`
-  repository's full content: the contribution flow (a by-product of
-  running `slipx-id`, not a separate act), the acceptance bar in prose
-  pointing at the bar in code, and a CI runner the self-test exercises
-  against its own emitted car. It leaves this tree when the repository is
-  created.
+- **The registry is live.** The staged `registry/` content left this tree
+  for https://github.com/ibrahimsel/slipx_registry: the contribution flow
+  (a by-product of running `slipx-id`, not a separate act), the
+  acceptance bar in prose pointing at the bar in code, and a CI runner
+  over every entry on every pull request. Until the 0.4.0 release is on
+  PyPI its CI installs SlipX from git source, and says so. The self-test
+  that exercised the staged runner now exercises the same bar directly.
 - **The validation report.** `validation:` bags in a session file replay
   through the emitted car and produce `validation.svg` beside it: measured
   against replayed yaw rate, lateral acceleration and encoder speed, with

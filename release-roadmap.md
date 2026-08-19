@@ -738,11 +738,11 @@ directories and must respect the downward dependency order
 
 ## M6. P2: identification and the registry
 
-Status: in-progress; every buildable task is done (M6.1 to M6.5, M6.9, and
-M6.6's staging). What remains needs the outside world: the user pushes the
-registry (M6.6), the chassis decision is "not now" (M6.7), the exit gate
-needs three external contributions (M6.8), and the release is deferred to
-the end of M7 by the 2026-08-19 decision (M6.10). Size: extra large
+Status: in-progress; M6.1 to M6.6 and M6.9 done (the registry is live at
+github.com/ibrahimsel/slipx_registry). What remains needs the outside
+world: the chassis decision is "not now" (M6.7), the exit gate needs three
+external contributions (M6.8), and the release is deferred to the end of M7
+by the 2026-08-19 decision (M6.10). Size: extra large
 (many weeks). Release: 0.4.0 at the end. This phase is the differentiator;
 the SRS is explicit that it must not slip behind the racing features,
 because parameter sets compound and racing features do not.
@@ -855,7 +855,7 @@ because parameter sets compound and racing features do not.
   submission without the identified label, a contributor, residuals, a
   validation report and the data digests. Enforced with tests either side,
   and every 0.3.0 document remains valid.
-- [ ] **M6.6** **DECISION**, then build: registry hosting and curation. A git
+- [x] **M6.6** **DECISION**, then build: registry hosting and curation. A git
   repository with PR review is the cheapest credible option; decide the
   acceptance bar before the first submission arrives. Contribution must be a
   by-product of using `slipx_id`, one command from bag to submitted PR, not a
@@ -877,6 +877,24 @@ because parameter sets compound and racing features do not.
   report gets it refused by name. Remains before the box is ticked: the
   user creates the `slipx_registry` repository and pushes this directory,
   which then leaves this tree.
+  Ticked 2026-08-19: at the user's instruction the repository was created
+  and pushed via the gh CLI as
+  https://github.com/ibrahimsel/slipx_registry (public, Apache-2.0, one
+  initial commit). Two edits were made as the content left the tree: the
+  staging note came out of the README, and both the README and the CI
+  workflow gained the honest version note, since the published 0.2.0
+  predates `slipx-id` and the acceptance-bar code: CI installs SlipX from
+  git source until the 0.4.0 release is on PyPI, then switches to
+  `pip install slipx` (the workflow comment says so at the line). The
+  in-tree end-to-end test that ran the staged runner now exercises the
+  same bar directly (`check_registry_submission` plus the report-file
+  rule), because the runner lives in the registry's own CI now.
+  One loose end, honest and expected: the registry's first CI run is RED,
+  because installing SlipX from git gets the public main, which does not
+  yet carry the acceptance-bar code; every commit since `c1bd582` is
+  local. It goes green when the user pushes `slipx` main and re-runs the
+  workflow (`gh run rerun -R ibrahimsel/slipx_registry <run-id>` or just
+  the next push there).
 - [ ] **M6.7** **DECISION**: buy a chassis. Materially changes the honesty of
   the launch claim; the SRS recommends yes. The first credible in-house
   parameter set is worth more than its cost.

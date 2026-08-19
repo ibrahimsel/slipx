@@ -319,14 +319,20 @@ def test_the_validation_report_closes_the_loop(emitted) -> None:
     assert "IDENTIFIED" in path.read_text(encoding="utf-8")
 
 
-def test_the_registry_check_accepts_the_emitted_car(emitted, tmp_path) -> None:
-    # The staged registry's CI runner, pointed at the self-test's own
-    # emission: the whole contribution flow in one assertion. The report is
+def test_the_registry_bar_accepts_the_emitted_car(emitted, tmp_path) -> None:
+    # The registry's acceptance bar, pointed at the self-test's own
+    # emission: the whole contribution flow in one assertion. The bar is
+    # `check_registry_submission` in this tree; the registry repository
+    # (github.com/ibrahimsel/slipx_registry) runs a thin CI runner over
+    # exactly this check plus the report-file rule replicated below, so
+    # what is asserted here is what its CI enforces. The report is
     # (re)generated first because the provenance promises it.
-    import os
     import shutil
-    import subprocess
-    import sys
+
+    import yaml
+
+    import slipx
+    from slipx_schema.rules import check_registry_submission
 
     from slipx_id import report
     from slipx_id.rosbag import read_recording
@@ -346,29 +352,23 @@ def test_the_registry_check_accepts_the_emitted_car(emitted, tmp_path) -> None:
     entry = tmp_path / "cars" / "selftest__bag_path_car__carpet"
     shutil.copytree(result.directory, entry)
 
-    repo_root = Path(__file__).resolve().parents[4]
-    script = repo_root / "registry" / "tools" / "check_submission.py"
-    environment = dict(os.environ)
-    environment["PYTHONPATH"] = os.pathsep.join(
-        str(repo_root / p)
-        for p in ("src/bindings/slipx", "src/core/slipx_schema")
-    )
-    accepted = subprocess.run(
-        [sys.executable, str(script), str(entry)],
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
-    assert "IDENTIFIED" in accepted.stdout
+    # Loads cleanly, and the tooling prints the label (NFR-08).
+    car = slipx.load_car(entry)
+    assert "IDENTIFIED" in car.summary()
 
-    # And the bar refuses when the report goes missing, by name.
-    (entry / "validation.svg").unlink()
-    refused = subprocess.run(
-        [sys.executable, str(script), str(entry)],
-        capture_output=True,
-        text=True,
-        env=environment,
+    provenance = yaml.safe_load(
+        (entry / "provenance.yaml").read_text(encoding="utf-8")
     )
-    assert refused.returncode == 1
-    assert "validation_report" in refused.stdout
+    assert check_registry_submission(provenance) == []
+
+    # The runner's one rule beyond the bar: the named report file really is
+    # in the entry, not just named.
+    named = str(provenance["validation_report"])
+    assert (entry / named).is_file()
+
+    # And the bar refuses by name: a submission with no author is a story
+    # nobody signed.
+    anonymous = dict(provenance)
+    anonymous.pop("contributor", None)
+    errors = [str(error) for error in check_registry_submission(anonymous)]
+    assert any("contributor" in error for error in errors)
