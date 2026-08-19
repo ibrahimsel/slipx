@@ -52,6 +52,7 @@ sit.
 | 5 | [The racing line](05-the-racing-line.md) | Why is the shortest path not the fastest? |
 | 6 | [Speed and the g-g diagram](06-speed-and-the-gg-diagram.md) | How fast can I go, and where do I brake? |
 | 17 | [A collision is an impulse](17-a-collision-is-an-impulse.md) | What does touching another car actually do? |
+| 18 | [The same race twice](18-the-same-race-twice.md) | Why does a simulation give a different answer each run, and what does it take not to? |
 
 **Part three: getting the numbers**
 
@@ -88,8 +89,8 @@ merely late.
 **Planned, not yet written.** Listed so the shape of the series is visible and
 so nobody writes the same article twice: the autonomy pipeline; localisation and
 mapping; global and local planning; path tracking, from pure pursuit to MPC;
-inertial and odometric sensor errors, which article 13 only touches; the
-sim-to-real gap; and reproducibility and benchmarking. Contributions welcome, and the articles above are the register to
+inertial and odometric sensor errors, which article 13 only touches; and the
+sim-to-real gap. Contributions welcome, and the articles above are the register to
 match.
 
 ## Conventions
