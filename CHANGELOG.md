@@ -21,6 +21,21 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The racing broadphase, and a renegotiated performance target**
+  (ADR-0045). `slipx/scene/broadphase.hpp`: a prebuilt `SceneBvh` over the
+  wall segments (fully specified build, ordered pruned traversal,
+  thread-safe query) and an `AgentOverlay` of per-step refit oriented
+  boxes answering rays with a self-skip and conservative pair queries;
+  both are asserted bit-for-bit against brute-force definitions. Measured
+  on the workload that matters, the BVH loses the wall rays to the grid
+  by a factor of three (95 against 280 ns per ray), so the grid stays and
+  the benchmark now prints both costs per commit, plus the agent-overlay
+  cost of cars seeing cars. With the acceleration-structure route
+  measured shut, the 20-agent target is renegotiated from 10x to over 7x
+  per the standing decision, with both sessions' numbers and the
+  alternation evidence recorded in `docs/reference/performance.md` (the
+  racing-phase code added nothing measurable; the drift between sessions
+  is the machine).
 - **The barrier and its timeout policies** (ADR-0044). Commands can arrive
   asynchronously through a step-tagged `CommandMailbox`, the one
   synchronised doorway into the otherwise single-threaded simulation; the

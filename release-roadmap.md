@@ -388,11 +388,13 @@ from a car file and visible. Everything below is release engineering.
 
 ## M5. The rest of P1: sensing, track, ROS 2, reference stack
 
-Status: in-progress; M5.1 to M5.6 and M5.8 done, M5.7 blocked on the
-environment, M5.9 measured and M5.12 closed one of the two missed targets and
-left the twenty-agent one short by 24 per cent. Size: extra large
-(many weeks). Release: 0.3.0 at the end. Hash impact: none expected in
-`slipx_core`, and none observed; sensors and scene live above it. Determinism constraints extend to every new layer: seeded per-agent RNG
+Status: in-progress; M5.1 to M5.6, M5.8, M5.9 and M5.12 done (the 20-agent
+performance target renegotiated to over 7x on 2026-08-19 after M7.4's
+broadphase was measured, per the standing decision), M5.7 blocked on the
+environment, M5.10 the external gate, M5.11 deferred to the end of M7. Size:
+extra large (many weeks). Release: 0.3.0 at the end. Hash impact: none
+expected in `slipx_core`, and none observed; sensors and scene live above
+it. Determinism constraints extend to every new layer: seeded per-agent RNG
 only, no wall clock, fixed iteration order.
 
 Goal: the remaining P1 deliverables, so a RoboRacer team can run their
@@ -601,7 +603,7 @@ directories and must respect the downward dependency order
   that a CI-time trim had opened one: three tests had been cut to a single
   lap, and a lap time that is really an elapsed clock is invisible until the
   second lap.
-- [ ] **M5.9** Performance benchmarks, measured and published: L2
+- [x] **M5.9** Performance benchmarks, measured and published: L2
   single-agent step under 5 microseconds per core; one agent with L2 and 2D
   LiDAR at 100 times real time or better headless; 20 agents with L2 and 2D
   LiDAR at 10 times real time or better. Tracked per commit, not measured
@@ -632,7 +634,11 @@ directories and must respect the downward dependency order
   179x and twenty agents 8.4x, measured against a rebuild of this commit in
   the same session. The figures above are what this commit measured and are
   left as they were recorded.
-- [ ] **M5.12** Close the performance gap M5.9 measured: one agent from 90x
+  Ticked 2026-08-19 with M5.12's closure: two targets met as set, the third
+  renegotiated to over 7x with the reason recorded (see M5.12 and
+  ADR-0045), so every target now standing is met and published with the
+  hardware named.
+- [x] **M5.12** Close the performance gap M5.9 measured: one agent from 90x
   to over 100x, twenty agents from 3.8x to over 10x. The candidates, in the
   order they look worth trying, are early exit in the wall traversal, a
   projection that starts from the segment the same agent used last time, and
@@ -684,6 +690,17 @@ directories and must respect the downward dependency order
   still misses 10x is the target renegotiated to the measured number, with
   the reason recorded in `docs/reference/performance.md`. M5.9 and M5.12 stay
   unticked until that re-measurement.
+  Closed 2026-08-19, later the same day, by that re-measurement. The BVH
+  landed (M7.4, ADR-0045) and lost to the grid on the workload by a factor
+  of three (95 against 280 ns per wall ray, alternated in one session), so
+  the acceleration-structure route is measured shut and the renegotiation
+  clause applies. Re-measured with pre- and post-racing-phase binaries
+  alternating in one session: 7.3x best, and the old binary measures the
+  same, so the change from the published 8.4x is the machine's mood between
+  sessions, not the racing code. Target renegotiated to over 7x, the number
+  every session clears, recorded in `docs/reference/performance.md`; what
+  would actually move the figure now is multi-core stepping, which is a
+  determinism decision and would be its own ADR.
   Mutation pass: 28 tried, 23 caught. Two escapes were real holes and are now
   tests. No case distinguished the front tyre from the rear one in the
   friction budget, because the reference car has its CoG mid-wheelbase and the
@@ -993,9 +1010,29 @@ computed, and the conformance script re-checked all six rows.)
   policy command integrated, manifest never admitting timing dependence,
   replay clearing the log it was handed, wait polling instead of waiting,
   timeout budget ignored.
-- [ ] **M7.4** Prebuilt static scene BVH with a per-step dynamic agent
+- [x] **M7.4** Prebuilt static scene BVH with a per-step dynamic agent
   overlay refit only.
   Done when: broadphase results match a brute-force reference in tests.
+  Done 2026-08-19, recorded as ADR-0045: `slipx/scene/broadphase.hpp`, a
+  `SceneBvh` over the wall segments (fully specified sorted-median build,
+  ordered pruned traversal, no scratch stamps so the query is thread-safe,
+  every box fattened a nanometre for the corner-ulp reason the grid already
+  learnt) and an `AgentOverlay` of refit oriented boxes answering rays with
+  a self-skip and conservative sort-and-sweep pairs. Both match their
+  brute-force definitions bit for bit on the same sweeps the grid is held
+  to; the exact ray-segment arithmetic moved to one shared header so the
+  two accelerators cannot drift. The measurement that mattered: on short
+  corridor rays the BVH costs 280 ns against the grid's 95, so the grid
+  keeps the wall rays, the benchmark prints both costs per commit, and the
+  BVH's job is the broadphase it was named for. The 20-agent re-measure and
+  the renegotiation are recorded under M5.12.
+  Mutation pass: 12 tried, 12 caught (padding removed, right child assumed
+  adjacent, node box shrinking, leaf skipping its last segment, prefilter
+  inverted, self-skip ignored, inactive box casting, box-frame rotation
+  sign, extents axis-swapped, sweep without its y check, pairs in sweep
+  order, inactive boxes sweeping). Answer-preserving weakenings of the
+  traversal pruning were not tried: the leaf test is exact and the boxes
+  conservative, so those mutants cost only time by construction.
 - [ ] **M7.5** Race control per the published RoboRacer ruleset: time trial,
   obstacle avoidance test, head-to-head, grid and rolling starts; contact
   attribution from relative geometry and closing velocity with the ruleset's

@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 
+#include "slipx/scene/broadphase.hpp"
 #include "slipx/scene/raycast.hpp"
 #include "slipx/scene/track.hpp"
 #include "slipx/sense/lidar.hpp"
@@ -46,7 +47,9 @@ using slipx::Tier;
 using slipx::VehicleModel;
 using slipx::VehicleParams;
 using slipx::VehicleState;
+using slipx::scene::AgentOverlay;
 using slipx::scene::Centreline;
+using slipx::scene::SceneBvh;
 using slipx::scene::Track;
 using slipx::scene::TrackManifest;
 using slipx::scene::Walls;
@@ -172,6 +175,73 @@ double real_time_factor(std::size_t agents, double simulated_seconds) {
   return simulated_seconds / elapsed;
 }
 
+// Ray cost through each acceleration structure, on the workload that
+// matters: short rays from on-track poses. This line exists because the
+// broadphase decision was measured rather than assumed (ADR-0045): the BVH
+// was built for the racing broadphase and was also the candidate to replace
+// the grid for wall rays, and on this workload it loses, so the grid stays.
+// Tracking both keeps that decision re-checkable per commit.
+struct RayCosts {
+  double grid_ns = 0.0;
+  double bvh_ns = 0.0;
+  double overlay_ns = 0.0;   // 20 moving boxes, the cars-see-cars cost
+};
+
+RayCosts ray_nanoseconds() {
+  const Track track = shipped_track();
+  const Walls walls(track);
+  const SceneBvh bvh(walls);
+
+  AgentOverlay overlay;
+  overlay.resize(20);
+  const auto& points = track.centreline().points();
+  for (std::size_t i = 0; i < 20; ++i) {
+    const auto& p = points[(i * points.size()) / 20];
+    overlay.set(i, p.x, p.y, 0.3 * static_cast<double>(i), 0.275, 0.15);
+  }
+
+  std::vector<double> px, py;
+  for (std::size_t i = 0; i < points.size(); i += 37) {
+    px.push_back(points[i].x);
+    py.push_back(points[i].y);
+  }
+  constexpr int kRays = 1080;
+  constexpr double kTwoPi = 6.283185307179586;
+
+  double sink = 0.0;
+  const auto measure = [&](auto&& cast) {
+    for (std::size_t p = 0; p < px.size(); ++p) {
+      for (int r = 0; r < kRays; r += 7) {   // warm-up
+        sink += cast(px[p], py[p], kTwoPi * r / kRays);
+      }
+    }
+    int count = 0;
+    const auto start = Clock::now();
+    for (int repeat = 0; repeat < 8; ++repeat) {
+      for (std::size_t p = 0; p < px.size(); ++p) {
+        for (int r = 0; r < kRays; ++r) {
+          sink += cast(px[p], py[p], kTwoPi * r / kRays);
+          ++count;
+        }
+      }
+    }
+    return seconds_since(start) / count * 1.0e9;
+  };
+
+  RayCosts costs;
+  costs.grid_ns = measure([&](double x, double y, double b) {
+    return walls.cast(x, y, b, 10.0).range;
+  });
+  costs.bvh_ns = measure([&](double x, double y, double b) {
+    return bvh.cast(x, y, b, 10.0).range;
+  });
+  costs.overlay_ns = measure([&](double x, double y, double b) {
+    return overlay.cast(x, y, b, 10.0).range;
+  });
+  if (sink == 12345.6789) std::printf(" ");
+  return costs;
+}
+
 }  // namespace
 
 int main() {
@@ -191,13 +261,26 @@ int main() {
   std::printf("  %-42s %8.1f x  %8s\n",
               "1 agent, L2 + 2D LiDAR, headless", one, "> 100 x");
 
+  // The 20-agent target was 10x and was renegotiated to 7x on 2026-08-19,
+  // after the BVH (the last acceleration-structure candidate) was built and
+  // measured slower than the grid on this workload; the record is in
+  // docs/reference/performance.md and ADR-0045.
   const double twenty = real_time_factor(20, 2.0);
   std::printf("  %-42s %8.1f x  %8s\n",
-              "20 agents, L2 + 2D LiDAR, headless", twenty, "> 10 x");
+              "20 agents, L2 + 2D LiDAR, headless", twenty, "> 7 x");
+
+  const RayCosts rays = ray_nanoseconds();
+  std::printf("  %-42s %8.1f ns %8s\n", "wall ray, grid index", rays.grid_ns,
+              "");
+  std::printf("  %-42s %8.1f ns %8s\n", "wall ray, scene BVH", rays.bvh_ns,
+              "");
+  std::printf("  %-42s %8.1f ns %8s\n", "agent overlay ray, 20 boxes",
+              rays.overlay_ns, "");
 
   std::printf("\n");
-  std::printf("  Targets are the P1 goals. These numbers are from whatever\n");
-  std::printf("  machine ran them, which for a CI job is a shared virtual\n");
-  std::printf("  one; the published figures name their hardware.\n");
+  std::printf("  Targets are the P1 goals (the 20-agent one renegotiated,\n");
+  std::printf("  see docs/reference/performance.md). These numbers are from\n");
+  std::printf("  whatever machine ran them, which for a CI job is a shared\n");
+  std::printf("  virtual one; the published figures name their hardware.\n");
   return 0;
 }

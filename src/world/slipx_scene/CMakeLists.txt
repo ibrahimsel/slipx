@@ -9,6 +9,7 @@
 # is and the dependency direction holds by construction (ADR-0003, ADR-0034).
 
 add_library(slipx_scene
+  src/broadphase.cpp
   src/centreline.cpp
   src/lap.cpp
   src/projection.cpp
