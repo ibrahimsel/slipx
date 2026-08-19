@@ -443,6 +443,14 @@ def emit_car_directory(outcome: FitOutcome) -> EmittedCar:
     provenance_doc = dict(
         provenance_common,
         residuals=residuals,
+        # The report itself is written after emission (it replays through
+        # the emitted car, so the car must exist first); naming it here is
+        # the promise the CLI then fulfils in the same run.
+        **(
+            {"validation_report": "validation.svg"}
+            if session.validation
+            else {}
+        ),
         data=[
             {
                 "name": f"{manoeuvre.role}:{manoeuvre.bag.name}",

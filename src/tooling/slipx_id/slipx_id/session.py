@@ -103,6 +103,7 @@ class Session:
     fixed: Mapping[str, object]
     topics: TopicMap
     manoeuvres: Tuple[SessionManoeuvre, ...]
+    validation: Tuple[Path, ...]
     provenance: Mapping[str, str]
     output: Path
 
@@ -189,6 +190,11 @@ def load_session(path) -> Session:
             )
         )
 
+    validation = tuple(
+        base / str(_require(entry, "bag", f"validation[{index}]"))
+        for index, entry in enumerate(document.get("validation", []))
+    )
+
     provenance = dict(document.get("provenance", {}))
     output = base / str(_require(document, "output", "top-level"))
 
@@ -202,6 +208,7 @@ def load_session(path) -> Session:
         fixed=fixed,
         topics=topics,
         manoeuvres=tuple(manoeuvres),
+        validation=validation,
         provenance=provenance,
         output=output,
     )

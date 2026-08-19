@@ -273,6 +273,36 @@ def ramp_steer(
     )
 
 
+def slalom(
+    params: "slipx.VehicleParams",
+    speed: float,
+    amplitude: float = 0.15,
+    frequency: float = 0.5,
+    duration: float = 8.0,
+) -> ManoeuvreRecording:
+    """Sinusoidal steering at held speed: the validation manoeuvre.
+
+    Not one of the six identification manoeuvres, on purpose: a validation
+    run should exercise the model with an input the fit never saw, and a
+    slalom sweeps through the transients and both signs of the curve at
+    once.
+    """
+
+    def policy(state, time, rng):
+        steer = amplitude * math.sin(2.0 * math.pi * frequency * time)
+        return slipx.DriveInput(
+            steer_cmd=steer, accel_cmd=slipx.hold_speed(state, speed)
+        )
+
+    return record_manoeuvre(
+        f"slalom_{speed:g}",
+        params,
+        policy,
+        duration,
+        initial_speed=speed,
+    )
+
+
 def step_steer(
     params: "slipx.VehicleParams",
     speed: float,

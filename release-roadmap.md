@@ -788,12 +788,29 @@ features do not.
   registry-check refusals); the escape (the ballast bench keeping the
   unballasted mass, diluted across nine recordings) became a direct test
   before the slice closed.
-- [ ] **M6.4** The validation report: replay measured control inputs through
+- [x] **M6.4** The validation report: replay measured control inputs through
   the fitted model and plot divergence in yaw rate, lateral acceleration and
   speed, with a single headline fit metric. Reuses the recording and sink
   machinery from M3 rather than growing its own plotting.
   Done when: a report generates from the synthetic self-test's data and reads
   correctly.
+  Done 2026-08-19: `slipx_id.report`, one theme-aware SVG built on the SVG
+  sink's own helpers, measured solid against replayed dashed for the three
+  channels, per-panel divergence and a headline that is the worst channel of
+  the worst run, so adding easy runs cannot improve it. Speed is the encoder
+  speed on both sides (like against like), and its divergence is scaled by
+  the mean speed because a held speed barely varies about it. The session
+  file's `validation:` bags drive it from the CLI; the emitted provenance
+  names `validation.svg`, which is what the registry's acceptance bar
+  checks. The report says plainly that a set which validates on these runs
+  has validated on these runs and on nothing else. The end-to-end test
+  closes the loop: the car fitted from bags replays a slalom the fit never
+  saw at under 6 per cent worst-channel divergence, and a deliberately
+  wrong model is visibly wrong (the metric is tested to measure something).
+  Mutation pass: 3 tried, 3 caught (headline as mean, divergence ignoring
+  the replay, the speed scale swapped); command playback by interpolation
+  rather than hold is unreachable with sine commands and is pinned by the
+  channel-level hold test instead.
 - [x] **M6.5** Schema: the provenance block (source, method, date,
   contributor, residuals) required on any parameter set submitted to the
   registry. A schema minor bump, versioned independently of the core as

@@ -41,6 +41,7 @@ def _write_session(tmp_path: Path, provenance: dict) -> Path:
     bags["step_slow"] = synthetic.step_steer(params, 2.0, 0.10)
     bags["step_fast"] = synthetic.step_steer(params, 6.0, 0.05)
     bags["step_big"] = synthetic.step_steer(params, 5.0, 0.25)
+    bags["slalom"] = synthetic.slalom(params, 3.0, amplitude=0.15, duration=6.0)
 
     for name, recording in bags.items():
         rosbag.write_recording(recording, tmp_path / name)
@@ -110,6 +111,7 @@ def _write_session(tmp_path: Path, provenance: dict) -> Path:
             },
         },
         "manoeuvres": manoeuvres,
+        "validation": [{"bag": "slalom"}],
         "provenance": provenance,
         "output": "fitted_car",
     }
@@ -132,11 +134,11 @@ def emitted(tmp_path_factory):
     spec = session.load_session(_write_session(tmp_path, PROVENANCE))
     outcome = session.run_session(spec, sample_stride=3)
     result = emit.emit_car_directory(outcome)
-    return outcome, result
+    return outcome, result, spec
 
 
 def test_the_emitted_car_loads_and_reaches_l2(emitted) -> None:
-    outcome, result = emitted
+    outcome, result, spec = emitted
     car = slipx.load_car(result.directory)
     assert "IDENTIFIED" in car.summary(), "the label leads, printed not implied"
     params = car.params_for_tier(slipx.Tier.L2_DoubleTrack)
@@ -147,7 +149,7 @@ def test_the_fitted_numbers_survive_the_files(emitted) -> None:
     # Through emission, schema validation, the loader and the ADR-0039
     # restatement (which is the identity here: the files are stated at this
     # car's own static loads).
-    outcome, result = emitted
+    outcome, result, spec = emitted
     truth = slipx.VehicleParams()
     car = slipx.load_car(result.directory)
     params = car.params_for_tier(slipx.Tier.L2_DoubleTrack)
@@ -184,7 +186,7 @@ def test_the_fitted_numbers_survive_the_files(emitted) -> None:
 
 
 def test_residuals_travel_with_the_car(emitted) -> None:
-    outcome, result = emitted
+    outcome, result, spec = emitted
     document = yaml.safe_load(
         (result.directory / "provenance.yaml").read_text(encoding="utf-8")
     )
@@ -209,7 +211,7 @@ def test_an_implausible_identified_value_warns(emitted, tmp_path) -> None:
     # Doctor the lateral fit into claiming a peak friction of 2.4 and emit:
     # the read-back through slipx_schema must surface the plausibility
     # warning rather than let the number ship quietly.
-    outcome, _ = emitted
+    outcome, _, _spec = emitted
     report = outcome.lateral.report
     index = report.names.index("mu_y0")
     values = list(report.values)
@@ -285,3 +287,33 @@ def test_ballast_changes_the_mass_and_only_the_mass() -> None:
     for name in ("lf", "lr", "h_cog", "track_front", "track_rear",
                  "wheel_radius", "izz"):
         assert getattr(heavy, name) == getattr(bench, name), name
+
+
+def test_the_validation_report_closes_the_loop(emitted) -> None:
+    # The emitted car replays the validation bag the fit never consumed,
+    # the report lands beside the car, and the provenance already names it,
+    # which is what the registry's acceptance bar checks for.
+    from slipx_id import report
+    from slipx_id.rosbag import read_recording
+
+    outcome, result, spec = emitted
+    recordings = [
+        read_recording(bag, spec.bench, topic_map=spec.topics)
+        for bag in spec.validation
+    ]
+    path, worst = report.generate(
+        result.directory,
+        recordings,
+        result.directory / "validation.svg",
+        date="2026-08-19",
+    )
+    assert path.exists()
+    assert worst < 6.0, (
+        f"the fitted car diverged {worst:.1f}% on a manoeuvre the fit never "
+        f"saw"
+    )
+    provenance = yaml.safe_load(
+        (result.directory / "provenance.yaml").read_text(encoding="utf-8")
+    )
+    assert provenance["validation_report"] == "validation.svg"
+    assert "IDENTIFIED" in path.read_text(encoding="utf-8")

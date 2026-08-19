@@ -21,6 +21,13 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The validation report.** `validation:` bags in a session file replay
+  through the emitted car and produce `validation.svg` beside it: measured
+  against replayed yaw rate, lateral acceleration and encoder speed, with
+  the headline being the worst channel of the worst run. The emitted
+  provenance names the report, which is what the registry's acceptance bar
+  requires; the report itself states that a set which validates on these
+  runs has validated on these runs and on nothing else.
 - **`slipx-id`, one command from bags to a car directory** (ADR-0040). The
   fitter reads rosbag2 recordings directly, without ROS: sqlite3 storage
   with the standard library, MCAP through the existing extra, CDR decoded by

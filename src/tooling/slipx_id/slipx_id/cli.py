@@ -42,11 +42,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         check_provenance(session.provenance)
         outcome = run_session(session, sample_stride=arguments.sample_stride)
         emitted = emit_car_directory(outcome)
+        report_line = None
+        if session.validation:
+            from .report import generate
+            from .rosbag import read_recording
+
+            recordings = [
+                read_recording(bag, session.bench, topic_map=session.topics)
+                for bag in session.validation
+            ]
+            path, worst = generate(
+                emitted.directory,
+                recordings,
+                emitted.directory / "validation.svg",
+                date=str(session.provenance.get("date", "")),
+            )
+            report_line = (
+                f"validation report: {path} "
+                f"(worst-channel divergence {worst:.1f}%)"
+            )
     except (ValueError, FileNotFoundError, FileExistsError) as failure:
         print(f"slipx-id: {failure}", file=sys.stderr)
         return 2
 
     print(f"IDENTIFIED: parameter set emitted to {emitted.directory}")
+    if report_line is not None:
+        print(report_line)
     for name, report in outcome.reports().items():
         print(f"\n[{name}]")
         print(report.summary())
