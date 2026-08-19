@@ -53,7 +53,7 @@ LAYERS: list[tuple[str, Path]] = [
     ("slipx", Path("src/bindings/slipx")),
     ("slipx_c", Path("src/bindings/slipx_c")),
     ("slipx_ros", Path("src/integration/slipx_ros")),
-    ("slipx_id", Path("tooling/slipx_id")),
+    ("slipx_id", Path("src/tooling/slipx_id")),
     ("slipx_registry", Path("src/tooling/slipx_registry")),
 ]
 

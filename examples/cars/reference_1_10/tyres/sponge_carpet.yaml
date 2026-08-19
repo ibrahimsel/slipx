@@ -15,10 +15,13 @@ schema_version: "0.2.0"
 compound: sponge
 surface: carpet
 
-# Static load per tyre on a 3.5 kg car with 50/50 weight distribution. The
-# friction and stiffness numbers below are stated at this load; without it
-# they are not stated at anything.                                       [N]
-nominal_load: 8.6
+# Static load per tyre on a 3.5 kg car with 50/50 weight distribution,
+# exactly: 3.5 * 9.80665 / 4. The friction and stiffness numbers below are
+# stated at this load; without it they are not stated at anything. Written to
+# the digit rather than rounded so that the loader's load restatement
+# (ADR-0039) is the identity for the reference pairing and every number below
+# loads exactly as written.                                              [N]
+nominal_load: 8.58081875
 
 linear:
   # Cornering stiffness per tyre at the nominal load, positive. The restoring

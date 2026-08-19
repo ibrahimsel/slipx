@@ -21,6 +21,18 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Fixed: a tyre file loaded under a different car silently kept the wrong
+  load reference** (ADR-0039). A tyre file states its coefficients at its own
+  `nominal_load`; the core states every tyre at the static per-tyre load of
+  the car wearing it, and the loader never bridged the two, which
+  misreferenced every load-dependent coefficient for any pairing other than
+  the file's original car. The loader now restates `mu_y0`, `mu_x0`,
+  `c_alpha` and `c_kappa` at the car's static load, exactly (MF-lite's load
+  laws are power laws, so the restatement is lossless and the derived `B` is
+  invariant), records a note naming the factors, and warns when the ratio is
+  extreme enough to look like a units error. The reference pairing is
+  unaffected: its tyre file now states the exact static load, so every
+  number ADR-0032 chose still loads to the bit.
 - **Fixed: a LiDAR ray through a grid cell corner could miss the wall it
   hits, on Windows.** The raycast index's grid walk never steps diagonally;
   through an exact corner it visits one of the two cells sharing it, and

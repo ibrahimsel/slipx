@@ -1,4 +1,4 @@
-# Copyright 2026 The SlipX Authors
+﻿# Copyright 2026 The SlipX Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Reading a car directory (SCH-01 to SCH-05).
@@ -22,6 +22,7 @@ Somebody with four mistakes in a car file should need one run to find them all.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -179,6 +180,115 @@ def _resolve_tyre(
     )
 
 
+# Standard gravity, the same value as slipx_core's kGravity (math.hpp). Written
+# down twice because this layer may not import the core (NFR-06); it is a
+# defined constant, so the two copies cannot drift by accident.
+GRAVITY = 9.80665
+
+# How close the file's nominal_load must be to the car's static per-tyre load,
+# as a relative ratio, for the restatement to be skipped as the identity. Far
+# below anything a measurement resolves and far above the operation-order ulps
+# that separate a load written in a file from the same load recomputed here, so
+# a file stated at the car's own static load loads bit-identically.
+_LOAD_WINDOW = 1e-9
+
+# Past this ratio either way, the pairing looks like a units or reference
+# error rather than a heavy car: warn (ADR-0039). The restatement still
+# happens, because the arithmetic is right even when the pairing is suspect,
+# and strict mode turns the warning into a refusal as usual (SCH-04).
+_LOAD_RATIO_ALARM = 3.0
+
+
+def _static_tyre_loads(mass: float, lf: float, lr: float) -> Tuple[float, float]:
+    """Static per-tyre load of each axle, in newtons (front, rear).
+
+    The front axle carries ``lr`` in the numerator: a CoG near the front
+    means a short lf, a long lr, and a heavy front axle. Same formula and
+    same trap as ``static_loads`` in load_transfer.hpp.
+    """
+    weight = mass * GRAVITY
+    wheelbase = lf + lr
+    return (
+        0.5 * weight * lr / wheelbase,
+        0.5 * weight * lf / wheelbase,
+    )
+
+
+def _restate_at_load(
+    tyre: Tyre, static_load: float, axle: str, notes: List[str], report: Report
+) -> Tyre:
+    """Restate one tyre's load-dependent coefficients at the car's static load.
+
+    A tyre file states its coefficients at its own ``nominal_load``; the core
+    states every tyre at the static per-tyre load of the car wearing it. The
+    restatement is exact, not approximate: MF-lite's load laws are power laws
+    in ``Fz / Fz_nom``, so moving the reference multiplies the frictions by
+    ``ratio^(-k_mu)`` and both stiffnesses by ``ratio^(1 - k_mu)``, leaves C,
+    E and the relaxation length alone, and leaves the derived B invariant.
+    The same physical tyre, restated (ADR-0039).
+    """
+    if tyre.nominal_load is None:
+        notes.append(
+            f"{axle} tyre {tyre.reference} states no nominal_load; its "
+            f"coefficients are taken as stated at this car's static {axle} "
+            f"per-tyre load, {static_load:.3f} N"
+        )
+        return tyre
+
+    ratio = static_load / float(tyre.nominal_load)
+    if abs(ratio - 1.0) <= _LOAD_WINDOW:
+        return tyre
+
+    if tyre.k_mu is None:
+        notes.append(
+            f"{axle} tyre {tyre.reference} is stated at "
+            f"{tyre.nominal_load:g} N per tyre where this car's static "
+            f"{axle} load is {static_load:.3f} N, and the file carries no "
+            f"friction.k_mu, so no load restatement is possible; the linear "
+            f"coefficients are taken as stated"
+        )
+        return tyre
+
+    if not (1.0 / _LOAD_RATIO_ALARM < ratio < _LOAD_RATIO_ALARM):
+        report.warnings.append(
+            Warning_(
+                path="nominal_load",
+                message=(
+                    f"stated at {tyre.nominal_load:g} N per tyre where this "
+                    f"car's static {axle} load is {static_load:.3f} N, a "
+                    f"ratio of {ratio:.2f}. That is possible for an unusual "
+                    f"pairing and more often a units or reference error"
+                ),
+                file=f"{axle} tyre {tyre.reference}",
+                requirement="SCH-04",
+            )
+        )
+
+    k = float(tyre.k_mu)
+    mu_scale = ratio ** (-k)
+    stiffness_scale = ratio ** (1.0 - k)
+    notes.append(
+        f"{axle} tyre {tyre.reference} is stated at {tyre.nominal_load:g} N "
+        f"per tyre; this car's static {axle} load is {static_load:.3f} N, so "
+        f"the load-dependent coefficients were restated there, exactly "
+        f"(x{mu_scale:.4f} on the frictions, x{stiffness_scale:.4f} on the "
+        f"stiffnesses; C, E, the relaxation length and the derived B are "
+        f"unchanged) (ADR-0039)"
+    )
+    return replace(
+        tyre,
+        c_alpha=float(tyre.c_alpha) * stiffness_scale,
+        mu_y0=float(tyre.mu_y0) * mu_scale,
+        mu_x0=float(tyre.mu_x0) * mu_scale,
+        c_kappa=(
+            float(tyre.c_kappa) * stiffness_scale
+            if tyre.c_kappa is not None
+            else None
+        ),
+        nominal_load=static_load,
+    )
+
+
 def _weakest_label(labels: List[str]) -> str:
     """The weakest claim among several, which is the only honest one to make.
 
@@ -288,6 +398,19 @@ def load_car(directory: str | Path, strict: bool = False) -> Car:
 
     report.raise_if_failed(f"{root} did not validate")
     assert tyre_front is not None and tyre_rear is not None
+
+    # -------------------------------------- load re-reference (ADR-0039)
+    # A tyre file states its coefficients at its own nominal_load; the core
+    # states every tyre at the static per-tyre load of the car wearing it
+    # (MfLite::fz_nom in tyre.hpp). The bridge is exact because MF-lite's
+    # load dependence is a power law, and it happens here, before anything
+    # reads a tyre number, so the single-track assembly below and the L2
+    # path in the bindings see one restated tyre and not two references.
+    static_front, static_rear = _static_tyre_loads(
+        float(dynamics["mass"]), float(geometry["lf"]), float(geometry["lr"])
+    )
+    tyre_front = _restate_at_load(tyre_front, static_front, "front", notes, report)
+    tyre_rear = _restate_at_load(tyre_rear, static_rear, "rear", notes, report)
 
     if strict and report.warnings:
         report.errors.extend(
