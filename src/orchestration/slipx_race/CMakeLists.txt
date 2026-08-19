@@ -6,6 +6,7 @@
 # include/slipx/race/ruleset.hpp.
 
 add_library(slipx_race
+  src/event_stream.cpp
   src/head_to_head.cpp
   src/obstacle_test.cpp
   src/ruleset.cpp
@@ -38,6 +39,16 @@ set_target_properties(slipx_race PROPERTIES
 
 install(TARGETS slipx_race EXPORT slipxTargets)
 install(DIRECTORY include/slipx DESTINATION include)
+
+# The canned deterministic match, written out as an event stream. The pytest
+# suite runs it and reads the file back with the reference mcap library,
+# which is what holds the "one format, not two" claim.
+add_executable(slipx_race_demo tools/race_demo.cpp)
+target_link_libraries(slipx_race_demo PRIVATE slipx::race)
+target_compile_definitions(slipx_race_demo PRIVATE
+  SLIPX_EXAMPLE_TRACK_DIR="${CMAKE_SOURCE_DIR}/examples/tracks/paddock_stadium")
+slipx_apply_determinism_flags(slipx_race_demo)
+install(TARGETS slipx_race_demo EXPORT slipxTargets)
 
 if(SLIPX_BUILD_TESTS AND BUILD_TESTING)
   add_subdirectory(tests)

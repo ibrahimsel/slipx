@@ -901,7 +901,7 @@ because parameter sets compound and racing features do not.
 
 ## M7. P3: racing
 
-Status: in-progress; M7.1 to M7.5 done, M7.9 decided (deferred). Size:
+Status: in-progress; M7.1 to M7.6 done, M7.9 decided (deferred). Size:
 extra large (many weeks). Release:
 0.5.0 at the end. Hash impact: contact and rollover enter `slipx_core`
 numerical paths; expect deliberate hash movements, recorded per the standing
@@ -1075,11 +1075,35 @@ computed, and the conformance script re-checked all six rows.)
   streak ranking inverted, ties ignoring laps, grid on the centreline,
   pose never wrapping, DNF rewarding the DNF'd car, light contact every
   step, rolling start at rest.
-- [ ] **M7.6** The structured event stream: every race-control outcome as
+- [x] **M7.6** The structured event stream: every race-control outcome as
   timestamped, machine-readable events, encoded as MCAP so the event stream
   and the run sinks are one format, not two. Any leaderboard, report or CI job
   consumes the event stream and nothing else.
   Done when: a full race replays from its event stream alone.
+  Done 2026-08-19. `slipx/race/event_stream.hpp`: a hand-rolled MCAP
+  encoder (unchunked, uncompressed, no summary, CRC honestly zeroed as
+  "not computed"), one JSON channel `/race/events` in exactly the Python
+  sink's dialect (json messages, jsonschema schemas, absence over
+  sentinels: an event with no second car has no `other` key), and a
+  metadata record carrying the pinned ruleset, every RaceConfig field and
+  the caller's run identifiers, so the file answers "who won, under what
+  rules" alone. The reading half parses exactly what the writer emits and
+  refuses anything else by name, strict down to the log time agreeing
+  with the JSON time; the "replays from its stream alone" test
+  reconstructs a crash-and-disqualification match, winner, warnings and
+  all, from a consumer holding only the file, field for field bit-equal
+  (17 significant digits round-trip). `slipx_race_demo` runs a canned
+  deterministic match and writes its stream; pytest runs the binary and
+  reads the file with the reference `mcap` library, which is what holds
+  "one format, not two" against the same library that reads the run
+  sinks. Identical races write identical bytes.
+  Mutation pass: 9 tried, 9 caught (magic bytes wrong, doubles at nine
+  digits, the absent agent written as a sentinel, log time in seconds,
+  metadata record losing its name, messages claiming an undeclared
+  channel, the ruleset revision left out, the type round-trip missing the
+  last type, the reader trusting any record length). One test needed
+  sharpening first: the schema JSON legitimately names "other", so the
+  absence scan looks for the sentinel form, not the key.
 - [ ] **M7.7** Per-agent sensor configuration (cheap opponents run 2D or no
   sensors); `race_sync` client library implementing the barrier, linkable
   into a student control node with under ten lines of change; RMW default

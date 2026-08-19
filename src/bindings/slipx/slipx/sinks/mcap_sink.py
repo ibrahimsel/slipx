@@ -20,9 +20,12 @@ ADR-0006 exists to prevent. The encoder is asked for strict JSON
 (``allow_nan=False``), so if a NaN ever reaches it the write fails loudly
 instead of emitting a token no other JSON parser accepts.
 
-The channel and schema layout is not a public interface yet. P3's event stream
-has to live in the same file, and fixing the topic names before knowing what
-the events look like would mean either breaking them or working around them.
+The channel and schema layout is not a public interface yet. P3's event
+stream now exists (slipx_race writes "/race/events" in this same dialect:
+json messages, jsonschema schemas, absence over sentinels), today as its own
+file; merging a run recording and its race events into one file is possible
+precisely because both sides kept to one format, and the topic names stay
+unfixed until that merge decides them.
 """
 
 from __future__ import annotations

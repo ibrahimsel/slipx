@@ -21,6 +21,17 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The race event stream is MCAP.** Every race-control outcome travels as
+  a JSON message on `/race/events` in an MCAP file the race layer writes
+  itself (a two-hundred-line hand-rolled encoder, for the manifest
+  writer's reason), with the pinned ruleset and the full mechanised
+  configuration in a metadata record: the file answers "who won, under
+  what rules" by itself, and a leaderboard, report or CI job is meant to
+  consume it and nothing else. A full race replays from the stream alone,
+  asserted by a reader that holds only the file; the reference `mcap`
+  library reads a stream the C++ demo (`slipx_race_demo`) writes, which
+  is what holds "one format, not two" against the same library that reads
+  the run sinks. Identical races write identical bytes.
 - **Race control** (ADR-0046). A new component, `slipx_race`, above the
   sim and the scene: the referee that the pinned RoboRacer ruleset
   (`github.com/f1tenth/roboracer_rules` @ `202c377`, 2025-10-13, stated by
