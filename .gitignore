@@ -8,6 +8,9 @@ dist/
 *.egg-info/
 *.so
 *.a
+*.pyd
+*.ilk
+*.pdb
 
 # python
 __pycache__/
