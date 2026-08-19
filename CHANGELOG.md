@@ -21,6 +21,14 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **`slipx_id`, the identification package** (ADR-0038): the staged fits of
+  the manoeuvre library, a deterministic Levenberg-Marquardt on the standard
+  library alone, and the synthetic self-test that round-trips every MF-lite
+  parameter through the forward model before any real data exists. The
+  Magic Formula shape pair is identified as a curve rather than as
+  coordinates, and the fitter reports the C-E entanglement by name instead
+  of printing two confident numbers; the ADR carries the reasoning.
+  `VehicleParams` gained `copy()`.
 - **Fixed: a tyre file loaded under a different car silently kept the wrong
   load reference** (ADR-0039). A tyre file states its coefficients at its own
   `nominal_load`; the core states every tyre at the static per-tyre load of

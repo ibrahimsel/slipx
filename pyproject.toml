@@ -107,6 +107,7 @@ cmake.build-type = "RelWithDebInfo"
 wheel.packages = [
     "src/bindings/slipx/slipx",
     "src/core/slipx_schema/slipx_schema",
+    "src/tooling/slipx_id/slipx_id",
 ]
 sdist.exclude = ["build/", ".github/", "docs/spec/"]
 
@@ -155,9 +156,15 @@ test-command = "python {project}/tools/exit_gate.py && slipx-conformance"
 # Working in the repository without installing: both packages are importable
 # from the source tree, and the extension is built in place next to the slipx
 # package by a plain `cmake --build`.
-pythonpath = ["src/bindings/slipx", "src/core/slipx_schema", "tools"]
+pythonpath = [
+    "src/bindings/slipx",
+    "src/core/slipx_schema",
+    "src/tooling/slipx_id",
+    "tools",
+]
 testpaths = [
     "src/bindings/slipx/tests",
     "src/core/slipx_schema/tests",
+    "src/tooling/slipx_id/tests",
     "tools/tests",
 ]

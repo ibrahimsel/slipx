@@ -349,6 +349,9 @@ PYBIND11_MODULE(_slipx, m) {
            "None if the parameters describe a possible object, otherwise the "
            "reason. This is a physical sanity check, not schema validation: "
            "competition legality is slipx_schema's job.")
+      .def("copy", [](const VehicleParams& p) { return VehicleParams(p); },
+           "A value copy, tyre blocks included. What a fitter perturbs and "
+           "what a scenario edits without reaching the original.")
       .def("__repr__", [](const VehicleParams& p) {
         std::ostringstream o;
         o << "VehicleParams(mass=" << p.mass << ", wheelbase=" << p.wheelbase()

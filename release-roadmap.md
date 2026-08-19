@@ -736,12 +736,33 @@ features do not.
   carries the widest confidence interval in the file by design. The C++
   suite and the four scriptable CI checks pass; pytest is blocked on the
   reset WSL environment and these files are prose only.
-- [ ] **M6.2** The synthetic self-test **first**: generate data from known
+- [x] **M6.2** The synthetic self-test **first**: generate data from known
   parameters through the forward model, fit, and assert recovery within
   tolerance. It is the only way to test the fitter without hardware, so it is
   the first thing built, not the last.
   Done when: round-trip recovery of every MF-lite parameter is asserted in
   CI.
+  Done 2026-08-19. `slipx_id` exists (ADR-0038): a deterministic
+  Levenberg-Marquardt on the standard library, channels, the bag-level
+  reconstruction, the synthetic manoeuvre library, and four staged fits.
+  Recovery on noiseless synthetic data: resistances to 0.01 per cent, axle
+  stiffnesses to 0.4 per cent, mu_y0 to 0.9 per cent, c_kappa and mu_x0 to
+  3 per cent, k_mu to 4 per cent, the delays to 3 to 9 per cent. The shape
+  pair (C, E) round-trips as a curve (within 3 per cent through the working
+  range and under load transfer), not as coordinates: steady driving cannot
+  sit on the falling branch, so the pair is degenerate there and the fitter
+  reports the correlation by name instead of printing two confident numbers.
+  The ADR records the three traps the self-test surfaced (triangular ramps,
+  the steered wheels' induced-drag couple in the moment balance, and
+  mirroring ADR-0027's two-pass load evaluation).
+  Mutation pass: 6 tried, 5 caught (lift clamp deleted, slip-angle steer
+  sign flipped, the induced-drag couple deleted, correlation threshold
+  raised past the reported entanglement, ballast restatement dropped). One
+  escape, recorded as a non-defect in the safe direction: bypassing the
+  two-pass mirror and feeding measured ay into the load law now passes the
+  tolerances, because the triangular slow ramps shrank that discrepancy
+  below them; the mirror is kept because it is the model's actual structure
+  and costs nothing.
 - [ ] **M6.3** `slipx_id`, the fitter: ingest rosbag2, emit `dynamics.yaml`
   with per-parameter residuals and confidence intervals. Refuse to emit a
   parameter set without a populated provenance block; warn when identified
