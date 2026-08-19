@@ -175,7 +175,7 @@ def test_the_reference_suite_runs_and_observation_is_free():
     assert any(ray.valid for ray in scan.rays)
     imu = rig.latest_imu(0, "imu")
     assert imu.sample.az == pytest.approx(9.80665, abs=0.5)
-    odometry = rig.latest_odometry(0, "wheel_encoder")
+    odometry = rig.latest_odometry(0, "odom")
     assert odometry.sample.distance > 0.0
 
 

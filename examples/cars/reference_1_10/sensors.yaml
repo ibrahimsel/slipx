@@ -58,7 +58,9 @@ sensors:
       accel_bias_y: 0.0            #                                [m/s^2]
       gyro_bias_z: 0.0             #                                [rad/s]
 
-  - name: wheel_encoder
+  # Named for the topic it becomes (the schema's rule), and the topic every
+  # F1TENTH stack expects for wheel odometry is /odom.
+  - name: odom
     type: wheel_encoder
     rate: 100.0
     phase: 0.5

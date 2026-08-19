@@ -581,6 +581,32 @@ directories and must respect the downward dependency order
   verified (ackermann_msgs under /opt/ros/jazzy, colcon, rmw-zenoh-cpp,
   g++-11, clang-18, ninja, python3 pip/venv/headers). The bridge can now
   be built; the exit condition stays external (somebody else's stack).
+  BUILT later the same day (ADR-0050): `slipx_ros`, an rclpy package
+  above the bindings, deliberately outside the wheel. One node, one
+  validation-mode simulation paced against the wall clock, N agents
+  under /car_N/ speaking F1TENTH: drive in (held like a servo, speed
+  through a named proportional gain mechanising a VESC's loop), scan,
+  imu and odom out at sensor-data QoS with NaN never zero on the wire,
+  ground truth declineable at launch with the choice recorded in the
+  bridge manifest, /clock as steps times dt. odom is the encoder's own
+  belief, dead-reckoned from its speed and the commanded steer through
+  the kinematic bicycle, drifting by exactly the slip; its first test
+  run failed by the driven wheels' spin-up under acceleration, the
+  modelled effect, and the test now settles to steady state instead of
+  widening a tolerance. The input log is always on and a test replays a
+  live run bit for bit from it (ADR-0044's promise, kept). Nine rclpy
+  tests run in the WSL ROS environment and skip cleanly where rclpy is
+  absent, so the Windows suite stays green. Mutation pass over the
+  bridge: 14 tried, 14 caught (speed loop sign, commands not held, NaN
+  as zero, clock not sim time, ground truth ignoring the launch switch
+  and broadcasting one car's truth, the reckoner dropping the steer or
+  inverting the wheelbase, scan stamps laundered from the publishing
+  step, IMU axes crossed, frame ids not the mount, the input log off,
+  the grid unspaced, the mode not validation). Not tried: hardcoding
+  real_time_factor, which changes only how long the wall clock takes to
+  agree with the same trajectory. The tick still waits for the external
+  exit condition: an existing F1TENTH stack connecting with a remap
+  file, which is the outreach the user runs.
 - [x] **M5.8** Reference stack: wall-follower plus pure pursuit, as examples
   that validate the simulator, explicitly not a competitive stack.
   Done when: both run a lap on the shipped track headlessly in CI.

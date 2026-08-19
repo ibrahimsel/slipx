@@ -161,12 +161,14 @@ test-command = "python {project}/tools/exit_gate.py && slipx-conformance"
 pythonpath = [
     "src/bindings/slipx",
     "src/core/slipx_schema",
+    "src/integration/slipx_ros",
     "src/tooling/slipx_id",
     "tools",
 ]
 testpaths = [
     "src/bindings/slipx/tests",
     "src/core/slipx_schema/tests",
+    "src/integration/slipx_ros/tests",
     "src/tooling/slipx_id/tests",
     "tools/tests",
 ]

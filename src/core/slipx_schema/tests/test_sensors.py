@@ -38,7 +38,7 @@ def test_the_reference_sensors_file_carries_the_typed_blocks(reference_car):
     imu = sensor_named(car, "imu")
     assert imu["imu"]["accel_noise_density"] == 0.002
 
-    encoder = sensor_named(car, "wheel_encoder")
+    encoder = sensor_named(car, "odom")
     assert encoder["wheel_encoder"]["wheels_used"] == [False, False, True, True]
 
 

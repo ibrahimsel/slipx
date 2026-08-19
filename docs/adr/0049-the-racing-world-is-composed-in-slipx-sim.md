@@ -2,7 +2,9 @@
 
 - **Status:** Proposed
 - **Date recorded:** 2026-08-19
-- **Requirements:** SENSE-01, SENSE-04, SIM-09, NFR-02
+- **Requirements:** SENSE-01, SENSE-04, SIM-09 and NFR-02 in spirit;
+  `docs/spec` is not present in this checkout, so no ID is cited as
+  authority.
 - **Related:** ADR-0037 (sensing never sees the scene), ADR-0043 (contact
   footprints), ADR-0045 (the agent overlay), ADR-0047 (the sensor rig)
 

@@ -21,6 +21,29 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The ROS 2 bridge** (ADR-0050). `slipx_ros`, an rclpy package above the
+  Python bindings, run from a sourced ROS 2 environment and deliberately
+  not part of the wheel. One node, one simulation, N agents, one thread:
+  the track and every car directory load through the same loaders as
+  everywhere else, and each agent speaks F1TENTH under `/car_N/`: `drive`
+  in (AckermannDriveStamped, held like a servo, speed tracked by a named
+  proportional gain standing in for a VESC's loop), `scan`, `imu` and
+  `odom` out at sensor-data QoS with NaN for invalid rays, never zero,
+  ground truth under `/car_N/ground_truth/odom` unless declined at launch,
+  and `/clock` carrying steps times dt for `use_sim_time`. The run is a
+  validation-mode run: the simulation paces the wall clock, the manifest
+  says NOT REPRODUCIBLE, the input log is always on, and replaying it
+  reproduces the live trajectory bit for bit, which is the one promise a
+  live run keeps (ADR-0044). The published `odom` is the encoder's own
+  belief, dead-reckoned from its speed and the commanded steering angle
+  through the kinematic bicycle, so it drifts by exactly the slip and the
+  lag; the first run of its test failed by the driven wheels' spin-up
+  under acceleration, which is the feature, not a tolerance to widen. The
+  bridge writes its own manifest beside the run's, recording what the
+  simulation cannot know it was part of. Frame ids come from each
+  sensor's `mount`; the reference car's encoder sensor is renamed `odom`,
+  because the schema has always said names become topics and that is the
+  topic stacks expect.
 - **The racing world, composed once** (ADR-0049). `slipx/sim/track_world.hpp`:
   a `TrackWorld` answers a rig's ray with the nearer of the track's walls
   (the grid-accelerated cast the benchmarks measure) and the nearest other

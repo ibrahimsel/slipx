@@ -600,6 +600,17 @@ PYBIND11_MODULE(_slipx, m) {
                      "below this closing speed nothing bounces; an "
                      "anti-jitter device, not physics [m/s]");
 
+  py::enum_<RunMode>(
+      m, "RunMode",
+      "How a run treats the wall clock. Deterministic has no clock at all: "
+      "the trajectory is a function of the inputs, which is what makes a "
+      "hash worth comparing. Validation paces against real time, so a stack "
+      "under test experiences latency the way it would on a car, and the "
+      "manifest then promises nothing about reproducibility beyond replay "
+      "from the input log.")
+      .value("Deterministic", RunMode::kDeterministic)
+      .value("Validation", RunMode::kValidation);
+
   py::class_<SimulationConfig>(m, "SimulationConfig")
       .def(py::init<>())
       .def_readwrite("dt", &SimulationConfig::dt, "fixed step [s], default 1 kHz")
@@ -607,6 +618,12 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readwrite("master_seed", &SimulationConfig::master_seed)
       .def_readwrite("hash_stride", &SimulationConfig::hash_stride)
       .def_readwrite("schema_version", &SimulationConfig::schema_version)
+      .def_readwrite("mode", &SimulationConfig::mode,
+                     "deterministic unless asked otherwise; asking is "
+                     "deliberate, and the manifest records which")
+      .def_readwrite("real_time_factor", &SimulationConfig::real_time_factor,
+                     "validation mode only: how much faster than real time "
+                     "to pace; 1.0 is real time [-]")
       .def_readwrite("contact", &SimulationConfig::contact,
                      "agent-to-agent contact constants (ADR-0043); they "
                      "apply between agents that declare a footprint")
