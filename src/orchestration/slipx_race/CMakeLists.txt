@@ -8,6 +8,7 @@
 add_library(slipx_race
   src/event_stream.cpp
   src/head_to_head.cpp
+  src/leaderboard.cpp
   src/obstacle_test.cpp
   src/ruleset.cpp
   src/starts.cpp
@@ -49,6 +50,15 @@ target_compile_definitions(slipx_race_demo PRIVATE
   SLIPX_EXAMPLE_TRACK_DIR="${CMAKE_SOURCE_DIR}/examples/tracks/paddock_stadium")
 slipx_apply_determinism_flags(slipx_race_demo)
 install(TARGETS slipx_race_demo EXPORT slipxTargets)
+
+# The CI leaderboard harness (M7.8, IN PROGRESS: compiles and runs, but its
+# test suite and mutation pass have not landed yet; see the roadmap's M7.8
+# entry before relying on it).
+add_executable(slipx_leaderboard tools/leaderboard_main.cpp)
+target_link_libraries(slipx_leaderboard PRIVATE slipx::race)
+target_compile_definitions(slipx_leaderboard PRIVATE
+  SLIPX_EXAMPLE_TRACK_DIR="${CMAKE_SOURCE_DIR}/examples/tracks/paddock_stadium")
+slipx_apply_determinism_flags(slipx_leaderboard)
 
 if(SLIPX_BUILD_TESTS AND BUILD_TESTING)
   add_subdirectory(tests)

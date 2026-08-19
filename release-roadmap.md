@@ -1,12 +1,20 @@
 # SlipX release roadmap: 0.1.0a1 to 1.0.0
 
-Last updated: 2026-08-19 (M7 opened: M7.1 rollover-as-an-event done,
-ADR-0042. Earlier the same day, four user decisions recorded: the 20-agent
-performance target waits for M7.4's broadphase before any renegotiation; the
-WSL environment gets ROS 2 and the extra compilers installed by the user; the
-0.3.0, 0.4.0 and 0.5.0 releases are cut together after M7 rather than at each
-milestone end; the registry is a separate repository whose content is staged
-in this tree). Published version: `0.2.0` (PyPI, tag `v0.2.0`).
+Last updated: 2026-08-19, end of a long session that built M7.1 through
+M7.6 (rollover events, contact, the barrier, the broadphase with the
+20-agent target renegotiated to over 7x, race control on the pinned
+ruleset, the MCAP event stream; ADR-0042 to ADR-0046) and closed M5.9 and
+M5.12. M7.8 is STAGED but unfinished; its entry says exactly what remains
+and is where the next session starts. After it, the buildable remainder of
+M7 is the in-process fraction of M7.7 (per-agent sensor configuration from
+sensors.yaml; the race_sync client, the RMW benchmark and multi-host need
+the ROS environment, like M5.7). Earlier the same day, four user decisions
+were recorded: the 20-agent performance target waits for M7.4's broadphase
+before any renegotiation (since executed, see M5.12); the WSL environment
+gets ROS 2 and the extra compilers installed by the user; the 0.3.0, 0.4.0
+and 0.5.0 releases are cut together after M7 rather than at each milestone
+end; the registry is a separate repository whose content is staged in this
+tree. Published version: `0.2.0` (PyPI, tag `v0.2.0`).
 Current tree: L2 is complete (drivetrain, battery, servo and differentials),
 the sink layer writes MCAP, Rerun and SVG, and every figure is generated from
 `slipx_core`. M4 shipped that as `0.2.0`; M5 is in progress and is the rest of
@@ -1113,6 +1121,37 @@ computed, and the conformance script re-checked all six rows.)
   Done when: each has tests or, for the RMW decision, a recorded benchmark.
 - [ ] **M7.8** CI leaderboard harness with seeded scenario batches.
   Done when: a leaderboard run is reproducible from its manifest and seeds.
+  IN PROGRESS, staged 2026-08-19 as a session handoff; the code compiles
+  and runs but its tests and mutation pass have NOT landed, so this stays
+  unticked and the next session finishes it. What exists:
+  `slipx/race/leaderboard.hpp` and `src/leaderboard.cpp` (Entrant with a
+  policy factory, BatchConfig, `standings()` computing rows FROM PARSED
+  EVENT STREAMS ONLY with a total ordering, and `run_round_robin()` which
+  seeds each scenario as derive_seed(master, index), alternates the left
+  slot per repetition, writes one stream per match plus
+  `batch_manifest.json` (master seed, per-scenario seeds and pairings,
+  ruleset, budgets) and `leaderboard.json`, and computes standings by
+  reading its own files back from disk rather than trusting memory), and
+  `tools/leaderboard_main.cpp` (`slipx_leaderboard <dir> [seed]`: three
+  canned entrants whose steering carries a seeded jitter so the seed
+  genuinely reaches the racing; smoke-run on the shipped track: 6 matches,
+  sensible standings). Remaining, in order: (1) tests/test_leaderboard.cpp
+  per the design already settled: the same batch twice writes identical
+  stream bytes and identical leaderboard.json and equal rows; standings
+  recomputed independently from result.stream_paths equal result.rows; a
+  different master seed changes at least one stream's bytes (the jittered
+  entrants make this hold); an undecided scenario (coasting entrants,
+  tiny budget) counts as abandoned with no match win; register the test
+  and a `Leaderboard.Run` ctest case for the tool (mirror Benchmarks.Run).
+  (2) Mutation pass over leaderboard.cpp; candidates already identified:
+  standings reading kMatchWon.agent unmapped, sort orders flipped or
+  dropped, abandoned counted as wins, seed derivation ignoring the index
+  (all scenarios one seed), left slot never alternating, manifest missing
+  the seeds, standings computed from memory instead of the files (delete
+  the read-back), an unwritable directory not throwing. (3) CHANGELOG
+  entry and the M7.8 tick with the mutation list. No design questions are
+  open; ADR-0046 already covers the layer and the stream doctrine covers
+  the consumption rule, so no new ADR is expected.
 - [x] **M7.9** **DECISION**: governance. If a competition adopts SlipX,
   ownership of the ruleset implementation becomes contested; decide before,
   not after.
