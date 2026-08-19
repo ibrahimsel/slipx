@@ -97,6 +97,7 @@ Use [`template.md`](template.md) for a new record.
 | [0048](0048-schema-0-5-0-makes-the-sensor-file-buildable.md) | Schema 0.5.0 makes the sensor file carry what the sensor models consume | Proposed |
 | [0049](0049-the-racing-world-is-composed-in-slipx-sim.md) | The racing world is composed once, in slipx_sim, from the walls and the footprints | Proposed |
 | [0050](0050-the-ros-bridge-is-rclpy-above-the-bindings.md) | The ROS 2 bridge is rclpy above the Python bindings, pacing a validation-mode run | Proposed |
+| [0051](0051-race-sync-is-the-mailbox-barrier-on-stamped-topics.md) | race_sync is the mailbox barrier spoken over stamped topics | Proposed |
 
 ## Racing
 

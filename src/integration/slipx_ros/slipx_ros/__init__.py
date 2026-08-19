@@ -22,5 +22,6 @@ input log, and both manifests the bridge writes say so.
 """
 
 from .bridge import Bridge, BridgeConfig
+from .race_sync import RaceSyncClient
 
-__all__ = ["Bridge", "BridgeConfig"]
+__all__ = ["Bridge", "BridgeConfig", "RaceSyncClient"]

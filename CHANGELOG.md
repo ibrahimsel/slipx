@@ -21,6 +21,26 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Lockstep racing over ROS: race_sync** (ADR-0051). The bridge gains a
+  lockstep mode in which the simulator is the sync authority: it announces
+  the next step index on `/race_sync/step` (latched, so a late joiner
+  waits instead of deadlocking) and advances only when every agent has
+  answered through ADR-0044's step-tagged mailboxes; a miss is ruled by
+  the wall-clock timeout and the agent's own policy (wait, coast, freeze
+  or DNF), so one hung stack holds or forfeits exactly as that record
+  says. The tag travels as the header stamp of the same
+  `AckermannDriveStamped` a stack already publishes, exact in both
+  directions at a millisecond step, so no custom message package exists.
+  Joining costs a student three lines: `RaceSyncClient(node, "/car_0")`
+  and `sync.publish(msg)` where `publisher.publish(msg)` was; the client
+  acknowledges announcements the stack has not answered, and commands
+  land one step later, like a servo written between control ticks. A
+  stack that wants its computation itself step-synchronous passes
+  `on_step=` and computes when announced. The payoff is asserted, not
+  promised: two lockstep runs hash identically, a client that dawdles on
+  every fiftieth step changes not one bit of the trajectory or the final
+  position, and a lockstep manifest keeps deterministic mode's promise
+  because commands are functions of step indices, not the wall clock.
 - **The ROS 2 bridge** (ADR-0050). `slipx_ros`, an rclpy package above the
   Python bindings, run from a sourced ROS 2 environment and deliberately
   not part of the wheel. One node, one simulation, N agents, one thread:

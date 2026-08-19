@@ -24,6 +24,7 @@ import argparse
 import csv
 import json
 import math
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -37,8 +38,11 @@ from builtin_interfaces.msg import Time as TimeMsg
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, LaserScan
+from std_msgs.msg import UInt64
 
 import slipx
+
+from .race_sync import ACK_QOS, ANNOUNCE_QOS, STEP_TOPIC, stamp_to_step
 
 
 @dataclass
@@ -59,6 +63,14 @@ class BridgeConfig:
     out_dir: Optional[Path] = None
     namespace: str = "car_"
     tier: "slipx.Tier" = None  # default L2, resolved in __post_init__
+    # Lockstep (ADR-0051): the bridge announces each step and advances only
+    # when every agent has answered through its mailbox (ADR-0044). The
+    # policy names what a miss does once the wall-clock timeout expires;
+    # "wait" waits forever, which is for development, where a hang you can
+    # see beats a forfeit you cannot.
+    lockstep: bool = False
+    lockstep_policy: str = "wait"
+    lockstep_timeout_s: float = 0.0
 
     def __post_init__(self) -> None:
         if self.tier is None:
@@ -130,11 +142,19 @@ class Bridge(Node):
 
         sim_config = slipx.SimulationConfig()
         sim_config.master_seed = config.seed
-        # A live run is decided partly by message timing, so the manifest
-        # must say NOT REPRODUCIBLE: validation mode, which also paces the
-        # wall clock so the bridge does not reimplement pacing (ADR-0050).
-        sim_config.mode = slipx.RunMode.Validation
-        sim_config.real_time_factor = config.real_time_factor
+        if config.lockstep:
+            # Commands are functions of step indices, not the wall clock, so
+            # a lockstep run keeps deterministic mode and its manifest's
+            # promise (ADR-0051); the timeout is the escape from a hung
+            # stack, answered per agent by the policy below (ADR-0044).
+            sim_config.barrier_timeout = config.lockstep_timeout_s
+        else:
+            # A live run is decided partly by message timing, so the
+            # manifest must say NOT REPRODUCIBLE: validation mode, which
+            # also paces the wall clock so the bridge does not reimplement
+            # pacing (ADR-0050).
+            sim_config.mode = slipx.RunMode.Validation
+            sim_config.real_time_factor = config.real_time_factor
         self.sim = slipx.Simulation(sim_config)
         # Replay from the log is the one reproducibility promise a live run
         # keeps (ADR-0044), so the log is always on.
@@ -146,6 +166,18 @@ class Bridge(Node):
         ]
         self._acceleration_warned: List[bool] = [False for _ in self.cars]
 
+        policies = {
+            "wait": slipx.TimeoutPolicy.Wait,
+            "coast": slipx.TimeoutPolicy.Coast,
+            "freeze": slipx.TimeoutPolicy.Freeze,
+            "dnf": slipx.TimeoutPolicy.Dnf,
+        }
+        if config.lockstep_policy not in policies:
+            raise ValueError(
+                f"unknown lockstep_policy '{config.lockstep_policy}'; one "
+                f"of {sorted(policies)} (ADR-0044's answers to a miss)")
+
+        self._mailboxes: List[Optional[slipx.CommandMailbox]] = []
         points = _centreline_points(config.track_dir)
         for index, car in enumerate(self.cars):
             spec = slipx.AgentSpec()
@@ -160,7 +192,15 @@ class Bridge(Node):
             spec.initial_state.pos.x = x
             spec.initial_state.pos.y = y
             spec.initial_state.yaw = heading
-            spec.policy = self._make_policy(index)
+            if config.lockstep:
+                # The barrier's doorway (ADR-0044): an agent has one command
+                # source, and in lockstep it is the mailbox.
+                spec.mailbox = slipx.CommandMailbox()
+                spec.timeout_policy = policies[config.lockstep_policy]
+                self._mailboxes.append(spec.mailbox)
+            else:
+                spec.policy = self._make_policy(index)
+                self._mailboxes.append(None)
             self.sim.add_agent(spec)
 
         # Sensors: each car's own file, and the composed world (walls plus
@@ -220,6 +260,10 @@ class Bridge(Node):
             self.create_subscription(
                 AckermannDriveStamped, f"{ns}/drive",
                 self._make_drive_callback(index), 10)
+            if config.lockstep:
+                self.create_subscription(
+                    UInt64, f"{ns}/drive_ack",
+                    self._make_ack_callback(index), ACK_QOS)
 
         self._clock_pub = self.create_publisher(Clock, "/clock", 10)
         dt = self.sim.dt
@@ -227,25 +271,37 @@ class Bridge(Node):
         self._gt_divisor = max(
             1, round(1.0 / (dt * config.ground_truth_rate_hz)))
 
+        if config.lockstep:
+            # Latched, so a client joining late receives the current step
+            # immediately: start-up is a wait, never a deadlock (ADR-0051).
+            self._announce_pub = self.create_publisher(
+                UInt64, STEP_TOPIC, ANNOUNCE_QOS)
+
         # One executor, held: rclpy.spin_once(node) builds a fresh executor
-        # per call, which is measurable at a kilohertz.
+        # per call, which is measurable at a kilohertz. In lockstep it runs
+        # on its own thread, because advance() blocks at the barrier until
+        # the callbacks it depends on have run (ADR-0051).
         self._executor = rclpy.executors.SingleThreadedExecutor()
         self._executor.add_node(self)
+        self._spin_thread: Optional[threading.Thread] = None
 
     # ------------------------------------------------------------- plumbing
 
     def _ns(self, index: int) -> str:
         return f"/{self.config.namespace}{index}"
 
-    def _make_policy(self, index: int):
-        gain = self.config.speed_gain
+    def _translate(self, index: int, steer: float, speed: float,
+                   vx: float) -> "slipx.DriveInput":
+        """Ackermann (steer, speed) to the core's input: the speed loop."""
+        command = slipx.DriveInput()
+        command.steer_cmd = steer
+        command.accel_cmd = self.config.speed_gain * (speed - vx)
+        return command
 
+    def _make_policy(self, index: int):
         def policy(state, _time, _rng):
             steer, speed = self._commands[index]
-            command = slipx.DriveInput()
-            command.steer_cmd = steer
-            command.accel_cmd = gain * (speed - state.vel_body.x)
-            return command
+            return self._translate(index, steer, speed, state.vel_body.x)
 
         return policy
 
@@ -261,14 +317,78 @@ class Bridge(Node):
                     f"mechanisation of a VESC's speed loop"
                 )
             self._commands[index] = (drive.steering_angle, drive.speed)
+            if self.config.lockstep:
+                # The stamp is the tag (ADR-0051). Reading the state here,
+                # from the spin thread, is safe by construction: integration
+                # for the awaited step begins only after every mailbox holds
+                # an entry for it, so the state is at rest at every post.
+                step = stamp_to_step(msg.header.stamp, self.sim.dt)
+                command = self._translate(
+                    index, drive.steering_angle, drive.speed,
+                    self.sim.state(index).vel_body.x)
+                try:
+                    self._mailboxes[index].post(step, command)
+                except ValueError as error:
+                    self.get_logger().warning(
+                        f"{self._ns(index)}/drive tagged step {step} "
+                        f"refused and dropped: {error}")
+
+        return callback
+
+    def _make_ack_callback(self, index: int):
+        def callback(msg: UInt64) -> None:
+            try:
+                self._mailboxes[index].ack(int(msg.data))
+            except ValueError as error:
+                self.get_logger().warning(
+                    f"{self._ns(index)}/drive_ack step {msg.data} refused "
+                    f"and dropped: {error}")
 
         return callback
 
     # ------------------------------------------------------------- stepping
 
+    def start_spinning(self) -> None:
+        """Run the executor on its own thread (lockstep needs it: advance()
+        blocks at the barrier until the callbacks it depends on have run)."""
+        if self._spin_thread is None:
+            self._spin_thread = threading.Thread(
+                target=self._executor.spin, daemon=True)
+            self._spin_thread.start()
+
+    def wait_for_clients(self, per_agent: int = 1,
+                         timeout_s: float = 10.0) -> bool:
+        """Wait until every drive topic has publishers, for lockstep starts.
+
+        Discovery takes a moment, and a lockstep bridge that announces into
+        the void waits at its first barrier until the timeout policy rules;
+        waiting for the match instead makes start-up deterministic.
+        """
+        import time as wall
+
+        deadline = wall.monotonic() + timeout_s
+        while wall.monotonic() < deadline:
+            matched = all(
+                self.count_publishers(f"{self._ns(i)}/drive") >= per_agent
+                for i in range(len(self.cars))
+            )
+            if matched:
+                return True
+            wall.sleep(0.01)
+        return False
+
     def step_once(self) -> None:
-        """Spin the callbacks, advance one paced step, publish deliveries."""
-        self._executor.spin_once(timeout_sec=0.0)
+        """One step: callbacks, one advance, then publish what was due.
+
+        Live mode spins the executor inline and the advance paces the wall
+        clock; lockstep announces the step about to be computed and the
+        advance blocks at the barrier until every agent answered.
+        """
+        if self.config.lockstep:
+            self.start_spinning()
+            self._announce_pub.publish(UInt64(data=self.sim.step_count))
+        else:
+            self._executor.spin_once(timeout_sec=0.0)
         self.sim.advance()
         self.rig.collect()
         self._publish_due()
@@ -276,6 +396,13 @@ class Bridge(Node):
     def run(self) -> None:
         while rclpy.ok():
             self.step_once()
+
+    def shutdown(self) -> None:
+        """Stop the spin thread, if one runs, before destroying the node."""
+        if self._spin_thread is not None:
+            self._executor.shutdown()
+            self._spin_thread.join(timeout=2.0)
+            self._spin_thread = None
 
     def _publish_due(self) -> None:
         steps = self.sim.step_count
@@ -407,7 +534,14 @@ class Bridge(Node):
             "speed_gain": self.config.speed_gain,
             "seed": self.config.seed,
             "namespace": self.config.namespace,
+            "lockstep": self.config.lockstep,
+            "lockstep_policy": self.config.lockstep_policy,
+            "lockstep_timeout_s": self.config.lockstep_timeout_s,
             "reproducibility": (
+                "commands are functions of step indices, so the run "
+                "reproduces when the clients do, and always from the "
+                "input log (ADR-0051)"
+                if self.config.lockstep else
                 "a live run is decided partly by message timing; replay "
                 "the recorded input log for bit-identity (ADR-0044)"
             ),
@@ -431,6 +565,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None,
                         help="directory for the run and bridge manifests")
+    parser.add_argument("--lockstep", action="store_true",
+                        help="announce each step and advance only when "
+                             "every agent has answered (ADR-0051)")
+    parser.add_argument("--lockstep-policy", default="wait",
+                        choices=["wait", "coast", "freeze", "dnf"])
+    parser.add_argument("--lockstep-timeout", type=float, default=0.0,
+                        help="wall seconds before a miss is ruled [s]")
     arguments = parser.parse_args(argv)
 
     rclpy.init()
@@ -442,6 +583,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         speed_gain=arguments.speed_gain,
         seed=arguments.seed,
         out_dir=arguments.out,
+        lockstep=arguments.lockstep,
+        lockstep_policy=arguments.lockstep_policy,
+        lockstep_timeout_s=arguments.lockstep_timeout,
     ))
     try:
         bridge.run()
@@ -449,6 +593,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         pass
     finally:
         bridge.write_manifests()
+        bridge.shutdown()
         bridge.destroy_node()
         rclpy.shutdown()
     return 0

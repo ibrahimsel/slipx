@@ -1219,6 +1219,32 @@ computed, and the conformance script re-checked all six rows.)
   scratchpad harness now writes with an explicit encoding.
   Still open in M7.7: the race_sync client, the RMW benchmark and
   multi-host agents, all ROS work and now unblocked.
+  The race_sync half landed later the same day (ADR-0051), on the bridge
+  of ADR-0050: the simulator announces each step on a latched topic and
+  advances only when every agent answered through ADR-0044's mailboxes,
+  with the tag travelling as the header stamp of the stack's own
+  AckermannDriveStamped (exact both ways at a millisecond step, no custom
+  message package). Joining costs a student three lines
+  (`RaceSyncClient(node, ns)`; `sync.publish(msg)`), with a strict
+  `on_step=` callback mode for stacks that want the computation itself
+  step-synchronous. Asserted rather than promised: two lockstep runs hash
+  identically, a client dawdling every fiftieth step changes not one bit
+  of trajectory or final position, the simulator never outruns a client
+  (each step seen exactly once, in order), a wrapping-mode command lands
+  one step later and holds like a servo, and a silent agent coasts or is
+  ruled out by its policy rather than hanging the race. Mutation pass
+  over the client and the bridge's lockstep half: 8 tried, 7 caught
+  outright (a skipped tag, a dropped acknowledgement path on either
+  side, the announcement off by one, and the mailbox policy ignored all
+  hang the barrier, which the harness counts as caught because a hung
+  barrier is the failure the policies exist to prevent; the stamp
+  encoding off by a thousand fails the round-trip; the speed loop fed a
+  zero velocity fails the brake phase). One escape recorded as a
+  non-defect: dropping the client's duplicate-announcement guard is
+  unobservable in-suite because announcements are only ever delivered
+  once per step by construction, and the mailbox's own strictly
+  increasing tags refuse the residue anyway; the guard stays as defence
+  in depth for a client rejoining under latched announcements.
   Groundwork for the ROS bridge landed the same day (ADR-0049): the
   TrackWorld in slipx_sim composes the walls and the simulation's own
   footprints into the rig's world function (nearer-of-wall-and-car, asker
