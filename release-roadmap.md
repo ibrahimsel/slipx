@@ -712,18 +712,30 @@ directories and must respect the downward dependency order
 
 ## M6. P2: identification and the registry
 
-Status: not-started. Size: extra large (many weeks). Release: 0.4.0 at the
+Status: in-progress. Size: extra large (many weeks). Release: 0.4.0 at the
 end. This phase is the differentiator; the SRS is explicit that it must not
 slip behind the racing features, because parameter sets compound and racing
 features do not.
 
-- [ ] **M6.1** The manoeuvre library: skidpad, step steer, ramp steer,
+- [x] **M6.1** The manoeuvre library: skidpad, step steer, ramp steer,
   straight-line acceleration, coastdown, circle-to-slip. Each with a written
   procedure, a space requirement and a safety note, and each executable with
   only the sensors on a stock competition car (encoders, IMU, LiDAR pose).
   No dyno, no tyre rig, no force platform, ever.
   Done when: the six procedures ship as documentation with worked parameter
   coverage (which manoeuvre identifies which parameter).
+  Done 2026-08-19: `docs/identification/`, six procedures plus an index that
+  carries the bench-measurement list (including the bifilar pendulum for
+  `izz`, timed by the car's own gyro) and the full coverage table: every
+  `VehicleParams` field is sourced from a bench measurement, a manoeuvre, a
+  datasheet, or stays `provisional` with the reason stated. Worked numbers
+  throughout are the reference car's. Two honesty notes worth keeping: the
+  understeer gradient alone identifies only the difference of the axle
+  stiffnesses (the LiDAR pose is what makes them separately identifiable),
+  and `k_mu`'s ballast signal is a 1.4 per cent change in limit speed, so it
+  carries the widest confidence interval in the file by design. The C++
+  suite and the four scriptable CI checks pass; pytest is blocked on the
+  reset WSL environment and these files are prose only.
 - [ ] **M6.2** The synthetic self-test **first**: generate data from known
   parameters through the forward model, fit, and assert recovery within
   tolerance. It is the only way to test the fitter without hardware, so it is

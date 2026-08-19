@@ -4,7 +4,12 @@ What each thing is, what its units are and which tier can fill it in. This is
 the lookup material; it does not teach the subject.
 
 - **Learning vehicle dynamics**: the [racing series](../racing/README.md),
-  twelve articles that explain the concepts and mention SlipX only in asides.
+  thirteen articles that explain the concepts and mention SlipX only in
+  asides.
+- **Getting numbers for your car**: the
+  [manoeuvre library](../identification/README.md), six car-park procedures
+  and the bench measurements, with the coverage table saying which parameter
+  each one identifies.
 - **Running code**: the [examples](../../examples/), three programs that are
   executed by the test suite rather than proofread.
 - **Why something is the way it is**: the
