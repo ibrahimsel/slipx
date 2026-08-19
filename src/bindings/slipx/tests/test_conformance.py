@@ -74,9 +74,20 @@ def test_the_python_hash_matches_the_cpp_binary() -> None:
     moment it stops being true, every published reference hash silently becomes
     ambiguous about which one it referred to.
     """
-    binary = REPO_ROOT / "build" / "src" / "orchestration" / "slipx_sim" / "slipx_conformance"
-    if not binary.exists():
-        pytest.skip(f"{binary} not built; run cmake --build build")
+    # The binary this interpreter can actually execute. A checkout that builds
+    # under more than one toolchain holds more than one build tree, and on
+    # Windows the Linux binary from a WSL build still *exists*, so existence
+    # alone picks a file CreateProcess then refuses. The platform-correct
+    # suffix is the discriminator: an ELF binary is never named .exe.
+    suffix = ".exe" if sys.platform == "win32" else ""
+    candidates = [
+        REPO_ROOT / tree / "src" / "orchestration" / "slipx_sim"
+        / f"slipx_conformance{suffix}"
+        for tree in ("build", "build-win", "build-gcc")
+    ]
+    binary = next((c for c in candidates if c.exists()), None)
+    if binary is None:
+        pytest.skip(f"{candidates[0]} not built; run cmake --build build")
 
     result = subprocess.run(
         [str(binary), "--quiet"], capture_output=True, text=True, check=True
