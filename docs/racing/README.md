@@ -57,6 +57,12 @@ sit.
 | | Article | What it answers |
 |---|---|---|
 | 7 | [Fitting a tyre model](07-fitting-a-tyre-model.md) | Where do the coefficients in a tyre model come from? |
+| 14 | [System identification](14-system-identification.md) | How does driving a car turn into numbers for its model? |
+| 15 | [Residuals and confidence](15-residuals-and-confidence.md) | How much should I believe a fitted number? |
+| 16 | [Validation by replay](16-validation-by-replay.md) | What test does a fitted model have to pass? |
+
+Articles 14 to 16 are one argument in three parts: what a fit is, how it
+reports its own reliability, and the exam it has to pass afterwards.
 
 **Part four: beyond steady state**
 

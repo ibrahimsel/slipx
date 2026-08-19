@@ -859,9 +859,17 @@ features do not.
   for those sets; the project-wide claim stays "physically structured and
   identifiable" and the labels do the talking.
   Done when: three external sets with reports are merged.
-- [ ] **M6.9** Tutorial articles as the work surfaces them (system
+- [x] **M6.9** Tutorial articles as the work surfaces them (system
   identification, residuals and confidence, the validation report), per the
   standing brief.
+  Done 2026-08-19: articles 14 (system identification, with the coastdown
+  two-parameter fit worked by hand), 15 (residuals and confidence, with
+  entanglement as the failure an interval alone cannot show) and 16
+  (validation by replay, with the open-loop argument and what a validation
+  is worth). One argument in three parts, indexed as such; concepts only,
+  SlipX in asides; no figures, because none earned its place. Proper
+  outside sources cited (Ljung; Numerical Recipes ch. 15; Oberkampf and
+  Roy).
 - [ ] **M6.10** Release 0.4.0, per the release checklist.
 
 ## M7. P3: racing
