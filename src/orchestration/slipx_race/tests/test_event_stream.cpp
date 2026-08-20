@@ -103,6 +103,9 @@ TEST(EventStream, AFullRaceReplaysFromTheStreamAlone) {
   EXPECT_EQ(contents.metadata_value("ruleset_revision"),
             slipx::race::kRulesetRevision);
   EXPECT_EQ(contents.metadata_value("config.warnings_to_disqualify"), "3");
+  // The direction races were run in is part of what race this was.
+  EXPECT_EQ(contents.metadata_value("config.reversed"), "false");
+  EXPECT_EQ(contents.metadata_value("config.wrong_way_distance"), "1");
   EXPECT_EQ(contents.metadata_value("scenario"), "test");
 }
 
@@ -170,7 +173,7 @@ TEST(EventStream, AbsenceIsAbsentOnTheWire) {
 }
 
 TEST(EventStream, EveryEventTypeRoundTripsItsName) {
-  for (int k = 0; k <= static_cast<int>(EventType::kHeatEnd); ++k) {
+  for (int k = 0; k <= static_cast<int>(EventType::kWrongWay); ++k) {
     const EventType type = static_cast<EventType>(k);
     EventType back = EventType::kRoundStart;
     ASSERT_TRUE(slipx::race::event_type_from_string(

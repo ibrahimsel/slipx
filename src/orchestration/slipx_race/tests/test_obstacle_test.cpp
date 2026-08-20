@@ -56,6 +56,26 @@ TEST(ObstacleTest, ACleanPassAtSpeedPasses) {
             slipx::race::EventType::kObstaclePassed);
 }
 
+TEST(ObstacleTest, AReversedTestMeasuresPastAlongTheRacedDirection) {
+  // The car and the obstacle are placed on the reversed track, so what is
+  // "ahead" is ahead in the raced direction; race control gets the forward
+  // track and only the flag, and must reach the same judgment.
+  const Track track = race_test::shipped_track();
+  const Track raced = track.reversed();
+  slipx::sim::Simulation sim;
+  sim.add_agent(race_test::race_car(race_test::follow_centreline(raced, 2.0)));
+  sim.add_agent(race_test::race_car({}));
+  slipx::race::place_on_track(sim, 0, raced, 1.0, 0.0, 2.0);
+  slipx::race::place_on_track(sim, 1, raced, 4.0, -0.45, 0.0);
+
+  RaceConfig config;
+  config.reversed = true;
+  ObstacleTest test(sim, track, 0, 1, config);
+  test.run(6000);
+
+  EXPECT_EQ(test.outcome(), ObstacleOutcome::kPassed);
+}
+
 TEST(ObstacleTest, DrivingIntoTheObstacleFails) {
   Fixture fixture(2.0, 0.0, follower);
 

@@ -179,7 +179,7 @@ std::string EventStreamContents::metadata_value(const std::string& key) const {
 }
 
 bool event_type_from_string(const std::string& name, EventType* out) {
-  for (int k = 0; k <= static_cast<int>(EventType::kHeatEnd); ++k) {
+  for (int k = 0; k <= static_cast<int>(EventType::kWrongWay); ++k) {
     const EventType type = static_cast<EventType>(k);
     if (name == to_string(type)) {
       *out = type;
@@ -237,6 +237,8 @@ bool write_event_stream(
         {"config.limit_tolerance", number(config.limit_tolerance)},
         {"config.grid_gap", number(config.grid_gap)},
         {"config.stop_speed", number(config.stop_speed)},
+        {"config.reversed", config.reversed ? "true" : "false"},
+        {"config.wrong_way_distance", number(config.wrong_way_distance)},
     };
     map.insert(map.end(), extra_metadata.begin(), extra_metadata.end());
 

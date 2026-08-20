@@ -216,5 +216,39 @@ double Centreline::closing_chord() const {
   return chord(points_.back(), points_.front());
 }
 
+Centreline Centreline::reversed(bool keep_first) const {
+  if (keep_first && points_.front().x == points_.back().x &&
+      points_.front().y == points_.back().y) {
+    throw std::invalid_argument(
+        origin_ +
+        ": cannot reverse keeping the first point while the last point "
+        "repeats it; the repeat would become a zero-length segment, which "
+        "has no direction. Delete the duplicate last row: on a closed "
+        "track the closing chord is implied.");
+  }
+
+  Centreline out;
+  out.origin_ = origin_ + " (reversed)";
+  const std::size_t n = points_.size();
+  out.points_.reserve(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    // Walking backwards from the first point when it is kept, or from the
+    // last when it is not: p0, p(n-1), ..., p1 against p(n-1), ..., p0.
+    const std::size_t j = keep_first ? (n - i) % n : n - 1 - i;
+    CentrelinePoint point = points_[j];
+    const double w_left = point.w_left;
+    point.w_left = point.w_right;
+    point.w_right = w_left;
+    out.points_.push_back(point);
+  }
+
+  out.points_[0].s = 0.0;
+  for (std::size_t i = 1; i < n; ++i) {
+    out.points_[i].s =
+        out.points_[i - 1].s + chord(out.points_[i - 1], out.points_[i]);
+  }
+  return out;
+}
+
 }  // namespace scene
 }  // namespace slipx

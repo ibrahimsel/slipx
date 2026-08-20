@@ -383,6 +383,37 @@ TEST(LapCounter, DrivesALapOfTheShippedStadium) {
       << "the centreline is not a track limits violation";
 }
 
+TEST(LapCounter, TheReversedTrackCountsTheSamePathTheOtherWay) {
+  // One physical drive, judged twice: the stadium's own samples walked
+  // backwards read as negative progress against the track as declared and
+  // as positive progress against its reversal. This is the whole mechanism
+  // by which a race runs the other way round: reverse the track, and every
+  // signed quantity follows.
+  const Track track = stadium();
+  const Track raced = track.reversed();
+  LapCounter forward(track, 0.0);
+  LapCounter reversed(raced, 0.0);
+
+  const auto& points = track.centreline().points();
+  const std::size_t n = points.size();
+  // Just over a lap, not exactly one, for the boundary reason the test
+  // above spells out.
+  const std::size_t steps = n + n / 20;
+  for (std::size_t i = 0; i <= steps; ++i) {
+    const auto& p = points[(n - (i % n)) % n];
+    forward.update(p.x, p.y);
+    reversed.update(p.x, p.y);
+  }
+
+  EXPECT_GT(reversed.distance(), track.length());
+  EXPECT_NEAR(reversed.distance(), -forward.distance(), 1.0e-9)
+      << "the two directions must disagree only in sign";
+  EXPECT_EQ(reversed.laps(), 1);
+  EXPECT_LE(forward.laps(), -1);
+  EXPECT_FALSE(reversed.has_left_the_track())
+      << "the corridor is the same corridor both ways";
+}
+
 // The boundary the test above steps around, pinned deliberately: short of the
 // line is the lap the car is on, not the one it has finished.
 TEST(LapCounter, JustShortOfTheLineIsStillTheFirstLap) {

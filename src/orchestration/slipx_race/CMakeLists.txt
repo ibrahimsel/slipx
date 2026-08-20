@@ -13,6 +13,7 @@ add_library(slipx_race
   src/ruleset.cpp
   src/starts.cpp
   src/time_trial.cpp
+  src/wrong_way.cpp
 )
 add_library(slipx::race ALIAS slipx_race)
 

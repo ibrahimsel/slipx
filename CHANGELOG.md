@@ -21,6 +21,28 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Races know their direction** (ADR-0056). The direction is increasing
+  arc length along the centreline as declared, and a race run the other
+  way runs on `Track::reversed()`: same venue, same start line, widths
+  swapped, traversal turned round. `RaceConfig.reversed` makes every race
+  procedure (time trial, head-to-head, obstacle test) race the reversed
+  track, so grids, laps, restarts and the corridor all turn together with
+  no sign logic anywhere, and the flag travels in the event stream
+  metadata. Race control also notices a car driving against the
+  direction: a `wrong_way` event fires once per excursion after
+  `RaceConfig.wrong_way_distance` metres of lost progress (recorded,
+  never penalised; the pinned ruleset has no wrong-way rule), and
+  referee set-backs rebase the judgment rather than triggering it. The
+  bridge announces the direction the way race control does: the
+  centreline latched once on `/race/centreline` as a `Path` whose pose
+  order and tangents are the direction (first pose repeated on a closed
+  track, so closure is explicit on the wire), `--reversed` turning the
+  grid and the announcement together and `--no-centreline` declining the
+  topic, both recorded in the bridge manifest. The pursuit demo driver
+  now consumes the announcement instead of reading the track file off
+  disk, so its `--track` argument is gone and a reversed bridge turns
+  the parade round with no driver change. Article 20 explains the
+  concept.
 - **Cars collide with walls** (ADR-0055). Wall polylines are immovable
   contact geometry in the simulation: `Simulation.add_wall` latches them
   before the first advance, a pure segment-versus-footprint function in

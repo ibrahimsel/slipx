@@ -88,6 +88,20 @@ class Centreline {
   // Length of the chord from the last point back to the first.
   double closing_chord() const;
 
+  // The same geometry traversed the other way: point order reversed, the
+  // left and right widths swapped (what lies to the left one way lies to
+  // the right the other), and arc length re-derived in the new order. With
+  // `keep_first` the original first point stays first, which is what a
+  // closed lap wants: reversing the direction of racing must not move the
+  // start line. The origin gains a "(reversed)" suffix so a manifest that
+  // cites it says which way the geometry was walked.
+  //
+  // Throws std::invalid_argument when `keep_first` is set and the last
+  // point repeats the first, because keeping the first point would turn
+  // the repeat into a zero-length segment; the fix is deleting the
+  // duplicate row, since a closed track's closing chord is implied.
+  Centreline reversed(bool keep_first) const;
+
  private:
   Centreline() = default;
 

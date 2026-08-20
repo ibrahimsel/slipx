@@ -12,6 +12,7 @@
 
 #include "slipx/race/events.hpp"
 #include "slipx/race/ruleset.hpp"
+#include "slipx/race/wrong_way.hpp"
 #include "slipx/scene/lap.hpp"
 #include "slipx/scene/track.hpp"
 #include "slipx/sim/simulation.hpp"
@@ -32,7 +33,9 @@ class TimeTrial {
  public:
   // The car runs from wherever it stands; the caller places it (a heat
   // starts from the pit lane, not from a grid). The lap counter seeds at
-  // the current position, so lap one begins here.
+  // the current position, so lap one begins here. With config.reversed the
+  // heat is judged against track.reversed(), so a caller placing the car
+  // along the racing direction should place it on the reversed track too.
   TimeTrial(sim::Simulation& sim, const scene::Track& track,
             std::size_t agent, RaceConfig config);
 
@@ -52,11 +55,15 @@ class TimeTrial {
   void emit(EventType type, double value, int code);
 
   sim::Simulation& sim_;
-  const scene::Track& track_;
   std::size_t agent_;
   RaceConfig config_;
+  // The track as raced: an owned copy, reversed when the config says so,
+  // so the counter, the restarts and the laps all measure one direction
+  // and none of them carries a flag (ADR-0056).
+  const scene::Track track_;
 
   scene::LapCounter counter_;
+  WrongWayMonitor wrong_way_;
   bool was_inside_ = true;
   double lap_start_time_ = 0.0;
   bool lap_dirty_ = false;

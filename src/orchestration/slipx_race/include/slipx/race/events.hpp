@@ -36,6 +36,8 @@ enum class EventType {
   kObstacleFailed,   // agent failed; code: 1 stopped, 2 hit the obstacle,
                      // 3 crashed the border
   kHeatEnd,          // time trial heat over for agent
+  kWrongWay,         // agent is driving against the race direction;
+                     // value = metres behind its furthest point [m]
 };
 
 const char* to_string(EventType type);

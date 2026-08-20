@@ -16,10 +16,11 @@ namespace race {
 TimeTrial::TimeTrial(sim::Simulation& sim, const scene::Track& track,
                      std::size_t agent, RaceConfig config)
     : sim_(sim),
-      track_(track),
       agent_(agent),
       config_(config),
-      counter_(track, config.limit_tolerance) {
+      track_(config.reversed ? track.reversed() : track),
+      counter_(track_, config.limit_tolerance),
+      wrong_way_(config.wrong_way_distance) {
   result_.fastest_lap = std::numeric_limits<double>::infinity();
   const VehicleState& state = sim_.state(agent_);
   counter_.reset_to(state.pos.x, state.pos.y);
@@ -63,11 +64,17 @@ void TimeTrial::advance() {
     place_on_track(sim_, agent_, track_, s, 0.0, 0.0);
     const VehicleState& placed = sim_.state(agent_);
     counter_.update(placed.pos.x, placed.pos.y);
+    // A placement is a teleport, not driving: rebase rather than rule.
+    wrong_way_.rebase(counter_.distance());
     emit(EventType::kRestart, s, 0);
     lap_dirty_ = true;
     streak_ = 0;
   }
   was_inside_ = counter_.limits().inside;
+
+  if (wrong_way_.update(counter_.distance())) {
+    emit(EventType::kWrongWay, wrong_way_.deficit(), 0);
+  }
 
   if (counter_.laps() > result_.laps) {
     result_.laps = counter_.laps();

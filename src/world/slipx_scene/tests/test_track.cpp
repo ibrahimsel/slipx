@@ -86,6 +86,97 @@ TEST(Track, LengthIncludesTheClosingChordOnlyWhenTheTrackIsClosed) {
   EXPECT_DOUBLE_EQ(open.length(), 3.0);
 }
 
+// Reversal is how a race runs the other way round (everything downstream
+// measures direction as increasing arc length), so what it must preserve is
+// the venue: same start line, same length, same drivable band.
+TEST(Track, ReversingKeepsTheStartAndSwapsTheWidths) {
+  // Asymmetric widths, so a swap is observable: 1 m to the right of the
+  // traversal, 2 m to the left.
+  const Centreline geometry = Centreline::from_csv(
+      "0.0,0.0,1.0,2.0\n"
+      "1.0,0.0,1.0,2.0\n"
+      "1.0,1.0,1.0,2.0\n"
+      "0.0,1.0,1.0,2.0\n",
+      "square/centreline.csv");
+  const Track track =
+      Track::build(geometry, carpet_manifest(), carpet_tyres());
+  const Track raced = track.reversed();
+
+  EXPECT_DOUBLE_EQ(raced.length(), track.length());
+  const auto& forward = track.centreline().points();
+  const auto& reverse = raced.centreline().points();
+  ASSERT_EQ(reverse.size(), forward.size());
+
+  // The start stays: reversing a lap must not move the start line.
+  EXPECT_DOUBLE_EQ(reverse[0].x, forward[0].x);
+  EXPECT_DOUBLE_EQ(reverse[0].y, forward[0].y);
+  EXPECT_DOUBLE_EQ(reverse[0].s, 0.0);
+  // The traversal walks backwards: the second point is the old last one,
+  // one closing chord away.
+  EXPECT_DOUBLE_EQ(reverse[1].x, forward[3].x);
+  EXPECT_DOUBLE_EQ(reverse[1].y, forward[3].y);
+  EXPECT_DOUBLE_EQ(reverse[1].s, 1.0);
+  // What lay to the left one way lies to the right the other.
+  for (const auto& point : reverse) {
+    EXPECT_DOUBLE_EQ(point.w_left, 1.0);
+    EXPECT_DOUBLE_EQ(point.w_right, 2.0);
+  }
+  // The origin says which way the geometry was walked, for the manifest.
+  EXPECT_TRUE(mentions(raced.centreline().origin(), "(reversed)"));
+  EXPECT_EQ(raced.name(), track.name());
+}
+
+TEST(Track, ReversingTwiceIsTheOriginalTraversal) {
+  const Track track =
+      Track::build(square(), carpet_manifest(), carpet_tyres());
+  const Track twice = track.reversed().reversed();
+  const auto& a = track.centreline().points();
+  const auto& b = twice.centreline().points();
+  ASSERT_EQ(b.size(), a.size());
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    EXPECT_DOUBLE_EQ(b[i].x, a[i].x);
+    EXPECT_DOUBLE_EQ(b[i].y, a[i].y);
+    EXPECT_DOUBLE_EQ(b[i].s, a[i].s);
+    EXPECT_DOUBLE_EQ(b[i].w_left, a[i].w_left);
+    EXPECT_DOUBLE_EQ(b[i].w_right, a[i].w_right);
+  }
+}
+
+TEST(Track, AnOpenTrackReversesFromItsFarEnd) {
+  // No lap, so no start line to keep: the far end becomes the start, which
+  // is what running a point-to-point the other way means.
+  TrackManifest manifest = carpet_manifest();
+  manifest.closed = false;
+  const Track track = Track::build(square(), manifest, carpet_tyres());
+  const Track raced = track.reversed();
+
+  EXPECT_DOUBLE_EQ(raced.length(), 3.0);
+  const auto& forward = track.centreline().points();
+  const auto& reverse = raced.centreline().points();
+  EXPECT_DOUBLE_EQ(reverse[0].x, forward[3].x);
+  EXPECT_DOUBLE_EQ(reverse[0].y, forward[3].y);
+  EXPECT_DOUBLE_EQ(reverse[3].x, forward[0].x);
+  EXPECT_DOUBLE_EQ(reverse[3].y, forward[0].y);
+}
+
+TEST(Track, RefusesToReverseWhenTheLastPointRepeatsTheFirst) {
+  // Some centreline files close the loop by repeating the first row. On a
+  // closed track the reversal keeps the first point, so the repeat would
+  // become a zero-length segment; refused with the fix named.
+  const Centreline geometry = Centreline::from_csv(
+      "0.0,0.0,1.0,1.0\n"
+      "1.0,0.0,1.0,1.0\n"
+      "1.0,1.0,1.0,1.0\n"
+      "0.0,1.0,1.0,1.0\n"
+      "0.0,0.0,1.0,1.0\n",
+      "square/centreline.csv");
+  const Track track =
+      Track::build(geometry, carpet_manifest(), carpet_tyres());
+  const std::string message = refusal_from([&] { track.reversed(); });
+  EXPECT_TRUE(mentions(message, "square/centreline.csv")) << message;
+  EXPECT_TRUE(mentions(message, "duplicate")) << message;
+}
+
 TEST(Track, RefusesATyreForAnotherSurface) {
   const std::string message = refusal_from([] {
     Track::build(square(), carpet_manifest(), {{"slick", "asphalt"}});

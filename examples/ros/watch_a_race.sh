@@ -44,7 +44,7 @@ for ((i = 0; i < AGENTS; i++)); do CARS="$CARS --car $CAR"; done
 BRIDGE=$!
 sleep 3
 "$PYTHON" "$REPO/examples/ros/race_demo_driver.py" \
-    --agents "$AGENTS" --mode "$MODE" --speed "$SPEED" --track "$TRACK" &
+    --agents "$AGENTS" --mode "$MODE" --speed "$SPEED" &
 DRIVER=$!
 trap 'kill $BRIDGE $DRIVER 2>/dev/null; wait 2>/dev/null' EXIT INT TERM
 

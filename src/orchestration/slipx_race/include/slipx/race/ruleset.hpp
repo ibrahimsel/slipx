@@ -77,6 +77,22 @@ struct RaceConfig {
   // test (2.5.1.6.3). Operationalised: floating point never reaches an
   // exact zero.                                                       [m/s]
   double stop_speed = 0.05;
+
+  // Which way round. The direction is race control's announcement, not a
+  // property of the venue: forward is increasing arc length along the
+  // centreline as declared, and with this set every procedure races the
+  // reversed track instead (same start line on a closed track), so nothing
+  // downstream carries a sign (ADR-0056). The pinned revision assumes a
+  // direction was announced and never says how; this field is the
+  // announcement, mechanised.
+  bool reversed = false;
+
+  // A car whose progress along the race direction falls this far behind
+  // its own furthest point is ruled to be driving the wrong way, once per
+  // excursion. Recorded, never penalised: the pinned revision has no
+  // wrong-way rule, so the event states what a referee would see and a
+  // competition decides what it costs. Operationalised.               [m]
+  double wrong_way_distance = 1.0;
 };
 
 }  // namespace race

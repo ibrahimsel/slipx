@@ -26,6 +26,7 @@ rclpy = pytest.importorskip("rclpy", reason="the bridge needs a ROS 2 environmen
 
 from ackermann_msgs.msg import AckermannDriveStamped  # noqa: E402
 from nav_msgs.msg import OccupancyGrid, Odometry  # noqa: E402
+from nav_msgs.msg import Path as PathMsg  # noqa: E402
 from rosgraph_msgs.msg import Clock  # noqa: E402
 from sensor_msgs.msg import LaserScan  # noqa: E402
 from rclpy.qos import qos_profile_sensor_data  # noqa: E402
@@ -338,6 +339,122 @@ def test_the_map_agrees_with_the_raycaster(bridge):
         assert marched == pytest.approx(hit.range, abs=0.1), \
             f"map wall at {marched:.3f} m, raycast wall at " \
             f"{hit.range:.3f} m, bearing {offset_deg} deg"
+
+
+def centreline_rows():
+    """The track's own samples, straight from the file the bridge read."""
+    rows = []
+    with open(TRACK / "centreline.csv", encoding="utf-8",
+              newline="") as handle:
+        for line in handle:
+            content = line.strip()
+            if not content or content.startswith("#"):
+                continue
+            x, y = content.split(",")[:2]
+            rows.append((float(x), float(y)))
+    return rows
+
+
+def pose_yaw(pose):
+    return 2.0 * math.atan2(pose.orientation.z, pose.orientation.w)
+
+
+def angle_between(a, b):
+    return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
+
+
+def test_the_centreline_is_latched_in_the_race_direction(bridge, probe):
+    paths = []
+    # Joining after the bridge published: only the latch can deliver it.
+    probe.create_subscription(
+        PathMsg, "/race/centreline", paths.append, map_qos())
+    pump(bridge, probe, 200)
+    assert len(paths) == 1, "the centreline is latched once, not streamed"
+    msg = paths[0]
+    rows = centreline_rows()
+
+    assert msg.header.frame_id == "map"
+    # Every sample in file order, plus the loop made explicit: the first
+    # pose repeated at the end, because a Path has no closed flag.
+    assert len(msg.poses) == len(rows) + 1
+    assert msg.poses[0].pose.position.x == pytest.approx(rows[0][0])
+    assert msg.poses[0].pose.position.y == pytest.approx(rows[0][1])
+    assert msg.poses[1].pose.position.x == pytest.approx(rows[1][0])
+    assert msg.poses[1].pose.position.y == pytest.approx(rows[1][1])
+    assert msg.poses[-1].pose.position.x == pytest.approx(rows[0][0])
+    assert msg.poses[-1].pose.position.y == pytest.approx(rows[0][1])
+
+    # The tangents ARE the direction: each pose faces its successor, and
+    # the seam pose faces the way the start it repeats does.
+    ahead = math.atan2(rows[1][1] - rows[0][1], rows[1][0] - rows[0][0])
+    assert angle_between(pose_yaw(msg.poses[0].pose), ahead) < 1e-6
+    assert angle_between(pose_yaw(msg.poses[-1].pose), ahead) < 1e-6
+
+
+def test_a_reversed_bridge_turns_the_race_round(ros, tmp_path):
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        reversed=True,
+        out_dir=tmp_path,
+    ))
+    probe_node = rclpy.create_node("direction_probe")
+    try:
+        paths = []
+        probe_node.create_subscription(
+            PathMsg, "/race/centreline", paths.append, map_qos())
+        for _ in range(100):
+            node.step_once()
+            rclpy.spin_once(probe_node, timeout_sec=0.0)
+        assert paths, "the announcement must flow when reversed"
+        msg = paths[0]
+        rows = centreline_rows()
+
+        # Same start line, walked the other way: the second pose is the
+        # file's last sample.
+        assert msg.poses[0].pose.position.x == pytest.approx(rows[0][0])
+        assert msg.poses[0].pose.position.y == pytest.approx(rows[0][1])
+        assert msg.poses[1].pose.position.x == pytest.approx(rows[-1][0])
+        assert msg.poses[1].pose.position.y == pytest.approx(rows[-1][1])
+
+        # Against the declared direction the announcement is a U-turn, and
+        # the grid turned with it: the car starts facing the announcement.
+        announced = pose_yaw(msg.poses[0].pose)
+        declared = math.atan2(rows[1][1] - rows[0][1],
+                              rows[1][0] - rows[0][0])
+        assert angle_between(announced, declared) == pytest.approx(
+            math.pi, abs=0.1)
+        assert angle_between(node.sim.state(0).yaw, announced) < 1e-6
+
+        out = node.write_manifests()
+        manifest = json.loads(
+            (out / "bridge_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["reversed"] is True
+        assert manifest["centreline"] is True
+    finally:
+        probe_node.destroy_node()
+        node.destroy_node()
+
+
+def test_the_centreline_can_be_declined_and_the_manifest_says_so(
+        ros, tmp_path):
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        centreline=False,
+        out_dir=tmp_path,
+    ))
+    try:
+        # No publisher exists at all: disabled means absent, not silent.
+        assert node._centreline_pub is None
+        out = node.write_manifests()
+        manifest = json.loads(
+            (out / "bridge_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["centreline"] is False
+    finally:
+        node.destroy_node()
 
 
 def test_the_map_survives_declining_ground_truth(ros, tmp_path):

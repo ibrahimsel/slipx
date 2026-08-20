@@ -107,6 +107,14 @@ class Track {
   // and excluded when it is not.
   double length() const;
 
+  // The same track raced the other way round: the centreline traversed in
+  // reverse (keeping the start when the track closes, because reversing a
+  // lap must not move the start line), widths swapped to match, manifest
+  // and tyres carried unchanged. Everything downstream measures direction
+  // as increasing arc length, so this one function is how a race runs the
+  // other way and nothing else carries a direction flag.
+  Track reversed() const;
+
  private:
   // Private, and taking everything it needs: a Track cannot be default
   // constructed, so there is no half-built one for a caller to hold.

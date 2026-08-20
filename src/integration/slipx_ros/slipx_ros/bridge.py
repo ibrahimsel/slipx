@@ -21,6 +21,14 @@ disagree with the scans, and never gated on ground truth, because a map is
 geometry a real car also has (SLAM gave it one). ``--no-map`` for a stack
 that runs its own map server.
 
+The race direction is announced (ADR-0056), the way race control announces
+it before a heat: the centreline latched once on ``/race/centreline`` as a
+``Path`` whose pose order and tangents ARE the direction. ``--reversed``
+races the same track the other way round (the grid turns with it), and on a
+closed track the loop is made explicit by repeating the first pose, because
+a Path carries no closed flag and a subscriber should not guess.
+``--no-centreline`` for a stack that brings its own racing line.
+
 Commands hold like a servo: the latest ``AckermannDriveStamped`` per agent
 is applied every step, the steering angle directly and the speed through a
 proportional acceleration demand whose gain is a named mechanisation of the
@@ -53,8 +61,11 @@ from rclpy.qos import (
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from builtin_interfaces.msg import Time as TimeMsg
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
+# Aliased: pathlib's Path is all over this file, and a name that means two
+# things is a bug that already happened once.
+from nav_msgs.msg import Path as PathMsg
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import UInt64
@@ -100,6 +111,15 @@ class BridgeConfig:
     # also has; off for a stack that runs its own map server.
     map: bool = True
     map_resolution_m: float = 0.05
+    # The race direction, announced (ADR-0056): the centreline latched once
+    # on /race/centreline, ordered and oriented the way the race runs. Off
+    # for a stack that brings its own racing line.
+    centreline: bool = True
+    # Race the same track the other way round: the centreline is walked
+    # backwards (start kept on a closed track), which turns the grid, the
+    # announcement and every tangent with it. The walls and the map do not
+    # change, because the venue does not.
+    reversed: bool = False
     clock_rate_hz: float = 100.0
     # The speed loop standing in for a VESC's controller: a mechanisation,
     # named here rather than buried (the same rule RaceConfig follows).
@@ -225,6 +245,13 @@ class Bridge(Node):
 
         self._mailboxes: List[Optional[slipx.CommandMailbox]] = []
         points = _centreline_points(config.track_dir)
+        if config.reversed:
+            # The same geometry walked backwards, keeping the first sample
+            # first on a closed track: reversing a lap must not move the
+            # start line. The grid below and the announcement latch this
+            # order, so the whole race turns together.
+            points = ([points[0]] + points[:0:-1] if self.track.closed
+                      else points[::-1])
         for index, car in enumerate(self.cars):
             spec = slipx.AgentSpec()
             spec.name = car.name
@@ -338,6 +365,15 @@ class Bridge(Node):
             self._map_pub = self.create_publisher(
                 OccupancyGrid, "/map", MAP_QOS)
             self._map_pub.publish(self._occupancy_grid(points[0]))
+
+        # The race direction, announced once (ADR-0056): pose order and
+        # tangents carry it, the way race control announces a direction
+        # before the heat rather than expecting cars to sense it.
+        self._centreline_pub: Optional[object] = None
+        if config.centreline:
+            self._centreline_pub = self.create_publisher(
+                PathMsg, "/race/centreline", MAP_QOS)
+            self._centreline_pub.publish(self._centreline_path(points))
 
         self._clock_pub = self.create_publisher(Clock, "/clock", 10)
         dt = self.sim.dt
@@ -648,6 +684,41 @@ class Bridge(Node):
         msg.twist.twist.angular.z = state.yaw_rate
         return msg
 
+    def _centreline_path(self, points: List[Tuple[float, float]]) -> PathMsg:
+        """The centreline as a latched Path in the race direction.
+
+        Pose order and tangents carry the direction. On a closed track the
+        first pose is repeated at the end, so the loop is explicit on the
+        wire: a Path has no closed flag, and a subscriber should not have
+        to guess whether two nearby ends join.
+        """
+        msg = PathMsg()
+        msg.header.stamp = _sim_time(0.0)
+        msg.header.frame_id = "map"
+        closed = self.track.closed
+        samples = points + [points[0]] if closed else points
+        count = len(samples)
+        for i, (x, y) in enumerate(samples):
+            # Each pose faces along the segment it starts; the repeated
+            # seam pose faces the way the first one does (same point, same
+            # direction of travel) and an open track's last pose keeps the
+            # direction it arrived with.
+            if closed and i == count - 1:
+                j = 0
+            else:
+                j = min(i, count - 2)
+            ax, ay = samples[j]
+            bx, by = samples[j + 1]
+            pose = PoseStamped()
+            pose.header.stamp = msg.header.stamp
+            pose.header.frame_id = "map"
+            pose.pose.position.x = x
+            pose.pose.position.y = y
+            _yaw_to_quaternion(pose.pose.orientation,
+                               math.atan2(by - ay, bx - ax))
+            msg.poses.append(pose)
+        return msg
+
     def _occupancy_grid(self, seed_xy: Tuple[float, float]) -> OccupancyGrid:
         """The walls as a latched map, rasterised from the raycaster's own
         polylines (``TrackWorld.wall_left`` / ``wall_right``), never from a
@@ -769,6 +840,8 @@ class Bridge(Node):
             "tf": self.config.tf,
             "map": self.config.map,
             "map_resolution_m": self.config.map_resolution_m,
+            "centreline": self.config.centreline,
+            "reversed": self.config.reversed,
             "real_time_factor": self.config.real_time_factor,
             "speed_gain": self.config.speed_gain,
             "seed": self.config.seed,
@@ -809,6 +882,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "the bridge manifest")
     parser.add_argument("--map-resolution", type=float, default=0.05,
                         help="occupancy grid cell size [m]")
+    parser.add_argument("--no-centreline", action="store_true",
+                        help="do not latch the centreline on "
+                             "/race/centreline, for a stack that brings "
+                             "its own racing line; recorded in the bridge "
+                             "manifest")
+    parser.add_argument("--reversed", action="store_true",
+                        help="race the track the other way round: the "
+                             "grid and the announced centreline turn "
+                             "together; recorded in the bridge manifest")
     parser.add_argument("--speed-gain", type=float, default=4.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None,
@@ -831,6 +913,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         tf=not arguments.no_tf,
         map=not arguments.no_map,
         map_resolution_m=arguments.map_resolution,
+        centreline=not arguments.no_centreline,
+        reversed=arguments.reversed,
         speed_gain=arguments.speed_gain,
         seed=arguments.seed,
         out_dir=arguments.out,

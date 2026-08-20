@@ -35,7 +35,9 @@ class ObstacleTest {
   // `obstacle` is another agent in the same simulation, footprinted and
   // typically at rest with no policy: the sim's contact model is what makes
   // touching it a detectable fact. The pass line is the obstacle's arc
-  // position plus `pass_margin` metres.
+  // position plus `pass_margin` metres. With config.reversed the test is
+  // measured along track.reversed(), so "past the obstacle" means past it
+  // in the raced direction.
   ObstacleTest(sim::Simulation& sim, const scene::Track& track,
                std::size_t car, std::size_t obstacle, RaceConfig config,
                double pass_margin = 1.0);
@@ -54,6 +56,9 @@ class ObstacleTest {
   std::size_t car_;
   std::size_t obstacle_;
   RaceConfig config_;
+  // The track as raced: an owned copy, reversed when the config says so
+  // (ADR-0056).
+  const scene::Track track_;
 
   scene::LapCounter counter_;
   double distance_to_pass_ = 0.0;

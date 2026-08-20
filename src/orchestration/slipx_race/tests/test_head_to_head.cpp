@@ -67,6 +67,7 @@ TEST(HeadToHead, ACleanRoundGoesToTheCarThatFinishesFirst) {
   EXPECT_EQ(wins[0].agent, 0u);
   EXPECT_EQ(wins[0].code, 0) << "won on the road, not by default";
   EXPECT_FALSE(events_of(round.events(), EventType::kLap).empty());
+  EXPECT_TRUE(events_of(round.events(), EventType::kWrongWay).empty());
 }
 
 TEST(HeadToHead, ARearEndIsTheFollowersFaultAndThreeOfThemDisqualify) {
@@ -119,6 +120,68 @@ TEST(HeadToHead, ARearEndIsTheFollowersFaultAndThreeOfThemDisqualify) {
   const auto wins = events_of(round.events(), EventType::kRoundWon);
   ASSERT_EQ(wins.size(), 1u);
   EXPECT_EQ(wins[0].code, 1) << "won by the opponent's disqualification";
+  // Every crash set the at-fault car metres back along the track, and none
+  // of those set-backs may read as driving the wrong way: the referee
+  // moved the car, the car did not drive.
+  EXPECT_TRUE(events_of(round.events(), EventType::kWrongWay).empty());
+}
+
+TEST(HeadToHead, AReversedRoundRacesTheOtherWayRound) {
+  // Race control gets the forward track and only the flag; both cars
+  // follow the raced direction, in separate lanes, and the round must
+  // play out exactly as a forward one does: grid turned, laps counted,
+  // nothing ruled wrong way.
+  const Track track = race_test::shipped_track();
+  const Track raced = track.reversed();
+  slipx::sim::Simulation sim;
+  sim.add_agent(
+      race_test::race_car(race_test::follow_centreline(raced, 5.0, 0.25)));
+  sim.add_agent(
+      race_test::race_car(race_test::follow_centreline(raced, 3.5, -0.25)));
+
+  RaceConfig config = short_race();
+  config.reversed = true;
+  HeadToHeadRound round(sim, track, 0, 1, 0.0, true, {0, 0}, config);
+  round.run(60000);
+
+  ASSERT_TRUE(round.finished());
+  EXPECT_EQ(round.winner(), 0u) << "the faster car wins either way round";
+  EXPECT_EQ(round.laps(0), 2);
+  EXPECT_TRUE(events_of(round.events(), EventType::kWrongWay).empty());
+}
+
+TEST(HeadToHead, ReverseGearAgainstTheRaceDirectionIsRuledPerCar) {
+  const Track track = race_test::shipped_track();
+  const Track raced = track.reversed();
+  slipx::sim::Simulation sim;
+  // Straight back down the road in reverse gear: the one way to drive
+  // against the direction without a U-turn the corridor cannot hold.
+  const auto reverse_gear = [](const slipx::VehicleState& state, double,
+                               slipx::sense::Rng&) {
+    slipx::DriveInput input;
+    input.steer_cmd = 0.0;
+    input.accel_cmd = 4.0 * (-1.0 - state.vel_body.x);
+    return input;
+  };
+  sim.add_agent(race_test::race_car(reverse_gear));
+  sim.add_agent(race_test::race_car(reverse_gear));
+
+  RaceConfig config = short_race();
+  config.reversed = true;
+  // The middle of a straight of the raced track, so reversing has clear
+  // runway before any corner.
+  const double line_s = slipx::scene::project(raced, 0.0, 3.0).s;
+  HeadToHeadRound round(sim, track, 0, 1, line_s, true, {0, 0}, config);
+  round.run(2500);
+
+  // Both cars ruled, each exactly once: the excursion never ends, and one
+  // ruling stands for it.
+  const auto rulings = events_of(round.events(), EventType::kWrongWay);
+  ASSERT_EQ(rulings.size(), 2u);
+  EXPECT_NE(rulings[0].agent, rulings[1].agent);
+  EXPECT_GE(rulings[0].value, config.wrong_way_distance);
+  EXPECT_FALSE(round.finished());
+  EXPECT_TRUE(events_of(round.events(), EventType::kLap).empty());
 }
 
 TEST(HeadToHead, ASlowNudgeIsRecordedAndNotPenalised) {

@@ -30,6 +30,15 @@ bool has_event(const std::vector<slipx::race::RaceEvent>& events,
                      });
 }
 
+std::vector<slipx::race::RaceEvent> events_of(
+    const std::vector<slipx::race::RaceEvent>& events, EventType type) {
+  std::vector<slipx::race::RaceEvent> out;
+  for (const slipx::race::RaceEvent& e : events) {
+    if (e.type == type) out.push_back(e);
+  }
+  return out;
+}
+
 TEST(TimeTrial, ACleanHeatTimesItsLapsAndKeepsItsStreak) {
   const Track track = race_test::shipped_track();
   slipx::sim::Simulation sim;
@@ -55,6 +64,56 @@ TEST(TimeTrial, ACleanHeatTimesItsLapsAndKeepsItsStreak) {
   EXPECT_TRUE(has_event(trial.events(), EventType::kLap));
   EXPECT_TRUE(has_event(trial.events(), EventType::kHeatEnd));
   EXPECT_FALSE(has_event(trial.events(), EventType::kBorderCrash));
+  EXPECT_FALSE(has_event(trial.events(), EventType::kWrongWay));
+}
+
+TEST(TimeTrial, AReversedHeatLapsTheOtherWayRound) {
+  // Race control is handed the forward track and only the flag; the car
+  // follows the raced direction. Laps must accumulate exactly as they do
+  // forward, with nothing ruled wrong way (ADR-0056: reversal is the
+  // reversed track, so no signed quantity needs a special case).
+  const Track track = race_test::shipped_track();
+  const Track raced = track.reversed();
+  slipx::sim::Simulation sim;
+  sim.add_agent(race_test::race_car(race_test::follow_centreline(raced, 4.0)));
+  slipx::race::place_on_track(sim, 0, raced, 0.0, 0.0, 4.0);
+
+  RaceConfig config;
+  config.reversed = true;
+  TimeTrial trial(sim, track, 0, config);
+  trial.run_for(30.0);
+
+  const TimeTrialResult& result = trial.result();
+  ASSERT_GE(result.laps, 2) << "laps accumulate along the raced direction";
+  EXPECT_FALSE(result.dnf);
+  const double nominal = track.length() / 4.0;
+  EXPECT_GT(result.fastest_lap, 0.8 * nominal);
+  EXPECT_LT(result.fastest_lap, 1.3 * nominal);
+  EXPECT_FALSE(has_event(trial.events(), EventType::kWrongWay));
+  EXPECT_FALSE(has_event(trial.events(), EventType::kBorderCrash));
+}
+
+TEST(TimeTrial, DrivingAgainstTheRaceDirectionIsRuledOncePerExcursion) {
+  // The car drives the track as declared while race control announced the
+  // other way round: every metre is a metre lost.
+  const Track track = race_test::shipped_track();
+  slipx::sim::Simulation sim;
+  sim.add_agent(race_test::race_car(race_test::follow_centreline(track, 4.0)));
+  slipx::race::place_on_track(sim, 0, track, 0.0, 0.0, 4.0);
+
+  RaceConfig config;
+  config.reversed = true;
+  TimeTrial trial(sim, track, 0, config);
+  trial.run_for(10.0);
+
+  const auto rulings = events_of(trial.events(), EventType::kWrongWay);
+  ASSERT_EQ(rulings.size(), 1u)
+      << "one excursion, one ruling, however long it lasts";
+  EXPECT_EQ(rulings[0].agent, 0u);
+  EXPECT_GE(rulings[0].value, config.wrong_way_distance);
+  EXPECT_LT(rulings[0].value, config.wrong_way_distance + 0.1);
+  EXPECT_EQ(trial.result().laps, 0) << "backwards laps are not laps";
+  EXPECT_FALSE(trial.result().dnf);
 }
 
 TEST(TimeTrial, LeavingTheCorridorIsABorderCrashThatResetsTheStreak) {

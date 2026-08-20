@@ -48,6 +48,30 @@ TEST(Starts, PoseAtWalksAndWrapsTheTrack) {
   EXPECT_NEAR(projected.s, 2.0, 1e-6);
 }
 
+TEST(Starts, AReversedTrackKeepsItsStartAndFacesTheOtherWay) {
+  const Track track = race_test::shipped_track();
+  const Track raced = track.reversed();
+  EXPECT_NEAR(raced.length(), track.length(), 1e-9);
+
+  // The start line stays put and the direction of travel turns round, so a
+  // grid on the reversed track is the same grid facing the other way.
+  const TrackPose fwd = pose_at(track, 0.0);
+  const TrackPose rev = pose_at(raced, 0.0);
+  EXPECT_NEAR(rev.x, fwd.x, 1e-9);
+  EXPECT_NEAR(rev.y, fwd.y, 1e-9);
+  const double turn = std::atan2(std::sin(rev.heading - fwd.heading),
+                                 std::cos(rev.heading - fwd.heading));
+  // Not exactly pi: behind the stadium's start line the track is an arc,
+  // so the first reversed segment is a chord of it.
+  EXPECT_NEAR(std::abs(turn), 3.14159265358979323846, 0.05);
+
+  // The same physical point sits at s one way and length - s the other.
+  const TrackPose there = pose_at(track, 5.0);
+  const TrackPose back = pose_at(raced, track.length() - 5.0);
+  EXPECT_NEAR(back.x, there.x, 1e-9);
+  EXPECT_NEAR(back.y, there.y, 1e-9);
+}
+
 TEST(Starts, TheGridIsSideBySideOneCarWidthApartAtRest) {
   const Track track = race_test::shipped_track();
   slipx::sim::Simulation sim;

@@ -17,12 +17,14 @@ HeadToHeadRound::HeadToHeadRound(sim::Simulation& sim,
                                  bool a_on_left, std::array<int, 2> warnings,
                                  RaceConfig config)
     : sim_(sim),
-      track_(track),
       car_a_(car_a),
       car_b_(car_b),
       config_(config),
-      counters_{scene::LapCounter(track, config.limit_tolerance),
-                scene::LapCounter(track, config.limit_tolerance)},
+      track_(config.reversed ? track.reversed() : track),
+      counters_{scene::LapCounter(track_, config.limit_tolerance),
+                scene::LapCounter(track_, config.limit_tolerance)},
+      wrong_way_{WrongWayMonitor(config.wrong_way_distance),
+                 WrongWayMonitor(config.wrong_way_distance)},
       warnings_(warnings) {
   const std::size_t left = a_on_left ? car_a : car_b;
   const std::size_t right = a_on_left ? car_b : car_a;
@@ -76,6 +78,8 @@ void HeadToHeadRound::handle_border(std::size_t which) {
     place_on_track(sim_, sim_index(which), track_, s, 0.0, 0.0);
     const VehicleState& placed = sim_.state(sim_index(which));
     counters_[which].update(placed.pos.x, placed.pos.y);
+    // A placement is a teleport, not driving: rebase rather than rule.
+    wrong_way_[which].rebase(counters_[which].distance());
     emit(EventType::kRestart, agent, kNoAgent, s, 0);
   }
   was_inside_[which] = counters_[which].limits().inside;
@@ -151,6 +155,7 @@ void HeadToHeadRound::handle_contact() {
       place_on_track(sim_, sim_index(victim), track_, s0, 0.0, 0.0);
       const VehicleState& placed = sim_.state(sim_index(victim));
       counters_[victim].update(placed.pos.x, placed.pos.y);
+      wrong_way_[victim].rebase(counters_[victim].distance());
       emit(EventType::kRestart,
            static_cast<std::uint32_t>(sim_index(victim)), kNoAgent, s0, 0);
     }
@@ -159,6 +164,9 @@ void HeadToHeadRound::handle_contact() {
     place_on_track(sim_, sim_index(fault), track_, s0 - setback, 0.0, 0.0);
     const VehicleState& placed = sim_.state(sim_index(fault));
     counters_[fault].update(placed.pos.x, placed.pos.y);
+    // The set-back is the referee moving the car, not the car driving
+    // backwards: rebase, or every crash would also be ruled a wrong way.
+    wrong_way_[fault].rebase(counters_[fault].distance());
     emit(EventType::kRestart, static_cast<std::uint32_t>(sim_index(fault)),
          kNoAgent, s0 - setback, 0);
 
@@ -191,6 +199,14 @@ void HeadToHeadRound::advance() {
   }
 
   for (std::size_t which = 0; which < 2; ++which) handle_border(which);
+
+  for (std::size_t which = 0; which < 2; ++which) {
+    if (wrong_way_[which].update(counters_[which].distance())) {
+      emit(EventType::kWrongWay,
+           static_cast<std::uint32_t>(sim_index(which)), kNoAgent,
+           wrong_way_[which].deficit(), 0);
+    }
+  }
 
   // Laps, and the win (2.5.4.1: the first car to complete the count). When
   // both cross on the same step, the one further along wins, and an exact

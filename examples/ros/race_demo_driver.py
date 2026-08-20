@@ -12,9 +12,11 @@ end to end.
   after carving a safety bubble around the nearest return. Opponents appear
   in the scan exactly as walls do, so avoidance falls out rather than being
   coded, and twenty of these on one track jostle like a race.
-- ``pursuit``: ground truth against the centreline, the textbook geometric
-  controller. It ignores the scan entirely, so it validates the geometry
-  and the model, not the sensors; twenty of them parade on the same line.
+- ``pursuit``: ground truth against the centreline the bridge announces on
+  ``/race/centreline``, the textbook geometric controller. It ignores the
+  scan entirely, so it validates the geometry, the model and the announced
+  direction, not the sensors; twenty of them parade on the same line, and
+  a ``--reversed`` bridge turns the parade round with no change here.
 
 These exist to exercise the simulator, not to win anything.
 
@@ -26,33 +28,33 @@ Run in a sourced ROS 2 environment with slipx on PYTHONPATH::
 from __future__ import annotations
 
 import argparse
-import csv
 import math
-from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 
 from ackermann_msgs.msg import AckermannDriveStamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import LaserScan
 
 MAX_STEER = 0.40      # the reference car's full lock              [rad]
 WHEELBASE = 0.32      # lf + lr from dynamics.yaml                 [m]
 
-
-def load_centreline(track_dir: Path) -> List[Tuple[float, float]]:
-    points: List[Tuple[float, float]] = []
-    with open(track_dir / "centreline.csv", encoding="utf-8",
-              newline="") as handle:
-        for row in csv.reader(handle):
-            if not row or row[0].lstrip().startswith("#"):
-                continue
-            points.append((float(row[0]), float(row[1])))
-    return points
+#: The QoS the bridge latches the centreline with: joining late still
+#: delivers the announcement.
+LATCHED_QOS = QoSProfile(
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 
 class GapFollower:
@@ -176,7 +178,15 @@ class PurePursuit:
 class Driver(Node):
     def __init__(self, arguments) -> None:
         super().__init__("race_demo_driver")
+        self._arguments = arguments
         self._drive_pubs = []
+        # Pursuit controllers exist only once the bridge's latched
+        # announcement arrives: the centreline, in the direction raced, is
+        # race control's to give, not this driver's to read off disk.
+        self._pursuit: List[Optional[PurePursuit]] = [None] * arguments.agents
+        if arguments.mode == "pursuit":
+            self.create_subscription(
+                Path, "/race/centreline", self._take_centreline, LATCHED_QOS)
         for index in range(arguments.agents):
             ns = f"/{arguments.namespace}{index}"
             publisher = self.create_publisher(
@@ -189,15 +199,30 @@ class Driver(Node):
                     self._relay(index, controller),
                     qos_profile_sensor_data)
             else:
-                controller = PurePursuit(
-                    load_centreline(arguments.track),
-                    arguments.lookahead, arguments.speed)
                 self.create_subscription(
                     Odometry, f"{ns}/ground_truth/odom",
-                    self._relay(index, controller), 10)
+                    self._relay_pursuit(index), 10)
+
+    def _take_centreline(self, msg: Path) -> None:
+        points = [(pose.pose.position.x, pose.pose.position.y)
+                  for pose in msg.poses]
+        self._pursuit = [
+            PurePursuit(points, self._arguments.lookahead,
+                        self._arguments.speed)
+            for _ in range(self._arguments.agents)
+        ]
 
     def _relay(self, index: int, controller):
         def callback(msg) -> None:
+            self._drive_pubs[index].publish(controller.drive(msg))
+
+        return callback
+
+    def _relay_pursuit(self, index: int):
+        def callback(msg: Odometry) -> None:
+            controller = self._pursuit[index]
+            if controller is None:
+                return   # no announcement yet: sit still rather than guess
             self._drive_pubs[index].publish(controller.drive(msg))
 
         return callback
@@ -212,10 +237,6 @@ def main() -> int:
                         help="top speed [m/s]")
     parser.add_argument("--lookahead", type=float, default=1.2,
                         help="pursuit lookahead [m]")
-    parser.add_argument("--track", type=Path,
-                        default=Path(__file__).resolve().parents[1]
-                        / "tracks" / "paddock_stadium",
-                        help="track directory (pursuit mode)")
     arguments = parser.parse_args()
 
     rclpy.init()

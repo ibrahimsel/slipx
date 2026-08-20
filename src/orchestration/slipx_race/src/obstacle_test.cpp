@@ -15,7 +15,8 @@ ObstacleTest::ObstacleTest(sim::Simulation& sim, const scene::Track& track,
       car_(car),
       obstacle_(obstacle),
       config_(config),
-      counter_(track, config.limit_tolerance) {
+      track_(config.reversed ? track.reversed() : track),
+      counter_(track_, config.limit_tolerance) {
   const VehicleState& state = sim_.state(car_);
   counter_.reset_to(state.pos.x, state.pos.y);
 
@@ -25,10 +26,10 @@ ObstacleTest::ObstacleTest(sim::Simulation& sim, const scene::Track& track,
   // progress, so a car that wanders backwards first still has to cover it.
   const VehicleState& box = sim_.state(obstacle_);
   const double s_car = counter_.where().s;
-  const double s_obstacle = scene::project(track, box.pos.x, box.pos.y).s;
+  const double s_obstacle = scene::project(track_, box.pos.x, box.pos.y).s;
   double gap = s_obstacle - s_car;
-  if (track.is_closed()) {
-    const double total = track.length();
+  if (track_.is_closed()) {
+    const double total = track_.length();
     gap = std::fmod(gap, total);
     if (gap < 0.0) gap += total;
   }

@@ -1430,6 +1430,38 @@ computed, and the conformance script re-checked all six rows.)
   taken when and if someone adopts, and the tripwire is the first adoption
   enquiry. Until then the implementation states its ruleset revision
   (M7.5) and nothing more is promised.
+- [x] **M7.12** Race direction (ADR-0056; numbered by writing order, landed
+  before the gate below). The direction is increasing arc length along the
+  centreline as declared; `Track::reversed()` produces the same venue
+  traversed the other way (start line kept on a closed track, widths
+  swapped, "(reversed)" recorded in the centreline origin, a duplicate
+  closing point refused by name), and `RaceConfig.reversed` makes every
+  race procedure own and race the reversed copy, so grids, laps, restarts,
+  the corridor and the obstacle gap all turn together with no sign logic
+  anywhere. `WrongWayMonitor` (high-water mark, threshold
+  `RaceConfig.wrong_way_distance`, one ruling per excursion, re-armed on
+  recovery, rebased on teleports) drives the new `wrong_way` event in the
+  time trial and head-to-head; recorded, never penalised, because the
+  pinned revision has no wrong-way rule. Both knobs travel in the event
+  stream metadata. The bridge latches `/race/centreline` (Path, map frame,
+  map QoS, pose order and tangents are the direction, first pose repeated
+  on a closed track) with `--reversed` and `--no-centreline` recorded in
+  the bridge manifest; the pursuit demo driver consumes the announcement
+  instead of the CSV and loses its `--track` argument, verified end to end
+  forward and reversed against a live bridge. Tests: 5 scene (reversal
+  geometry, refusal, reversed lap counting), 5 monitor unit, 7 race
+  scenario (reversed heat and round lap correctly; wrong-way ruled once
+  per excursion per car; a crash set-back never reads as wrong way;
+  reversed obstacle pass), event-stream name and metadata round trips, 3
+  bridge (latched direction, reversed bridge turning grid and
+  announcement together, declined centreline). Article 20 ("Which way
+  round?") added to the tutorial series. Mutation pass: 22 tried, 22
+  caught first time (width swap, keep-first, stale arc lengths, refusal,
+  keep-first inverted at the Track seam, origin suffix, threshold
+  inverted, ruling latch, re-arm, rebase high water, set-back rebase,
+  reversal dropped in each of the three procedures, both emission sites,
+  wire name collision, metadata inverted, threshold validation; bridge:
+  reversal ignored, seam pose, latch QoS, seam tangent, manifest key).
 - [ ] **M7.10** P3 exit gate (external fact): one course or one competition
   runs an evaluation on SlipX.
   Done when: it has happened and can be cited.

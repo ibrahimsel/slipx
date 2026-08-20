@@ -123,5 +123,12 @@ double Track::length() const {
   return is_closed() ? open + centreline_.closing_chord() : open;
 }
 
+Track Track::reversed() const {
+  // Straight to the constructor: the manifest and the tyres already passed
+  // build() once, and reversal preserves every geometric invariant the
+  // parser enforces.
+  return Track(centreline_.reversed(is_closed()), manifest_, tyres_);
+}
+
 }  // namespace scene
 }  // namespace slipx

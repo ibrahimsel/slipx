@@ -2,6 +2,7 @@
 # milestone's own acceptance bar.
 
 slipx_add_test(test_starts slipx::race)
+slipx_add_test(test_wrong_way slipx::race)
 slipx_add_test(test_time_trial slipx::race)
 slipx_add_test(test_obstacle_test slipx::race)
 slipx_add_test(test_head_to_head slipx::race)

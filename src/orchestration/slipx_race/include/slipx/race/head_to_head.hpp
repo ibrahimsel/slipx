@@ -15,6 +15,7 @@
 
 #include "slipx/race/events.hpp"
 #include "slipx/race/ruleset.hpp"
+#include "slipx/race/wrong_way.hpp"
 #include "slipx/scene/lap.hpp"
 #include "slipx/scene/track.hpp"
 #include "slipx/sim/simulation.hpp"
@@ -33,7 +34,10 @@ class HeadToHeadRound {
   // Places both cars on the grid at `line_s` (car_a on the left when
   // a_on_left) and seeds the lap counters there. `warnings` carries the
   // teams' warning counts into the round, because warnings accumulate over
-  // the race, not the round.
+  // the race, not the round. With config.reversed the round races
+  // track.reversed(), which also turns the grid to face that way; `line_s`
+  // is an arc length of the raced track, and 0 is the same start line in
+  // both directions on a closed track.
   HeadToHeadRound(sim::Simulation& sim, const scene::Track& track,
                   std::size_t car_a, std::size_t car_b, double line_s,
                   bool a_on_left, std::array<int, 2> warnings,
@@ -61,12 +65,16 @@ class HeadToHeadRound {
   void handle_contact();
 
   sim::Simulation& sim_;
-  const scene::Track& track_;
   std::size_t car_a_;
   std::size_t car_b_;
   RaceConfig config_;
+  // The track as raced: an owned copy, reversed when the config says so,
+  // so the grid, the counters and every restart measure one direction and
+  // none of them carries a flag (ADR-0056).
+  const scene::Track track_;
 
   std::array<scene::LapCounter, 2> counters_;
+  std::array<WrongWayMonitor, 2> wrong_way_;
   std::array<bool, 2> was_inside_{true, true};
   std::array<double, 2> lap_start_time_{0.0, 0.0};
   std::array<int, 2> laps_done_{0, 0};

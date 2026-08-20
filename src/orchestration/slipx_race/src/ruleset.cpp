@@ -29,6 +29,7 @@ const char* to_string(EventType type) {
     case EventType::kObstaclePassed: return "obstacle_passed";
     case EventType::kObstacleFailed: return "obstacle_failed";
     case EventType::kHeatEnd: return "heat_end";
+    case EventType::kWrongWay: return "wrong_way";
   }
   return "unknown";
 }
