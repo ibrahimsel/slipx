@@ -21,6 +21,16 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The bridge broadcasts a REP 105 TF tree** (ADR-0053). Identity mounts
+  on `tf_static` (the sensor models cast from the vehicle origin),
+  `odom` to `base_link` from the dead reckoner, and, only while ground
+  truth is offered, a `map` to `odom` correction that composes the chain
+  to the true pose; `--no-tf` removes the broadcast, and both switches
+  are recorded in the bridge manifest. Frame ids lose the leading slash
+  they carried from the topic namespace: tf2 refuses to look up a frame
+  that starts with one, so the old ids could never have joined a tree,
+  and bags recorded before this change will not resolve against the new
+  one.
 - **The transport, measured, and a racing default decided** (ADR-0052).
   `python -m slipx_ros.rmw_bench` runs the same fully sensored lockstep
   race (a bridge process plus one client process per agent) over Fast-DDS

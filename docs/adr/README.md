@@ -99,6 +99,7 @@ Use [`template.md`](template.md) for a new record.
 | [0050](0050-the-ros-bridge-is-rclpy-above-the-bindings.md) | The ROS 2 bridge is rclpy above the Python bindings, pacing a validation-mode run | Proposed |
 | [0051](0051-race-sync-is-the-mailbox-barrier-on-stamped-topics.md) | race_sync is the mailbox barrier spoken over stamped topics | Proposed |
 | [0052](0052-the-racing-rmw-default-is-zenoh.md) | The recommended racing transport is rmw_zenoh, measured against both Fast-DDS shapes | Proposed |
+| [0053](0053-tf-is-rep-105-with-truth-as-the-map-correction.md) | The bridge broadcasts a REP 105 TF tree, with ground truth as the map correction | Proposed |
 
 ## Racing
 

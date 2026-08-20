@@ -129,8 +129,9 @@ def test_the_scan_crosses_the_wire_with_nan_never_zero(bridge, probe):
     assert scans, "a scan must arrive"
     scan = scans[-1]
     assert len(scan.ranges) == 1080
-    assert scan.header.frame_id == "/car_0/laser_frame", \
-        "the frame id is the sensor's mount, namespaced"
+    assert scan.header.frame_id == "car_0/laser_frame", \
+        "the frame id is the sensor's mount, namespaced without the " \
+        "leading slash tf2 forbids"
     finite = [r for r in scan.ranges if math.isfinite(r)]
     assert len(finite) > 500, "a corridor surrounds the car"
     # Over EVERY scan received, not just the last: a dropout is a rare draw
@@ -232,6 +233,157 @@ def test_odometry_curves_with_the_commanded_steer(bridge, probe):
     assert abs(difference) < 0.35, \
         f"reckoned {reckoned_yaw:.2f} rad against true {true_yaw:.2f} rad"
     assert abs(reckoned_yaw) > 0.3, "the commanded steer must curve the belief"
+
+
+def tf_buffer(probe_node):
+    """A tf2 buffer fed by hand from /tf and /tf_static, no listener thread:
+    what lands in it crossed the RMW like any stack's transforms would."""
+    from rclpy.qos import (
+        DurabilityPolicy, QoSProfile, ReliabilityPolicy)
+    from tf2_msgs.msg import TFMessage
+    from tf2_ros.buffer import Buffer
+
+    buffer = Buffer()
+
+    def dynamic(msg: TFMessage) -> None:
+        for transform in msg.transforms:
+            buffer.set_transform(transform, "probe")
+
+    def static(msg: TFMessage) -> None:
+        for transform in msg.transforms:
+            buffer.set_transform_static(transform, "probe")
+
+    probe_node.create_subscription(TFMessage, "/tf", dynamic, 100)
+    probe_node.create_subscription(
+        TFMessage, "/tf_static", static,
+        QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                   durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    return buffer
+
+
+def test_tf_mounts_are_identity_and_latched(bridge, probe):
+    from rclpy.qos import (
+        DurabilityPolicy, QoSProfile, ReliabilityPolicy)
+    from rclpy.time import Time
+    from tf2_msgs.msg import TFMessage
+
+    buffer = tf_buffer(probe)
+    statics = []
+    probe.create_subscription(
+        TFMessage, "/tf_static", statics.append,
+        QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                   durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    pump(bridge, probe, 100)
+    for namespace in ("car_0", "car_1"):
+        for mount in ("laser_frame", "imu_frame"):
+            assert buffer.can_transform(
+                f"{namespace}/base_link", f"{namespace}/{mount}", Time())
+    # Identity is asserted on the wire, not through the buffer: tf2
+    # normalises quaternions on lookup, so a wrong rotation could come
+    # back laundered to identity (a mutation escaped exactly that way).
+    assert statics, "the latched mounts must reach a late subscriber"
+    transforms = statics[-1].transforms
+    assert len(transforms) == 4, "two cars, two mounts each; base_link " \
+        "itself is a mount and gets no self edge"
+    for transform in transforms:
+        translation = transform.transform.translation
+        rotation = transform.transform.rotation
+        assert translation.x == 0.0 and translation.y == 0.0, \
+            "the sensor models cast from the vehicle origin"
+        assert rotation.w == 1.0 and rotation.x == 0.0 \
+            and rotation.y == 0.0 and rotation.z == 0.0
+
+
+def test_tf_composes_to_the_true_pose_through_the_odom_correction(
+        bridge, probe):
+    # The reckoner drifts on a tight arc (slip, spin-up, quantisation); the
+    # map -> odom correction must carry exactly that drift, so the chain
+    # map -> odom -> base_link lands on the true pose while odom ->
+    # base_link alone stays the honest belief.
+    from rclpy.time import Time
+
+    buffer = tf_buffer(probe)
+    publisher = probe.create_publisher(
+        AckermannDriveStamped, "/car_1/drive", 10)
+    command = AckermannDriveStamped()
+    # Fast on a tight arc: at the friction limit the car runs wide of the
+    # kinematic line, which is where dead reckoning genuinely breaks.
+    command.drive.speed = 3.0
+    command.drive.steering_angle = 0.25
+    for _ in range(40):
+        publisher.publish(command)
+        pump(bridge, probe, 50)
+
+    state = bridge.sim.state(1)
+    belief = buffer.lookup_transform("car_1/odom", "car_1/base_link", Time())
+    drift = math.hypot(belief.transform.translation.x - state.pos.x,
+                       belief.transform.translation.y - state.pos.y)
+    # The operating point must be reachable before the assertion means
+    # anything: without real drift, an identity correction would also pass.
+    assert drift > 0.15, f"the manoeuvre must drift the belief ({drift:.3f} m)"
+
+    composed = buffer.lookup_transform("map", "car_1/base_link", Time())
+    assert composed.transform.translation.x == pytest.approx(
+        state.pos.x, abs=0.05)
+    assert composed.transform.translation.y == pytest.approx(
+        state.pos.y, abs=0.05)
+    rotation = composed.transform.rotation
+    composed_yaw = 2.0 * math.atan2(rotation.z, rotation.w)
+    difference = math.atan2(math.sin(composed_yaw - state.yaw),
+                            math.cos(composed_yaw - state.yaw))
+    assert abs(difference) < 0.03
+
+    # And through the static mount: the scan is placeable in the map.
+    placed = buffer.lookup_transform("map", "car_1/laser_frame", Time())
+    assert placed.transform.translation.x == pytest.approx(
+        state.pos.x, abs=0.05)
+
+
+def test_tf_map_edge_declines_with_ground_truth(ros, tmp_path):
+    from rclpy.time import Time
+
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        ground_truth=False,
+        out_dir=tmp_path,
+    ))
+    probe_node = rclpy.create_node("tf_probe")
+    try:
+        buffer = tf_buffer(probe_node)
+        for _ in range(100):
+            node.step_once()
+            rclpy.spin_once(probe_node, timeout_sec=0.0)
+        # The belief stays on the wire; the truth-bearing edge does not.
+        assert buffer.lookup_transform(
+            "car_0/odom", "car_0/base_link", Time()) is not None
+        assert not buffer.can_transform("map", "car_0/odom", Time()), \
+            "declining ground truth must also decline the map edge"
+    finally:
+        probe_node.destroy_node()
+        node.destroy_node()
+
+
+def test_tf_can_be_declined_entirely_and_the_manifest_says_so(ros, tmp_path):
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        tf=False,
+        out_dir=tmp_path,
+    ))
+    try:
+        for _ in range(50):
+            node.step_once()
+        # No TF publisher exists at all: disabled means absent, not silent.
+        assert node._tf_pub is None and node._tf_static_pub is None
+        out = node.write_manifests()
+        manifest = json.loads(
+            (out / "bridge_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["tf"] is False
+    finally:
+        node.destroy_node()
 
 
 def test_ground_truth_can_be_declined_and_the_manifests_say_so(

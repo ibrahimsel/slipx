@@ -9,6 +9,12 @@ the sensors and every ray are native (ADR-0047, ADR-0049); what happens here
 is message assembly, and the RMW benchmark measures whether that is fast
 enough before anything is promised about it.
 
+TF is REP 105 shaped (ADR-0053): identity mounts on ``tf_static`` (the
+sensor models cast from the vehicle origin), ``odom -> base_link`` from the
+dead reckoner, and, only while ground truth is offered, a ``map -> odom``
+correction that makes the chain compose to the true pose. ``--no-tf``
+removes the broadcast for a stack that owns its tree.
+
 Commands hold like a servo: the latest ``AckermannDriveStamped`` per agent
 is applied every step, the steering angle directly and the speed through a
 proportional acceleration demand whose gain is a named mechanisation of the
@@ -31,18 +37,34 @@ from typing import Dict, List, Optional, Tuple
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from builtin_interfaces.msg import Time as TimeMsg
+from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import UInt64
+from tf2_msgs.msg import TFMessage
 
 import slipx
 
 from .race_sync import ACK_QOS, ANNOUNCE_QOS, STEP_TOPIC, stamp_to_step
+
+#: The QoS the tf2_ros broadcasters use, restated here because the bridge
+#: publishes TFMessage directly and keeps its imports to message packages.
+TF_QOS = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE)
+TF_STATIC_QOS = QoSProfile(
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 
 @dataclass
@@ -54,6 +76,10 @@ class BridgeConfig:
     real_time_factor: float = 1.0
     ground_truth: bool = True
     ground_truth_rate_hz: float = 100.0
+    # TF (ADR-0053): the dead reckoner's odom -> base_link, identity mounts
+    # on tf_static, and, only while ground truth is offered, the map -> odom
+    # correction that makes the chain compose to the true pose.
+    tf: bool = True
     clock_rate_hz: float = 100.0
     # The speed loop standing in for a VESC's controller: a mechanisation,
     # named here rather than buried (the same rule RaceConfig follows).
@@ -216,13 +242,15 @@ class Bridge(Node):
             self.rig.attach(index, sensors)
 
         # Frame ids come from each sensor's mount, the field carried for
-        # exactly this, prefixed with the agent's namespace.
+        # exactly this, prefixed with the agent's namespace. Unlike topics
+        # the prefix has no leading slash: tf2 refuses to look up any frame
+        # that starts with one, so a slashed frame id can never join a tree.
         self._frames: List[Dict[str, str]] = []
         for index, car in enumerate(self.cars):
             frames: Dict[str, str] = {}
             for entry in car.spec.sensors:
                 mount = entry.get("mount", entry["name"])
-                frames[entry["name"]] = f"{self._ns(index)}/{mount}"
+                frames[entry["name"]] = f"{self._frame_ns(index)}/{mount}"
             self._frames.append(frames)
 
         # The encoder's own pose belief, dead-reckoned like a VESC driver's.
@@ -265,6 +293,17 @@ class Bridge(Node):
                     UInt64, f"{ns}/drive_ack",
                     self._make_ack_callback(index), ACK_QOS)
 
+        # TF (ADR-0053). The mounts are latched once and are identity: the
+        # sensor models cast from the vehicle origin, so identity is the
+        # modelled truth, not a convenience.
+        self._tf_pub: Optional[object] = None
+        self._tf_static_pub: Optional[object] = None
+        if config.tf:
+            self._tf_pub = self.create_publisher(TFMessage, "/tf", TF_QOS)
+            self._tf_static_pub = self.create_publisher(
+                TFMessage, "/tf_static", TF_STATIC_QOS)
+            self._tf_static_pub.publish(self._static_mounts())
+
         self._clock_pub = self.create_publisher(Clock, "/clock", 10)
         dt = self.sim.dt
         self._clock_divisor = max(1, round(1.0 / (dt * config.clock_rate_hz)))
@@ -289,6 +328,63 @@ class Bridge(Node):
 
     def _ns(self, index: int) -> str:
         return f"/{self.config.namespace}{index}"
+
+    def _frame_ns(self, index: int) -> str:
+        """The agent's frame prefix: the topic namespace without the leading
+        slash, which tf2 forbids in a frame id."""
+        return f"{self.config.namespace}{index}"
+
+    def _static_mounts(self) -> TFMessage:
+        """base_link to every sensor mount, identity, latched once."""
+        message = TFMessage()
+        for index in range(len(self.cars)):
+            base = f"{self._frame_ns(index)}/base_link"
+            for frame in sorted(set(self._frames[index].values())):
+                if frame == base:
+                    continue
+                transform = TransformStamped()
+                transform.header.stamp = _sim_time(0.0)
+                transform.header.frame_id = base
+                transform.child_frame_id = frame
+                transform.transform.rotation.w = 1.0
+                message.transforms.append(transform)
+        return message
+
+    def _odom_edge(self, index: int, now: float) -> TransformStamped:
+        """odom to base_link: the dead reckoner's belief, as a transform."""
+        reckoned = self._reckoned[index]
+        transform = TransformStamped()
+        transform.header.stamp = _sim_time(now)
+        transform.header.frame_id = f"{self._frame_ns(index)}/odom"
+        transform.child_frame_id = f"{self._frame_ns(index)}/base_link"
+        transform.transform.translation.x = reckoned["x"]
+        transform.transform.translation.y = reckoned["y"]
+        _yaw_to_quaternion(transform.transform.rotation, reckoned["yaw"])
+        return transform
+
+    def _map_correction(self, index: int, now: float) -> TransformStamped:
+        """map to odom, chosen so the chain composes to the true pose.
+
+        The correction a perfect localiser would publish (REP 105): with
+        truth T and belief R as poses, the edge is T composed with the
+        inverse of R, so map -> odom -> base_link lands exactly on T while
+        odom -> base_link alone stays the honest, drifting belief.
+        """
+        state = self.sim.state(index)
+        reckoned = self._reckoned[index]
+        yaw = state.yaw - reckoned["yaw"]
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        transform = TransformStamped()
+        transform.header.stamp = _sim_time(now)
+        transform.header.frame_id = "map"
+        transform.child_frame_id = f"{self._frame_ns(index)}/odom"
+        transform.transform.translation.x = state.pos.x - (
+            cos_yaw * reckoned["x"] - sin_yaw * reckoned["y"])
+        transform.transform.translation.y = state.pos.y - (
+            sin_yaw * reckoned["x"] + cos_yaw * reckoned["y"])
+        _yaw_to_quaternion(transform.transform.rotation, yaw)
+        return transform
 
     def _translate(self, index: int, steer: float, speed: float,
                    vx: float) -> "slipx.DriveInput":
@@ -431,6 +527,15 @@ class Bridge(Node):
             for index, publisher in enumerate(self._gt_pubs):
                 publisher.publish(self._ground_truth(index, now))
 
+        if self._tf_pub is not None and steps % self._gt_divisor == 0:
+            message = TFMessage()
+            for index in range(len(self.cars)):
+                message.transforms.append(self._odom_edge(index, now))
+                if self.config.ground_truth:
+                    message.transforms.append(
+                        self._map_correction(index, now))
+            self._tf_pub.publish(message)
+
     # ------------------------------------------------------------- messages
 
     def _laser_scan(self, index: int, lidar, scan) -> LaserScan:
@@ -438,7 +543,7 @@ class Bridge(Node):
         msg = LaserScan()
         msg.header.stamp = _sim_time(scan.stamp_time)
         msg.header.frame_id = self._frames[index].get(
-            lidar.name, f"{self._ns(index)}/{lidar.name}")
+            lidar.name, f"{self._frame_ns(index)}/{lidar.name}")
         msg.angle_min = spec.angle_min
         span = spec.angle_max - spec.angle_min
         msg.angle_increment = span / float(spec.rays)
@@ -459,7 +564,7 @@ class Bridge(Node):
         msg = Imu()
         msg.header.stamp = _sim_time(reading.stamp_time)
         msg.header.frame_id = self._frames[index].get(
-            imu.name, f"{self._ns(index)}/{imu.name}")
+            imu.name, f"{self._frame_ns(index)}/{imu.name}")
         msg.linear_acceleration.x = sample.ax
         msg.linear_acceleration.y = sample.ay
         msg.linear_acceleration.z = sample.az
@@ -485,9 +590,9 @@ class Bridge(Node):
 
         msg = Odometry()
         msg.header.stamp = _sim_time(reading.stamp_time)
-        msg.header.frame_id = f"{self._ns(index)}/odom"
+        msg.header.frame_id = f"{self._frame_ns(index)}/odom"
         msg.child_frame_id = self._frames[index].get(
-            encoder.name, f"{self._ns(index)}/base_link")
+            encoder.name, f"{self._frame_ns(index)}/base_link")
         msg.pose.pose.position.x = reckoned["x"]
         msg.pose.pose.position.y = reckoned["y"]
         _yaw_to_quaternion(msg.pose.pose.orientation, reckoned["yaw"])
@@ -499,7 +604,7 @@ class Bridge(Node):
         msg = Odometry()
         msg.header.stamp = _sim_time(now)
         msg.header.frame_id = "map"
-        msg.child_frame_id = f"{self._ns(index)}/base_link"
+        msg.child_frame_id = f"{self._frame_ns(index)}/base_link"
         msg.pose.pose.position.x = state.pos.x
         msg.pose.pose.position.y = state.pos.y
         _yaw_to_quaternion(msg.pose.pose.orientation, state.yaw)
@@ -530,6 +635,7 @@ class Bridge(Node):
             "track": str(self.config.track_dir),
             "cars": [str(path) for path in self.config.car_dirs],
             "ground_truth": self.config.ground_truth,
+            "tf": self.config.tf,
             "real_time_factor": self.config.real_time_factor,
             "speed_gain": self.config.speed_gain,
             "seed": self.config.seed,
@@ -559,8 +665,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                         type=Path, help="car directory; repeat per agent")
     parser.add_argument("--real-time-factor", type=float, default=1.0)
     parser.add_argument("--no-ground-truth", action="store_true",
-                        help="do not offer ground truth topics; recorded in "
-                             "the bridge manifest")
+                        help="do not offer ground truth topics or the map "
+                             "TF edge; recorded in the bridge manifest")
+    parser.add_argument("--no-tf", action="store_true",
+                        help="do not broadcast TF at all, for a stack that "
+                             "owns its tree; recorded in the bridge manifest")
     parser.add_argument("--speed-gain", type=float, default=4.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None,
@@ -580,6 +689,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         car_dirs=list(arguments.cars),
         real_time_factor=arguments.real_time_factor,
         ground_truth=not arguments.no_ground_truth,
+        tf=not arguments.no_tf,
         speed_gain=arguments.speed_gain,
         seed=arguments.seed,
         out_dir=arguments.out,

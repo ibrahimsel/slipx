@@ -611,7 +611,16 @@ directories and must respect the downward dependency order
   agree with the same trajectory. The support matrix the task names is
   published in docs/reference/ros-bridge.md (Jazzy tested; rolling
   expected, untested), alongside the transport recommendation of
-  ADR-0052. The tick still waits for the external
+  ADR-0052. TF added 2026-08-20 (ADR-0053): REP 105 shaped, identity
+  mounts on tf_static (the sensor models cast from the vehicle origin),
+  odom to base_link from the dead reckoner, and a map to odom correction
+  composing the chain to the true pose, gated by the same switch as
+  ground truth; --no-tf removes the broadcast, and frame ids lost the
+  leading slash tf2 refuses to look up. Mutation pass over the TF code:
+  12 tried, 11 caught first time; the escape (a non-identity mount
+  rotation laundered back to identity by tf2's quaternion normalisation
+  on lookup) became a wire-level test on /tf_static, then 12/12.
+  The tick still waits for the external
   exit condition: an existing F1TENTH stack connecting with a remap
   file, which is the outreach the user runs; the two-machine lockstep
   measurement rides with it.

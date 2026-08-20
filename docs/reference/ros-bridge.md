@@ -26,7 +26,8 @@ Topic names are the sensor names from the car's `sensors.yaml`, which the
 schema has always defined as topic names; the reference car names its
 sensors `scan`, `imu` and `odom`, so an existing stack connects with a
 topic remap file and no code change. Frame ids are each sensor's `mount`,
-prefixed with the agent namespace.
+prefixed with the agent namespace without a leading slash: tf2 refuses to
+look up a frame that starts with one.
 
 What the messages mean is SlipX's usual honesty on the wire. An invalid
 ray is NaN in `ranges`, never a zero that reads as a wall against the
@@ -41,6 +42,27 @@ Commands hold like a servo: the latest `drive` message is applied every
 step, the steering angle directly, the speed through a proportional
 acceleration demand whose gain (`--speed-gain`) is a stated mechanisation
 of a VESC's speed loop.
+
+## The TF tree
+
+REP 105 shaped, per agent (ADR-0053). `car_N/base_link` to each sensor
+mount on `/tf_static`, identity because the sensor models cast from the
+vehicle origin; `car_N/odom` to `car_N/base_link` on `/tf`, the dead
+reckoner's belief, the same one the `odom` topic carries; and, only while
+ground truth is offered, `map` to `car_N/odom`, the correction a perfect
+localiser would publish, computed so the chain composes to the true pose.
+Declining ground truth declines the map edge with it, and `--no-tf`
+removes the broadcast entirely, for a stack that owns its tree; both
+choices are recorded in the bridge manifest. A stack that runs its own
+localiser publishes that same map edge, and tf2 keeps whichever authority
+spoke last: the car snaps between the estimate and the truth, and the
+symptom reads as a broken filter. Such a stack launches with
+`--no-ground-truth` (keeping the belief edge) or `--no-tf`.
+
+To watch a run: RViz with fixed frame `map` places every scan and pose.
+Without the map edge, fix on `car_N/odom` instead, and the scan sits in
+the belief's frame, off the true one by exactly as far as the belief has
+drifted.
 
 ## Two ways to run
 

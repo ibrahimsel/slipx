@@ -8,7 +8,7 @@ car directories through the same loaders every other consumer uses, steps a
 validation-mode simulation paced against the wall clock, and speaks the
 F1TENTH dialect per agent under ``/car_N/``: ``drive`` in, ``scan``, ``imu``,
 ``odom`` and (unless disabled) ``ground_truth/odom`` out, with ``/clock``
-for ``use_sim_time``.
+for ``use_sim_time`` and a REP 105 shaped TF tree (ADR-0053).
 
 Not part of the wheel: rclpy is a ROS package, not a pip dependency, so this
 package is used from a sourced ROS 2 environment, in tree or installed by
