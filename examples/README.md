@@ -62,6 +62,23 @@ cmake -S . -B build && cmake --build build -j
 python3 examples/ghost_race_figure.py /tmp/race
 ```
 
+## The ROS demo
+
+These need a sourced ROS 2 environment on top of the checkout, because they
+drive the bridge (`docs/reference/ros-bridge.md`).
+
+| File | What it is for |
+|---|---|
+| [`ros/watch_a_race.sh`](ros/watch_a_race.sh) | Bridge, driver and RViz in one command: `./examples/ros/watch_a_race.sh 20 gap`. Closing RViz stops the rest. |
+| [`ros/race_demo_driver.py`](ros/race_demo_driver.py) | One node driving all N agents, mirroring the reference stack's split: `gap` follows the farthest gap in the scan alone, so opponents are avoided because they appear in the scan exactly as walls do; `pursuit` is pure pursuit on ground truth against the centreline, and parades. |
+| [`ros/make_race_rviz.py`](ros/make_race_rviz.py) | Generates the RViz config: the latched map, and each car's scan and pose in its own colour. |
+
+Unlike the ghost race, the bridge declares each car's collision footprint,
+so this field jostles for real. The walls do not push back, however: contact
+exists between agents, not between an agent and the track, so a hard enough
+bump in traffic can put a car on the wrong side of a wall, where its scan
+shows it exactly what happened.
+
 A ghost race is not a race, and the code says so in more places than this one.
 These cars declare no collision footprints (contact exists between agents
 that declare one, ADR-0043) and there is no race control until P3, so they
