@@ -20,7 +20,14 @@ __pycache__/
 
 # determinism artefacts produced by a local run
 *.manifest.json
+runs/
+*.mcap
+*.rrd
+/lap.svg
 
 # Agents
 
 CLAUDE.local.md
+
+# IDE
+.vscode/
