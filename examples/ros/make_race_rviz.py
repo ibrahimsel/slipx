@@ -1,9 +1,13 @@
 # Copyright 2026 The SlipX Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Generate an RViz config for watching a bridge race: the latched map,
-# the TF tree, and per-car scans and ground-truth arrows, each car in its
-# own colour. Stdlib only.
+# Generate an RViz config for watching a bridge race: the latched map, a
+# car body per agent, and per-car scans, each car in its own colour. The
+# bodies are small URDFs written next to the config, one per car so each
+# carries its own colour, loaded by RViz from file and placed by the TF
+# the bridge already broadcasts (car_N/base_link); every visual hangs off
+# that one link, so no joint state is needed. Dimensions come from the
+# car's own dynamics.yaml rather than being retyped here.
 
 from __future__ import annotations
 
@@ -13,10 +17,70 @@ import csv
 import math
 from pathlib import Path
 
+import yaml
 
-def car_colour(index: int, agents: int) -> str:
-    r, g, b = colorsys.hsv_to_rgb(index / max(agents, 1), 0.85, 0.95)
-    return f"{int(r * 255)}; {int(g * 255)}; {int(b * 255)}"
+
+def car_colour(index: int, agents: int) -> tuple:
+    return colorsys.hsv_to_rgb(index / max(agents, 1), 0.85, 0.95)
+
+
+def rviz_colour(rgb: tuple) -> str:
+    return "; ".join(str(int(c * 255)) for c in rgb)
+
+
+def urdf_colour(rgb: tuple) -> str:
+    return f"{rgb[0]:.3f} {rgb[1]:.3f} {rgb[2]:.3f} 1.0"
+
+
+def car_urdf(name: str, rgb: tuple, geometry: dict) -> str:
+    """One link, every visual on it. The chassis and the nose wear the
+    car's colour and a heading mark; wheels and the lidar puck do not."""
+    length = float(geometry["length"])
+    width = float(geometry["width"])
+    lf = float(geometry["lf"])
+    lr = float(geometry["lr"])
+    half_track = 0.5 * float(geometry["track_front"])
+    wheel_r = float(geometry["wheel_radius"])
+    wheel_w = 0.05
+
+    def wheel(x: float, y: float) -> str:
+        return f"""
+    <visual>
+      <origin xyz="{x:.3f} {y:.3f} {wheel_r:.3f}" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="{wheel_r:.3f}" length="{wheel_w:.3f}"/></geometry>
+      <material name="tyre"/>
+    </visual>"""
+
+    wheels = "".join(
+        wheel(x, y)
+        for x in (lf, -lr)
+        for y in (half_track, -half_track)
+    )
+    return f"""<?xml version="1.0"?>
+<robot name="{name}">
+  <material name="body"><color rgba="{urdf_colour(rgb)}"/></material>
+  <material name="tyre"><color rgba="0.08 0.08 0.08 1.0"/></material>
+  <material name="nose"><color rgba="0.95 0.95 0.95 1.0"/></material>
+  <material name="puck"><color rgba="0.25 0.25 0.28 1.0"/></material>
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 {wheel_r + 0.025:.3f}" rpy="0 0 0"/>
+      <geometry><box size="{length:.3f} {0.6 * width:.3f} 0.05"/></geometry>
+      <material name="body"/>
+    </visual>
+    <visual>
+      <origin xyz="{0.5 * length - 0.05:.3f} 0 {wheel_r + 0.055:.3f}" rpy="0 0 0"/>
+      <geometry><box size="0.10 {0.6 * width:.3f} 0.012"/></geometry>
+      <material name="nose"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 {wheel_r + 0.075:.3f}" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.035" length="0.05"/></geometry>
+      <material name="puck"/>
+    </visual>{wheels}
+  </link>
+</robot>
+"""
 
 
 def main() -> int:
@@ -25,8 +89,15 @@ def main() -> int:
     parser.add_argument("--namespace", default="car_")
     parser.add_argument("--track", type=Path, required=True,
                         help="track directory, for centring the view")
+    parser.add_argument("--car", type=Path,
+                        default=Path(__file__).resolve().parents[1]
+                        / "cars" / "reference_1_10",
+                        help="car directory, for the body dimensions")
     parser.add_argument("--out", type=Path, default=Path("race.rviz"))
     arguments = parser.parse_args()
+
+    with open(arguments.car / "dynamics.yaml", encoding="utf-8") as handle:
+        geometry = yaml.safe_load(handle)["geometry"]
 
     xs, ys = [], []
     with open(arguments.track / "centreline.csv", encoding="utf-8",
@@ -39,7 +110,10 @@ def main() -> int:
     centre_x = 0.5 * (min(xs) + max(xs))
     centre_y = 0.5 * (min(ys) + max(ys))
     extent = max(max(xs) - min(xs), max(ys) - min(ys)) + 4.0
-    scale = 800.0 / extent
+    scale = 900.0 / extent
+
+    out_dir = arguments.out.resolve().parent
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     displays = ["""    - Class: rviz_default_plugins/Map
       Enabled: true
@@ -62,8 +136,19 @@ def main() -> int:
 
     for index in range(arguments.agents):
         ns = f"/{arguments.namespace}{index}"
-        colour = car_colour(index, arguments.agents)
-        displays.append(f"""    - Class: rviz_default_plugins/LaserScan
+        rgb = car_colour(index, arguments.agents)
+        urdf_path = out_dir / f"race_car_{index}.urdf"
+        urdf_path.write_text(
+            car_urdf(f"race_car_{index}", rgb, geometry), encoding="utf-8")
+        displays.append(f"""    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: model {index}
+      Description Source: File
+      Description File: {urdf_path}
+      TF Prefix: {arguments.namespace}{index}
+      Visual Enabled: true
+      Alpha: 1
+    - Class: rviz_default_plugins/LaserScan
       Enabled: true
       Name: scan {index}
       Topic:
@@ -73,13 +158,13 @@ def main() -> int:
         History Policy: Keep Last
         Reliability Policy: Best Effort
       Color Transformer: FlatColor
-      Color: {colour}
+      Color: {rviz_colour(rgb)}
       Style: Points
       Size (Pixels): 2
       Alpha: 0.7
       Decay Time: 0
     - Class: rviz_default_plugins/Odometry
-      Enabled: true
+      Enabled: false
       Name: car {index}
       Topic:
         Value: {ns}/ground_truth/odom
@@ -89,7 +174,7 @@ def main() -> int:
         Reliability Policy: Reliable
       Shape:
         Value: Arrow
-        Color: {colour}
+        Color: {rviz_colour(rgb)}
         Alpha: 1
         Shaft Length: 0.35
         Shaft Radius: 0.05
@@ -130,7 +215,7 @@ Window Geometry:
   Width: 1400
 """
     arguments.out.write_text(config, encoding="utf-8")
-    print(f"wrote {arguments.out} for {arguments.agents} agents "
+    print(f"wrote {arguments.out} and {arguments.agents} car bodies "
           f"(view centred {centre_x:.1f}, {centre_y:.1f}, "
           f"scale {scale:.0f} px/m)")
     return 0

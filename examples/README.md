@@ -71,7 +71,7 @@ drive the bridge (`docs/reference/ros-bridge.md`).
 |---|---|
 | [`ros/watch_a_race.sh`](ros/watch_a_race.sh) | Bridge, driver and RViz in one command: `./examples/ros/watch_a_race.sh 20 gap`. Closing RViz stops the rest. |
 | [`ros/race_demo_driver.py`](ros/race_demo_driver.py) | One node driving all N agents, mirroring the reference stack's split: `gap` follows the farthest gap in the scan alone, so opponents are avoided because they appear in the scan exactly as walls do; `pursuit` is pure pursuit on ground truth against the centreline, and parades. |
-| [`ros/make_race_rviz.py`](ros/make_race_rviz.py) | Generates the RViz config: the latched map, and each car's scan and pose in its own colour. |
+| [`ros/make_race_rviz.py`](ros/make_race_rviz.py) | Generates the RViz config and a small URDF body per car, dimensioned from the car's own dynamics.yaml: the latched map, and each car's body and scan in its own colour, placed by the TF the bridge broadcasts. |
 
 Unlike the ghost race, the bridge declares each car's collision footprint,
 so this field jostles for real. The walls do not push back, however: contact
