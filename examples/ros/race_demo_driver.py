@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
@@ -221,11 +222,15 @@ def main() -> int:
     node = Driver(arguments)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # rclpy's signal handler raises the second of these out of spin on
+        # SIGTERM; both simply mean the race is over.
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # try_shutdown, because rclpy's own signal handler has usually shut
+        # the context first, and shutting twice is a traceback at every exit.
+        rclpy.try_shutdown()
     return 0
 
 
