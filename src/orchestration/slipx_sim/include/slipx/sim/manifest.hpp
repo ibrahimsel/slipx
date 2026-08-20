@@ -97,6 +97,14 @@ struct RunManifest {
   double contact_friction = 0.0;            //                          [-]
   double contact_restitution_min_speed = 0.0;  //                     [m/s]
 
+  // The walls (ADR-0055): how many immovable segments stood in the run,
+  // and a digest over their coordinates in order. Configuration for the
+  // same reason the contact constants are: a race with walls is not the
+  // race without them. Zero segments and an empty digest when none were
+  // added, which is also every run recorded before walls existed.
+  std::uint64_t wall_segments = 0;
+  std::string walls_digest;
+
   std::vector<AgentManifest> agents;
 
   // True when any agent takes commands from a mailbox under a non-wait

@@ -1569,6 +1569,58 @@ def fig_contact_impulse():
     f.save("contact-impulse.svg")
 
 
+def fig_wall_side_rule():
+    """SCHEMATIC: resolving overlap with a zero-thickness wall.
+
+    Two panels, same wall, same car, different rule. Left: the overlap is
+    removed toward the side the car's centre is on, whatever that costs.
+    Right: the overlap is removed toward the NEARER side, which reverses
+    the moment the centre crosses the line, and the car is helpfully
+    pushed out the far side. The assertions keep each panel's centre on
+    the side its arrow claims.
+    """
+    f = Fig(720, 400, "A thin wall resolved to the centre's side, against "
+                      "the least-effort rule that squeezes cars through")
+    f.head("A wall has no thickness, so a side must be chosen",
+           "The same overlapping car under two resolution rules. Only one "
+           "of them keeps walls solid.")
+
+    bw, bh = 150, 80   # the car, drawn side-on to a vertical wall
+
+    def panel(x0, wall_x, cx, label, push, verdict, cls):
+        # The wall: a line, not a box, because that is the whole problem.
+        f.line(wall_x, 96, wall_x, 320, "fg")
+        f.text(wall_x + 7, 108, "the wall", "ts")
+        f.rot_rect(cx, 200, bw, bh, 0)
+        f.circle(cx, 200, 3.4, "a2f")
+        f.text(cx, 226, "centre", "ts", "middle")
+        # The resolution arrow, from the centre, the way the rule pushes.
+        f.line(cx, 200, cx + push, 200, cls, arrow=True)
+        f.text(x0 + 150, 82, label, "tm", "middle")
+        f.text(x0 + 150, 342, verdict, "ts", "middle")
+        return cx
+
+    # Left: overlapping, centre still on the track side; pushed back.
+    lw = 250
+    lc = panel(30, lw, lw - 45, "resolve toward the centre", -70,
+               "the car ends the step on its own side", "ok")
+    assert lc < lw, "the left panel's centre must be on the near side"
+
+    # Right: one step deeper, the centre has crossed; the least-effort rule
+    # now pushes the SHORTER way, which is out the far side.
+    rw = 560
+    rc = panel(370, rw, rw + 25, "resolve the cheapest overlap", 80,
+               "the centre crossed, so cheap now means through", "a2")
+    assert rc > rw, "the right panel's centre must have crossed the line"
+    # The overlap being resolved must exist in both panels.
+    assert abs(lc - lw) < bw / 2 and abs(rc - rw) < bw / 2
+
+    f.text(30, 370, "the guard: the centre may never cross between checks,", "ts")
+    f.text(30, 386, "so one step's travel must stay below the half-width "
+                    "(4 mm against 150 mm at 4 m/s and 1 kHz)", "ts")
+    f.save("wall-side-rule.svg")
+
+
 def main():
     print("writing figures to docs/racing/assets/")
     for fn in (fig_slip_angle, fig_tyre_curve, fig_load_sensitivity,
@@ -1580,7 +1632,8 @@ def main():
                fig_understeer_oversteer, fig_racing_line, fig_gg_diagram,
                fig_speed_profile,
                fig_differential_speeds, fig_torque_speed, fig_servo_step,
-               fig_cross_tier_crossover, fig_contact_impulse):
+               fig_cross_tier_crossover, fig_contact_impulse,
+               fig_wall_side_rule):
         fn()
     print("done")
 

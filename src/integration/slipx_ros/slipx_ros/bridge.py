@@ -257,6 +257,12 @@ class Bridge(Node):
             for lidar in sensors.lidars:
                 max_range = max(max_range, lidar.spec.range_max)
         self.world = slipx.TrackWorld(self.track, self.sim, max_range)
+        # The walls the scans see are the walls the physics enforces: the
+        # raycaster's own polylines, handed straight across, so a car can no
+        # more end a step across a wall than a ray can pass one. Latched
+        # here because walls must precede the first advance.
+        self.sim.add_wall(self.world.wall_left, self.track.closed)
+        self.sim.add_wall(self.world.wall_right, self.track.closed)
         self.rig = slipx.SensorRig(self.sim, self.world, seed=config.seed)
         for index, sensors in enumerate(self._sensors):
             self.rig.attach(index, sensors)

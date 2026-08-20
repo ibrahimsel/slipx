@@ -300,6 +300,38 @@ def test_contact_crosses_the_boundary() -> None:
         sim.add_agent(half)
 
 
+def test_walls_cross_the_boundary() -> None:
+    # The wall physics is tested in C++ (test_contact.cpp, test_wall_sim.cpp);
+    # here: a polyline of plain (x, y) tuples arrives, a footprinted car
+    # cannot end a step across it, the latch refuses late walls by name, and
+    # the manifest fields round-trip.
+    car = slipx.load_reference_car()
+    geometry = car.spec.raw["dynamics"]["geometry"]
+
+    sim = slipx.Simulation()
+    sim.add_wall([(2.0, -50.0), (2.0, 50.0)], closed=False)
+    assert sim.wall_segment_count == 1
+
+    spec = slipx.AgentSpec()
+    spec.tier = slipx.Tier.L1_Bicycle
+    spec.initial_state.vel_body.x = 6.0
+    spec.footprint_length = geometry["length"]
+    spec.footprint_width = geometry["width"]
+    sim.add_agent(spec)
+    sim.run_for(1.5)
+    assert sim.state(0).pos.x + geometry["length"] / 2.0 <= 2.0 + 1e-9, (
+        "the car ended a step across the wall"
+    )
+
+    manifest = sim.manifest()
+    assert manifest.wall_segments == 1
+    assert manifest.walls_digest != ""
+    assert '"wall_segments": 1' in manifest.to_json()
+
+    with pytest.raises(ValueError, match="before the first advance"):
+        sim.add_wall([(5.0, -1.0), (5.0, 1.0)], closed=False)
+
+
 def test_the_barrier_crosses_the_boundary() -> None:
     # The barrier semantics are tested in C++ (test_barrier.cpp); here: the
     # mailbox works from a Python thread while the simulation blocks on a

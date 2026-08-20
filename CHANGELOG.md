@@ -21,6 +21,20 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **Cars collide with walls** (ADR-0055). Wall polylines are immovable
+  contact geometry in the simulation: `Simulation.add_wall` latches them
+  before the first advance, a pure segment-versus-footprint function in
+  the core (`segment_contact`) resolves them through the same impulse as
+  car-to-car contact, and the penetration is always removed toward the
+  side of the wall line the car's centre is on, which is what stops a car
+  squeezing through a zero-thickness polyline. Wall contacts are reported
+  as `WallContactEvent`s, and the wall segment count and coordinate
+  digest join the manifest and its configuration digest. The ROS bridge
+  hands the raycaster's own polylines across, so the walls a LiDAR sees
+  are the walls a bumper feels and the RViz race demo no longer loses
+  cars through the fence. No walls added means bit-identical
+  trajectories: the reference rows were re-checked, not re-measured.
+  Article 19 explains the concept.
 - **The bridge broadcasts a REP 105 TF tree** (ADR-0053). Identity mounts
   on `tf_static` (the sensor models cast from the vehicle origin),
   `odom` to `base_link` from the dead reckoner, and, only while ground

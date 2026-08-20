@@ -161,6 +161,18 @@ def test_the_scan_crosses_the_wire_with_nan_never_zero(bridge, probe):
     assert forward < 1.5
 
 
+def test_the_walls_are_physics_not_just_pixels(bridge):
+    # The polylines the scans and the map are built from are also latched
+    # into the simulation as immovable contact geometry, so a car can no
+    # more end a step across a wall than a ray can pass one. On a closed
+    # track every wall point starts one segment.
+    expected = len(bridge.world.wall_left) + len(bridge.world.wall_right)
+    assert bridge.sim.wall_segment_count == expected
+    manifest = bridge.sim.manifest()
+    assert manifest.wall_segments == expected
+    assert manifest.walls_digest != ""
+
+
 def test_odometry_is_the_encoders_belief(bridge, probe):
     # The front car again, driven to a steady speed before comparing: under
     # acceleration the driven wheels spin faster than the ground goes past,

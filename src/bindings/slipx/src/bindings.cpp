@@ -552,6 +552,12 @@ PYBIND11_MODULE(_slipx, m) {
       .def_readonly("contact_friction", &RunManifest::contact_friction)
       .def_readonly("contact_restitution_min_speed",
                     &RunManifest::contact_restitution_min_speed)
+      .def_readonly("wall_segments", &RunManifest::wall_segments,
+                    "How many immovable wall segments stood in the run; "
+                    "zero for every run recorded before walls existed.")
+      .def_readonly("walls_digest", &RunManifest::walls_digest,
+                    "Digest over the wall coordinates in order; empty when "
+                    "no walls were added.")
       .def_readonly("timing_dependent_commands",
                     &RunManifest::timing_dependent_commands,
                     "True when barrier misses were decided by a wall clock: "
@@ -776,7 +782,28 @@ PYBIND11_MODULE(_slipx, m) {
            py::arg("enabled"))
       .def_property_readonly("input_logging", &Simulation::input_logging)
       .def("input_log", &Simulation::input_log,
-           "Flat, step-major: entry (step * agent_count + agent).");
+           "Flat, step-major: entry (step * agent_count + agent).")
+      .def(
+          "add_wall",
+          [](Simulation& self,
+             const std::vector<std::pair<double, double>>& points,
+             bool closed) {
+            std::vector<Vec2> converted;
+            converted.reserve(points.size());
+            for (const auto& point : points) {
+              converted.push_back(Vec2{point.first, point.second});
+            }
+            self.add_wall(converted, closed);
+          },
+          py::arg("points"), py::arg("closed"),
+          "A wall polyline as immovable contact geometry: every footprinted "
+          "agent collides with it through the same impulse the pair pass "
+          "uses. Pass TrackWorld.wall_left and wall_right so the physics "
+          "walls are exactly the scan's walls. Latched before the first "
+          "advance; reset() keeps them; with no walls added every wall-free "
+          "trajectory stays bit-identical.")
+      .def_property_readonly("wall_segment_count",
+                             &Simulation::wall_segment_count);
 
   // ----------------------------------------------------- sensors (ADR-0047)
   //

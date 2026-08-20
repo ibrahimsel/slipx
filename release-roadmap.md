@@ -1075,6 +1075,42 @@ computed, and the conformance script re-checked all six rows.)
   ignored, incident edge most-parallel, contact pass dropped from advance
   and from replay, frozen car given inverse mass, self-contact, second
   agent's footprint not required, footprints left out of the digest.
+  Walls added 2026-08-20 (ADR-0055), the decision ADR-0043 deferred,
+  forced by the bridge: in the RViz race demo walls existed only to the
+  LiDAR, so a car shoved sideways at one left the map through it (race
+  control's border rule covers C++ races; the bridge runs no race
+  control). `segment_contact` in the core clips the wall segment to the
+  footprint and removes the penetration along the line normal toward the
+  car's CENTRE, never the minimum overlap, which is the rule that stops a
+  zero-thickness polyline being squeezed through; the centre cannot cross
+  between resolved steps below 150 m/s at 1 kHz, re-check on any step
+  change. `Simulation::add_wall` latches polylines before the first
+  advance (reset keeps them, replay shares the pass), walls resolve after
+  pairs so a pair shove into a wall is pushed back out the same step,
+  `WallContactEvent`s carry agent, segment, point, impulse and approach,
+  and the manifest folds the segment count and coordinate digest into the
+  configuration digest. No walls means bit-identical trajectories,
+  asserted in-suite and by the conformance rows. The bridge hands
+  `TrackWorld`'s own polylines across, so map, scans and physics are one
+  geometry. Article 19 explains the concept with its render-checked
+  figure. Mutation pass: 19 tried, 17 caught, one of them only after the
+  escape became a new test: an unpadded reject radius survived the suite
+  until a two-wall geometry (diagonal first wall pushing the car toward a
+  short second wall just outside the unpadded circle, normals
+  perpendicular so the pushback slides along the first wall) demanded the
+  within-pass motion pad. The other sixteen: normal never flipped toward
+  the centre, depth adding the distance, contact point as an endpoint,
+  clip misses not detected, DNF'd car still colliding, event step off by
+  one, approach reported as the wall's, the wall's zero deltas applied to
+  the car, latch dropped, closed polyline never closing, events
+  accumulating across steps, digest ignoring wall coordinates, reject
+  rejecting everything, wall pass running before pairs, bridge walls
+  dropped, bridge closed flag laundered to open. Two escapes kept as
+  measured equivalent: the degenerate-segment and parallel-slab guards
+  are subsumed by the depth check (a 2,000,000-case differential fuzz,
+  including targeted degenerate and axis-parallel classes, found zero
+  output differences bit for bit), so they stay in the code as local
+  determinism arguments rather than behaviour.
 - [x] **M7.3** Lockstep barrier protocol with per-agent acknowledgement and a
   configurable timeout policy (freeze, coast or DNF), so one hung agent cannot
   hang a race.

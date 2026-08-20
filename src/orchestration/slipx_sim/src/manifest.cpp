@@ -83,6 +83,8 @@ std::string RunManifest::configuration_digest() const {
   h.update(contact_restitution);
   h.update(contact_friction);
   h.update(contact_restitution_min_speed);
+  h.update_u64(wall_segments);
+  h.update(walls_digest);
   for (const AgentManifest& a : agents) {
     h.update(a.name);
     h.update(a.tier);
@@ -129,6 +131,8 @@ std::string RunManifest::to_json() const {
   o << "    \"contact_friction\": " << number(contact_friction) << ",\n";
   o << "    \"contact_restitution_min_speed\": "
     << number(contact_restitution_min_speed) << ",\n";
+  o << "    \"wall_segments\": " << number(wall_segments) << ",\n";
+  o << "    \"walls_digest\": " << quote(walls_digest) << ",\n";
   o << "    \"ground_truth_enabled\": "
     << (ground_truth_enabled ? "true" : "false") << "\n";
   o << "  },\n";

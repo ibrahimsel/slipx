@@ -244,6 +244,19 @@ struct ContactEvent {
   double approach_b = 0.0;   //                                        [m/s]
 };
 
+// One resolved wall contact (ADR-0055), the single-sided sibling of
+// ContactEvent: the wall is immovable, so only the car's side has anything
+// to report.
+struct WallContactEvent {
+  std::uint64_t step = 0;    // the step count after the advance that hit
+  std::uint32_t agent = 0;
+  std::uint32_t segment = 0; // index into the segments, in add_wall order
+  Vec2 point;                // contact point, world                     [m]
+  Vec2 normal;               // unit, from the wall toward the car
+  double jn = 0.0;           // normal impulse delivered               [N s]
+  double approach = 0.0;     // car's closing speed toward the wall    [m/s]
+};
+
 // Everything a running simulation is, at one instant (SIM-08).
 //
 // The vehicle state is trivially copyable by design, so the expensive part of
@@ -356,6 +369,32 @@ class Simulation {
   // polls it between steps; keeping history is the consumer's job.
   const std::vector<ContactEvent>& contacts() const { return contacts_; }
 
+  // ---------------------------------------------------------------- walls
+  //
+  // A wall polyline as immovable contact geometry (ADR-0055): every
+  // footprinted agent collides with its segments through the same impulse
+  // the pair pass uses, resolved to the side the car's centre is on.
+  // `closed` joins the last point back to the first, exactly as the
+  // raycaster treats a closed wall, so the physics walls can be the scan's
+  // walls verbatim.
+  //
+  // Walls are scenery, latched before the green flag: adding one after the
+  // first advance throws, and reset() keeps them. With no walls added the
+  // pass touches nothing, which keeps every wall-free trajectory
+  // bit-identical to what it was before walls existed. Refused by name:
+  // fewer than two points, a non-finite coordinate, a zero-length segment
+  // (consecutive duplicate points), or a closed polyline that repeats its
+  // first point.
+  void add_wall(const std::vector<Vec2>& points, bool closed);
+
+  std::size_t wall_segment_count() const { return wall_segments_.size(); }
+
+  // Every wall contact the most recent step resolved, in (agent, segment)
+  // order; the same lifecycle as contacts().
+  const std::vector<WallContactEvent>& wall_contacts() const {
+    return wall_contacts_;
+  }
+
   std::string trajectory_hash() const;
   std::string agent_trajectory_hash(std::size_t i) const;
 
@@ -417,7 +456,18 @@ class Simulation {
     double half_length = 0.0;
     double half_width = 0.0;
     double centre_offset = 0.0;   // wheelbase midpoint ahead of the CoG [m]
+    // Radius of the footprint's bounding circle, for the wall pass's cheap
+    // reject (ADR-0055). Comparisons only, so a rejected segment leaves no
+    // trace in the trajectory.
+    double bounding_radius = 0.0;
     bool has_footprint() const { return half_length > 0.0; }
+  };
+
+  // One wall segment (ADR-0055), with its bounding box cached for the
+  // reject: the box never changes, so it is computed once at add_wall.
+  struct WallSegment {
+    Vec2 a, b;
+    double min_x = 0.0, min_y = 0.0, max_x = 0.0, max_y = 0.0;
   };
 
   void hash_states();
@@ -437,9 +487,12 @@ class Simulation {
   void dnf_timeout(Agent& a);
   // The contact pass (ADR-0043), after every agent has moved: one impulse
   // per touching footprinted pair, pairs in ascending index order, one
-  // pass. Shared by advance() and replay() for the same reason step_agent
-  // is. With no footprints declared this touches nothing, which is what
-  // keeps every pre-contact trajectory bit-identical.
+  // pass; then the wall pass (ADR-0055) in ascending (agent, segment)
+  // order, walls last so a car shoved into a wall by a pair impulse is
+  // pushed back out in the same step. Shared by advance() and replay() for
+  // the same reason step_agent is. With no footprints declared and no
+  // walls added this touches nothing, which is what keeps every
+  // pre-contact trajectory bit-identical.
   void resolve_contacts();
   // Validation mode only; reads no clock in deterministic mode.
   void pace();
@@ -452,6 +505,11 @@ class Simulation {
   // count exceeds anything seen before and keeps its capacity after, so the
   // steady state allocates nothing.
   std::vector<ContactEvent> contacts_;
+  // The flattened wall segments, in add_wall order (ADR-0055), and the wall
+  // contacts of the most recent step, with the same capacity behaviour as
+  // contacts_.
+  std::vector<WallSegment> wall_segments_;
+  std::vector<WallContactEvent> wall_contacts_;
   std::vector<DriveInput> input_log_;
   std::uint64_t steps_ = 0;
   bool logging_inputs_ = false;

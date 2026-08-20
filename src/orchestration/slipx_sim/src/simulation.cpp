@@ -193,11 +193,61 @@ std::size_t Simulation::add_agent(AgentSpec spec) {
   // The footprint is the car's body, and a car's body is centred between
   // its axles, not on its CoG.
   agent.centre_offset = 0.5 * (spec.params.lf - spec.params.lr);
+  agent.bounding_radius = std::sqrt(agent.half_length * agent.half_length +
+                                    agent.half_width * agent.half_width);
 
   agents_.push_back(std::move(agent));
   // Sized once, here, so that advance() never allocates.
   pending_inputs_.resize(agents_.size());
   return index;
+}
+
+void Simulation::add_wall(const std::vector<Vec2>& points, bool closed) {
+  // Walls are scenery, latched before the green flag (ADR-0055): a wall
+  // that appears mid-run would make the manifest describe a race that was
+  // two different races.
+  if (steps_ != 0) {
+    throw std::invalid_argument(
+        "slipx_sim: walls are latched before the first advance; add them "
+        "while the step count is zero (reset() keeps them)");
+  }
+  if (points.size() < 2) {
+    throw std::invalid_argument(
+        "slipx_sim: a wall polyline needs at least two points");
+  }
+  for (std::size_t i = 0; i < points.size(); ++i) {
+    if (!std::isfinite(points[i].x) || !std::isfinite(points[i].y)) {
+      throw std::invalid_argument(
+          "slipx_sim: wall point " + std::to_string(i) +
+          " is not finite [m]");
+    }
+  }
+  if (closed && points.front().x == points.back().x &&
+      points.front().y == points.back().y) {
+    throw std::invalid_argument(
+        "slipx_sim: a closed wall repeats its first point, which would add "
+        "a zero-length closing segment; drop the duplicate");
+  }
+
+  const std::size_t spans = closed ? points.size() : points.size() - 1;
+  for (std::size_t i = 0; i < spans; ++i) {
+    const Vec2& a = points[i];
+    const Vec2& b = points[(i + 1) % points.size()];
+    if (a.x == b.x && a.y == b.y) {
+      throw std::invalid_argument(
+          "slipx_sim: wall points " + std::to_string(i) + " and " +
+          std::to_string(i + 1) +
+          " coincide, a zero-length segment; drop the duplicate");
+    }
+    WallSegment segment;
+    segment.a = a;
+    segment.b = b;
+    segment.min_x = a.x < b.x ? a.x : b.x;
+    segment.max_x = a.x < b.x ? b.x : a.x;
+    segment.min_y = a.y < b.y ? a.y : b.y;
+    segment.max_y = a.y < b.y ? b.y : a.y;
+    wall_segments_.push_back(segment);
+  }
 }
 
 void Simulation::check_index(std::size_t i) const {
@@ -253,6 +303,7 @@ void Simulation::advance() {
 // agent numbering the manifest records.
 void Simulation::resolve_contacts() {
   contacts_.clear();
+  wall_contacts_.clear();
   const auto body_of = [](const Agent& a) {
     ContactBody b;
     b.cog = a.state.pos.xy();
@@ -323,6 +374,61 @@ void Simulation::resolve_contacts() {
       event.approach_a = impulse.approach_a;
       event.approach_b = impulse.approach_b;
       contacts_.push_back(event);
+    }
+  }
+
+  // The wall pass (ADR-0055), after the pair pass so a car shoved into a
+  // wall by a pair impulse is pushed back out in the same step. Ascending
+  // (agent, segment) order, sequential like the pairs: within one agent a
+  // later segment sees the state an earlier one left. A DNF'd car is
+  // skipped outright: an immovable car against an immovable wall has
+  // nothing to exchange, and its frozen state must stay byte-identical.
+  if (wall_segments_.empty()) return;
+  for (std::size_t i = 0; i < agents_.size(); ++i) {
+    Agent& a = agents_[i];
+    if (!a.has_footprint() || a.dnf) continue;
+
+    // The reject circle: the footprint's bounding radius, doubled, because
+    // a resolution against one segment can move the centre by up to one
+    // depth (itself bounded by the radius) before a later segment of the
+    // same agent is tested against the centre computed here.
+    const double c_yaw = std::cos(a.state.yaw);
+    const double s_yaw = std::sin(a.state.yaw);
+    const double cx = a.state.pos.x + c_yaw * a.centre_offset;
+    const double cy = a.state.pos.y + s_yaw * a.centre_offset;
+    const double reach = 2.0 * a.bounding_radius;
+
+    for (std::size_t s = 0; s < wall_segments_.size(); ++s) {
+      const WallSegment& segment = wall_segments_[s];
+      if (cx + reach < segment.min_x || cx - reach > segment.max_x ||
+          cy + reach < segment.min_y || cy - reach > segment.max_y) {
+        continue;
+      }
+
+      const ContactBody body = body_of(a);
+      const ContactGeometry geometry =
+          segment_contact(segment.a, segment.b, body);
+      if (!geometry.touching) continue;
+
+      // The wall as a contact body: immovable, at rest. Its CoG is only an
+      // impulse arm, and a zero inverse inertia makes the arm irrelevant;
+      // the midpoint is recorded for the event's sake.
+      ContactBody wall;
+      wall.cog = (segment.a + segment.b) * 0.5;
+      const ContactImpulse impulse =
+          resolve_contact(wall, body, geometry, config_.contact);
+      apply(a, impulse.delta_velocity_b, impulse.delta_yaw_rate_b,
+            impulse.delta_position_b);
+
+      WallContactEvent event;
+      event.step = steps_ + 1;
+      event.agent = static_cast<std::uint32_t>(i);
+      event.segment = static_cast<std::uint32_t>(s);
+      event.point = geometry.point;
+      event.normal = geometry.normal;
+      event.jn = impulse.jn;
+      event.approach = impulse.approach_b;
+      wall_contacts_.push_back(event);
     }
   }
 }
@@ -503,6 +609,7 @@ void Simulation::reset() {
   steps_ = 0;
   input_log_.clear();
   contacts_.clear();
+  wall_contacts_.clear();
   pacing_started_ = false;
 }
 
@@ -636,6 +743,19 @@ RunManifest Simulation::manifest() const {
   m.contact_restitution = config_.contact.restitution;
   m.contact_friction = config_.contact.friction;
   m.contact_restitution_min_speed = config_.contact.restitution_min_speed;
+  m.wall_segments = wall_segments_.size();
+  if (!wall_segments_.empty()) {
+    // Coordinates in segment order (ADR-0055): two runs against different
+    // walls were different races, and this is how they are told apart.
+    TrajectoryHash walls;
+    for (const WallSegment& segment : wall_segments_) {
+      walls.update(segment.a.x);
+      walls.update(segment.a.y);
+      walls.update(segment.b.x);
+      walls.update(segment.b.y);
+    }
+    m.walls_digest = walls.hex();
+  }
 
   m.agents.reserve(agents_.size());
   m.agent_trajectory_hashes.reserve(agents_.size());

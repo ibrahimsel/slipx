@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" role="img" aria-label="A thin wall resolved to the centre's side, against the least-effort rule that squeezes cars through">
+<title>A thin wall resolved to the centre's side, against the least-effort rule that squeezes cars through</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7"
+          markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+  </marker>
+</defs>
+<style>
+  :root {
+    --paper:#ffffff; --fg:#14181d; --muted:#5b6672; --grid:#e3e7ec;
+    --accent:#c2410c; --accent2:#1d4ed8; --ok:#15803d; --warn:#a16207;
+    --body:#cfd6de; --road:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#11161c; --fg:#e8ecf1; --muted:#93a0ad; --grid:#2a323b;
+      --accent:#fb923c; --accent2:#7aa7ff; --ok:#4ade80; --warn:#eab308;
+      --body:#2b333c; --road:#1a2027;
+    }
+  }
+  .card { fill: var(--paper); }
+  .grid { stroke: var(--grid); stroke-width: 1; fill: none; }
+  .axis { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+  .mut  { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .fg   { stroke: var(--fg); stroke-width: 1.6; fill: none; }
+  .body { fill: var(--body); stroke: var(--muted); stroke-width: 1.1; }
+  .road { fill: var(--road); stroke: var(--grid); stroke-width: 1.1; }
+  .a1   { stroke: var(--accent);  stroke-width: 2.2; fill: none; }
+  .a2   { stroke: var(--accent2); stroke-width: 2.2; fill: none; }
+  .ok   { stroke: var(--ok);      stroke-width: 2.2; fill: none; }
+  .a1f  { fill: var(--accent);  stroke: none; }
+  .a2f  { fill: var(--accent2); stroke: none; }
+  .okf  { fill: var(--ok);      stroke: none; }
+  .dash { stroke-dasharray: 7 5; }
+  .dot  { stroke-dasharray: 2 4; }
+  .thin { stroke-width: 1.2; }
+  text  { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif; fill: var(--fg); }
+  .t    { font-size: 13px; }
+  .ts   { font-size: 11.5px; fill: var(--muted); }
+  .tb   { font-size: 15px; font-weight: 600; }
+  .tm   { font-size: 12px; fill: var(--muted); }
+  .k1   { font-size: 12px; fill: var(--accent); }
+  .k2   { font-size: 12px; fill: var(--accent2); }
+  .k3   { font-size: 12px; fill: var(--ok); }
+  .sb   { font-size: 0.72em; }
+</style>
+<rect class="card" x="0" y="0" width="720" height="400" rx="10"/>
+<text class="tb" x="22.00" y="28.00">A wall has no thickness, so a side must be chosen</text>
+<text class="tm" x="22.00" y="47.00">The same overlapping car under two resolution rules. Only one of them keeps walls solid.</text>
+<line class="fg" x1="250.00" y1="96.00" x2="250.00" y2="320.00"/>
+<text class="ts" x="257.00" y="108.00">the wall</text>
+<rect class="body" x="130.00" y="160.00" width="150" height="80" rx="3" transform="rotate(0 205.00 200.00)"/>
+<circle class="a2f" cx="205.00" cy="200.00" r="3.40"/>
+<text class="ts" x="205.00" y="226.00" text-anchor="middle">centre</text>
+<line class="ok" x1="205.00" y1="200.00" x2="135.00" y2="200.00" marker-end="url(#ah)"/>
+<text class="tm" x="180.00" y="82.00" text-anchor="middle">resolve toward the centre</text>
+<text class="ts" x="180.00" y="342.00" text-anchor="middle">the car ends the step on its own side</text>
+<line class="fg" x1="560.00" y1="96.00" x2="560.00" y2="320.00"/>
+<text class="ts" x="567.00" y="108.00">the wall</text>
+<rect class="body" x="510.00" y="160.00" width="150" height="80" rx="3" transform="rotate(0 585.00 200.00)"/>
+<circle class="a2f" cx="585.00" cy="200.00" r="3.40"/>
+<text class="ts" x="585.00" y="226.00" text-anchor="middle">centre</text>
+<line class="a2" x1="585.00" y1="200.00" x2="665.00" y2="200.00" marker-end="url(#ah)"/>
+<text class="tm" x="520.00" y="82.00" text-anchor="middle">resolve the cheapest overlap</text>
+<text class="ts" x="520.00" y="342.00" text-anchor="middle">the centre crossed, so cheap now means through</text>
+<text class="ts" x="30.00" y="370.00">the guard: the centre may never cross between checks,</text>
+<text class="ts" x="30.00" y="386.00">so one step's travel must stay below the half-width (4 mm against 150 mm at 4 m/s and 1 kHz)</text>
+</svg>

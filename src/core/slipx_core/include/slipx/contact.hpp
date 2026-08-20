@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Planar rigid-body contact: one impulse with restitution and Coulomb
-// friction between two oriented rectangles (ADR-0043).
+// friction between two oriented rectangles (ADR-0043), or between a
+// rectangle and an immovable wall segment (ADR-0055).
 //
 // This is the mathematics of a collision and nothing else: who touches whom,
 // and when, is the orchestrator's business, exactly as halting an agent is
@@ -266,6 +267,92 @@ inline ContactGeometry rectangle_contact(const ContactBody& a,
   out.touching = true;
   out.normal = n;
   out.depth = min_overlap;
+  return out;
+}
+
+// Contact between an immovable wall segment and a footprint (ADR-0055).
+//
+// The wall is the segment from p to q, with no thickness. Contact exists
+// when the segment passes through the body's rectangle, and the normal is
+// the segment line's unit normal oriented toward the rectangle's CENTRE, so
+// the resolution always pushes the body back to the side its centre is on.
+// Resolving along the minimum-overlap axis instead would push a body whose
+// centre had crossed the line out the far side, which is how a car squeezes
+// through a wall; the centre-side rule cannot, provided one step's motion
+// stays below the footprint's smallest half-extent (at 1 kHz and 40 m/s a
+// car moves 4 cm per step against a 0.15 m half-width, so the failure is
+// unreachable; a step-size change must re-check this arithmetic, exactly as
+// the pair test's tunnelling note says).
+//
+// The contact point is the midpoint of the segment clipped to the
+// rectangle. Near a polyline joint two segments each report a contact and
+// the caller resolves them in its fixed order, the same order-dependence
+// the pair pass accepts. A body centre exactly on the line keeps the
+// normal the segment's own winding gives (p to q rotated +90 degrees),
+// deterministically, as rectangle_contact does for a zero centre distance.
+//
+// Returned with the wall as body a: hand the result to
+// resolve_contact(wall, body, geometry, params) with an immovable wall
+// body (both reciprocals zero, at rest) and the normal points from the
+// wall toward the body, exactly as that function expects.
+inline ContactGeometry segment_contact(const Vec2& p, const Vec2& q,
+                                       const ContactBody& body) {
+  using contact_detail::Rect;
+  using contact_detail::extent_on;
+  using contact_detail::make_rect;
+
+  ContactGeometry out;
+  const Vec2 e = q - p;
+  const double len2 = e.dot(e);
+  if (!(len2 > 0.0)) return out;   // a degenerate segment touches nothing
+
+  const Rect r = make_rect(body);
+
+  // The segment in the rectangle's frame, then a Liang-Barsky clip against
+  // the box. Fixed axis order, so ties resolve the same way every time.
+  const Vec2 rel_p = p - r.centre;
+  const Vec2 rel_q = q - r.centre;
+  const double start[2] = {rel_p.dot(r.fwd), rel_p.dot(r.lat)};
+  const double delta[2] = {rel_q.dot(r.fwd) - start[0],
+                           rel_q.dot(r.lat) - start[1]};
+  const double extent[2] = {r.hl, r.hw};
+  double t0 = 0.0;
+  double t1 = 1.0;
+  for (int axis = 0; axis < 2; ++axis) {
+    if (delta[axis] == 0.0) {
+      // Parallel to this slab: inside it or not, for the whole segment.
+      if (std::abs(start[axis]) > extent[axis]) return out;
+      continue;
+    }
+    double enter = (-extent[axis] - start[axis]) / delta[axis];
+    double exit = (extent[axis] - start[axis]) / delta[axis];
+    if (enter > exit) {
+      const double swap = enter;
+      enter = exit;
+      exit = swap;
+    }
+    if (enter > t0) t0 = enter;
+    if (exit < t1) t1 = exit;
+    if (t0 > t1) return out;   // misses the rectangle
+  }
+
+  // The line normal, oriented toward the body's centre (see the header
+  // note: this is what stops a wall being squeezed through).
+  const double len = std::sqrt(len2);
+  Vec2 n{-e.y / len, e.x / len};
+  const double side = n.dot(r.centre - p);
+  if (side < 0.0) n = -n;
+
+  // How far the rectangle reaches past the line on the centre's side. The
+  // clip said the segment crosses the rectangle, so this is positive up to
+  // corner grazing, which is excluded exactly as kissing faces are.
+  const double depth = extent_on(r, n) - std::abs(side);
+  if (!(depth > 0.0)) return out;
+
+  out.touching = true;
+  out.normal = n;
+  out.depth = depth;
+  out.point = (p + e * t0 + p + e * t1) * 0.5;
   return out;
 }
 
