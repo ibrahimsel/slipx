@@ -21,6 +21,19 @@ python -m slipx_ros.bridge --track examples/tracks/paddock_stadium \
 | `odom` | `nav_msgs/Odometry` | out | sensor data |
 | `ground_truth/odom` | `nav_msgs/Odometry` | out | reliable |
 
+`/map` (global, not per agent) carries the track as a
+`nav_msgs/OccupancyGrid`, latched once like any map server's
+(ADR-0054): walls occupied, the drivable band free, everything beyond
+the walls unknown. It is rasterised from the exact wall polylines the
+lidar rays are cast against, never from a re-derived offset, so the map
+cannot disagree with the scans; a localiser that marches rays through it
+sees the wall where the scan saw it. Opponents are dynamic and are never
+in the map, exactly as in a SLAM map of an empty track. `--map-resolution`
+sets the cell size (default 0.05 m), `--no-map` declines the topic for a
+stack that runs its own map server, and both are recorded in the bridge
+manifest. The map is geometry rather than truth-telling, so declining
+ground truth keeps it: a real car has a map because SLAM gave it one.
+
 `/clock` carries simulation time (steps times dt) for `use_sim_time`.
 Topic names are the sensor names from the car's `sensors.yaml`, which the
 schema has always defined as topic names; the reference car names its
@@ -59,10 +72,10 @@ spoke last: the car snaps between the estimate and the truth, and the
 symptom reads as a broken filter. Such a stack launches with
 `--no-ground-truth` (keeping the belief edge) or `--no-tf`.
 
-To watch a run: RViz with fixed frame `map` places every scan and pose.
-Without the map edge, fix on `car_N/odom` instead, and the scan sits in
-the belief's frame, off the true one by exactly as far as the belief has
-drifted.
+To watch a run: RViz with fixed frame `map` places every scan and pose
+over the latched track map. Without the map edge, fix on `car_N/odom`
+instead, and the scan sits in the belief's frame, off the true one by
+exactly as far as the belief has drifted.
 
 ## Two ways to run
 

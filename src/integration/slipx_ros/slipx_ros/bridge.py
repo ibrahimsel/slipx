@@ -15,6 +15,12 @@ dead reckoner, and, only while ground truth is offered, a ``map -> odom``
 correction that makes the chain compose to the true pose. ``--no-tf``
 removes the broadcast for a stack that owns its tree.
 
+The map (ADR-0054) is the raycaster's own walls rasterised to a latched
+``OccupancyGrid`` on ``/map``: never a re-derived offset, so the map cannot
+disagree with the scans, and never gated on ground truth, because a map is
+geometry a real car also has (SLAM gave it one). ``--no-map`` for a stack
+that runs its own map server.
+
 Commands hold like a servo: the latest ``AckermannDriveStamped`` per agent
 is applied every step, the steering angle directly and the speed through a
 proportional acceleration demand whose gain is a named mechanisation of the
@@ -31,6 +37,7 @@ import csv
 import json
 import math
 import threading
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -47,7 +54,7 @@ from rclpy.qos import (
 from ackermann_msgs.msg import AckermannDriveStamped
 from builtin_interfaces.msg import Time as TimeMsg
 from geometry_msgs.msg import TransformStamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import UInt64
@@ -61,6 +68,14 @@ from .race_sync import ACK_QOS, ANNOUNCE_QOS, STEP_TOPIC, stamp_to_step
 #: publishes TFMessage directly and keeps its imports to message packages.
 TF_QOS = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE)
 TF_STATIC_QOS = QoSProfile(
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
+
+#: The QoS a map server latches with: published once, delivered to every
+#: subscriber however late it joins.
+MAP_QOS = QoSProfile(
     depth=1,
     reliability=ReliabilityPolicy.RELIABLE,
     durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -80,6 +95,11 @@ class BridgeConfig:
     # on tf_static, and, only while ground truth is offered, the map -> odom
     # correction that makes the chain compose to the true pose.
     tf: bool = True
+    # The map (ADR-0054): the raycaster's own walls, rasterised and latched
+    # once. Not gated on ground truth, because a map is geometry a real car
+    # also has; off for a stack that runs its own map server.
+    map: bool = True
+    map_resolution_m: float = 0.05
     clock_rate_hz: float = 100.0
     # The speed loop standing in for a VESC's controller: a mechanisation,
     # named here rather than buried (the same rule RaceConfig follows).
@@ -303,6 +323,15 @@ class Bridge(Node):
             self._tf_static_pub = self.create_publisher(
                 TFMessage, "/tf_static", TF_STATIC_QOS)
             self._tf_static_pub.publish(self._static_mounts())
+
+        # The map (ADR-0054), latched once. The seed for the free-space
+        # fill is the first centreline sample, which is inside the drivable
+        # band by construction.
+        self._map_pub: Optional[object] = None
+        if config.map:
+            self._map_pub = self.create_publisher(
+                OccupancyGrid, "/map", MAP_QOS)
+            self._map_pub.publish(self._occupancy_grid(points[0]))
 
         self._clock_pub = self.create_publisher(Clock, "/clock", 10)
         dt = self.sim.dt
@@ -613,6 +642,102 @@ class Bridge(Node):
         msg.twist.twist.angular.z = state.yaw_rate
         return msg
 
+    def _occupancy_grid(self, seed_xy: Tuple[float, float]) -> OccupancyGrid:
+        """The walls as a latched map, rasterised from the raycaster's own
+        polylines (``TrackWorld.wall_left`` / ``wall_right``), never from a
+        re-derived offset: a map that disagreed with the scans would be
+        worse than no map. Occupied where a wall crosses a cell, free where
+        the seed can reach without crossing one, unknown elsewhere, which
+        is the shape a SLAM map of the same walls has.
+        """
+        resolution = self.config.map_resolution_m
+        left = self.world.wall_left
+        right = self.world.wall_right
+        closed = self.track.closed
+
+        xs = [p[0] for p in left] + [p[0] for p in right]
+        ys = [p[1] for p in left] + [p[1] for p in right]
+        # A margin of a few cells keeps the walls off the border, so the
+        # outside exists in the grid and stays unknown.
+        margin = 4.0 * resolution
+        origin_x = min(xs) - margin
+        origin_y = min(ys) - margin
+        width = int(math.ceil((max(xs) - origin_x + margin) / resolution))
+        height = int(math.ceil((max(ys) - origin_y + margin) / resolution))
+        data = [-1] * (width * height)
+
+        def cell(x: float, y: float) -> Tuple[int, int]:
+            return (int((x - origin_x) / resolution),
+                    int((y - origin_y) / resolution))
+
+        def mark(ax: float, ay: float, bx: float, by: float) -> None:
+            # Every cell the segment passes through (a supercover grid
+            # walk), so the wall is a barrier the four-connected fill
+            # below cannot slip through at a diagonal.
+            col, row = cell(ax, ay)
+            end_col, end_row = cell(bx, by)
+            dx = bx - ax
+            dy = by - ay
+            step_col = 1 if dx > 0.0 else -1
+            step_row = 1 if dy > 0.0 else -1
+            edge_x = origin_x + (col + (step_col > 0)) * resolution
+            edge_y = origin_y + (row + (step_row > 0)) * resolution
+            t_col = (edge_x - ax) / dx if dx != 0.0 else math.inf
+            t_row = (edge_y - ay) / dy if dy != 0.0 else math.inf
+            dt_col = abs(resolution / dx) if dx != 0.0 else math.inf
+            dt_row = abs(resolution / dy) if dy != 0.0 else math.inf
+            for _ in range(abs(end_col - col) + abs(end_row - row) + 1):
+                data[row * width + col] = 100
+                if col == end_col and row == end_row:
+                    break
+                if t_col <= t_row:
+                    col += step_col
+                    t_col += dt_col
+                else:
+                    row += step_row
+                    t_row += dt_row
+            data[end_row * width + end_col] = 100
+
+        for wall in (left, right):
+            # A closed track's last point joins back to the first, exactly
+            # as the raycaster's segment list treats it.
+            spans = len(wall) if closed else len(wall) - 1
+            for i in range(spans):
+                j = (i + 1) % len(wall)
+                mark(wall[i][0], wall[i][1], wall[j][0], wall[j][1])
+
+        seed_col, seed_row = cell(seed_xy[0], seed_xy[1])
+        if data[seed_row * width + seed_col] == 100:
+            raise ValueError(
+                f"map_resolution_m {resolution} puts a wall in the seed "
+                f"cell on the centreline: the track is narrower than the "
+                f"map can draw, so choose a finer resolution"
+            )
+        data[seed_row * width + seed_col] = 0
+        frontier = deque([(seed_col, seed_row)])
+        while frontier:
+            col, row = frontier.popleft()
+            for near_col, near_row in ((col + 1, row), (col - 1, row),
+                                       (col, row + 1), (col, row - 1)):
+                if 0 <= near_col < width and 0 <= near_row < height:
+                    index = near_row * width + near_col
+                    if data[index] == -1:
+                        data[index] = 0
+                        frontier.append((near_col, near_row))
+
+        msg = OccupancyGrid()
+        msg.header.stamp = _sim_time(0.0)
+        msg.header.frame_id = "map"
+        msg.info.map_load_time = _sim_time(0.0)
+        msg.info.resolution = resolution
+        msg.info.width = width
+        msg.info.height = height
+        msg.info.origin.position.x = origin_x
+        msg.info.origin.position.y = origin_y
+        msg.info.origin.orientation.w = 1.0
+        msg.data = data
+        return msg
+
     # ------------------------------------------------------------ manifests
 
     def write_manifests(self) -> Optional[Path]:
@@ -636,6 +761,8 @@ class Bridge(Node):
             "cars": [str(path) for path in self.config.car_dirs],
             "ground_truth": self.config.ground_truth,
             "tf": self.config.tf,
+            "map": self.config.map,
+            "map_resolution_m": self.config.map_resolution_m,
             "real_time_factor": self.config.real_time_factor,
             "speed_gain": self.config.speed_gain,
             "seed": self.config.seed,
@@ -670,6 +797,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--no-tf", action="store_true",
                         help="do not broadcast TF at all, for a stack that "
                              "owns its tree; recorded in the bridge manifest")
+    parser.add_argument("--no-map", action="store_true",
+                        help="do not latch the walls on /map, for a stack "
+                             "that runs its own map server; recorded in "
+                             "the bridge manifest")
+    parser.add_argument("--map-resolution", type=float, default=0.05,
+                        help="occupancy grid cell size [m]")
     parser.add_argument("--speed-gain", type=float, default=4.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None,
@@ -690,6 +823,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         real_time_factor=arguments.real_time_factor,
         ground_truth=not arguments.no_ground_truth,
         tf=not arguments.no_tf,
+        map=not arguments.no_map,
+        map_resolution_m=arguments.map_resolution,
         speed_gain=arguments.speed_gain,
         seed=arguments.seed,
         out_dir=arguments.out,

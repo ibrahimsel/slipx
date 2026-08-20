@@ -1022,7 +1022,36 @@ PYBIND11_MODULE(_slipx, m) {
            "to answer rather than hiding an obstacle.")
       .def("__call__", &TrackWorld::operator(), py::arg("agent"),
            py::arg("origin"), py::arg("bearing"),
-           "One ray, answered the way the rig would see it.");
+           "One ray, answered the way the rig would see it.")
+      // The walls as data, not just as ray answers: a consumer drawing a
+      // map must draw the polylines rays are cast against, never its own
+      // offset of the centreline, or the map and the scans can disagree.
+      .def_property_readonly(
+          "wall_left",
+          [](const TrackWorld& world) {
+            const scene::Walls& walls = world.walls();
+            std::vector<std::pair<double, double>> points;
+            points.reserve(walls.left_x().size());
+            for (std::size_t i = 0; i < walls.left_x().size(); ++i) {
+              points.emplace_back(walls.left_x()[i], walls.left_y()[i]);
+            }
+            return points;
+          },
+          "The left wall as (x, y) points [m]: the exact polyline rays "
+          "are cast against. Closed tracks imply a final segment back to "
+          "the first point, exactly as the raycaster treats it.")
+      .def_property_readonly(
+          "wall_right",
+          [](const TrackWorld& world) {
+            const scene::Walls& walls = world.walls();
+            std::vector<std::pair<double, double>> points;
+            points.reserve(walls.right_x().size());
+            for (std::size_t i = 0; i < walls.right_x().size(); ++i) {
+              points.emplace_back(walls.right_x()[i], walls.right_y()[i]);
+            }
+            return points;
+          },
+          "The right wall as (x, y) points [m]; see wall_left.");
 
   py::class_<SensorRig>(
       m, "SensorRig",

@@ -620,6 +620,27 @@ directories and must respect the downward dependency order
   12 tried, 11 caught first time; the escape (a non-identity mount
   rotation laundered back to identity by tf2's quaternion normalisation
   on lookup) became a wire-level test on /tf_static, then 12/12.
+  Map added 2026-08-20 (ADR-0054): /map is a latched OccupancyGrid
+  rasterised from the raycaster's own wall polylines, newly exposed as
+  TrackWorld.wall_left/wall_right so no second offset derivation can
+  disagree with the scans; a supercover walk marks the walls occupied, a
+  four-connected fill from the first centreline sample marks the band
+  free, beyond the walls stays unknown, and a resolution coarse enough
+  to put a wall in the seed cell is refused by name. The map is geometry
+  rather than truth-telling, so --no-ground-truth keeps it; --no-map
+  declines it, and the manifest records both choices. Mutation pass over
+  the map: 13 tried, 12 caught (closing segment dropped, occupied
+  written as 50, the fill crossing walls, mark index transposed, the
+  announced origin losing the margin, cell axes swapped, volatile QoS,
+  the map republished every tick, the seed refusal removed, the
+  resolution hardcoded, the binding returning the left wall twice caught
+  by the infield flooding free, and the map gated on ground truth, which
+  escaped first and became the test that a run without ground truth
+  keeps its map). The one escape kept: an 8-connected fill is
+  behaviourally equivalent, because the supercover walk lays each wall
+  down as a 4-connected chain and a 4-connected barrier separates even
+  8-connected regions (the digital Jordan property); measured identical
+  maps at every resolution down to the refusal.
   The tick still waits for the external
   exit condition: an existing F1TENTH stack connecting with a remap
   file, which is the outreach the user runs; the two-machine lockstep

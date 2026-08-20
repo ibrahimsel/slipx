@@ -58,6 +58,11 @@ class TrackWorld {
   // A WorldFunction referring to *this; the TrackWorld must outlive it.
   WorldFunction function() const;
 
+  // The wall polylines rays are cast against, for a consumer that has to
+  // agree with the scans (the ROS bridge rasterises its occupancy map from
+  // these rather than re-deriving an offset that could disagree).
+  const scene::Walls& walls() const { return walls_; }
+
  private:
   void refit() const;
 

@@ -8,6 +8,10 @@ Jazzy environment); anywhere else they skip cleanly, which is what keeps the
 Windows pytest run green. The probe node is a second rclpy node in the same
 process, so what is asserted crossed the RMW like any stack's messages
 would.
+
+A live bridge on the default domain leaks its topics and TF into these
+tests (the map edge fails the declining test from outside); run them with
+a spare ROS_DOMAIN_ID while one is up.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import pytest
 rclpy = pytest.importorskip("rclpy", reason="the bridge needs a ROS 2 environment")
 
 from ackermann_msgs.msg import AckermannDriveStamped  # noqa: E402
-from nav_msgs.msg import Odometry  # noqa: E402
+from nav_msgs.msg import OccupancyGrid, Odometry  # noqa: E402
 from rosgraph_msgs.msg import Clock  # noqa: E402
 from sensor_msgs.msg import LaserScan  # noqa: E402
 from rclpy.qos import qos_profile_sensor_data  # noqa: E402
@@ -233,6 +237,152 @@ def test_odometry_curves_with_the_commanded_steer(bridge, probe):
     assert abs(difference) < 0.35, \
         f"reckoned {reckoned_yaw:.2f} rad against true {true_yaw:.2f} rad"
     assert abs(reckoned_yaw) > 0.3, "the commanded steer must curve the belief"
+
+
+def map_qos():
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+
+    return QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                      durability=DurabilityPolicy.TRANSIENT_LOCAL)
+
+
+def map_cell(msg, resolution, x, y):
+    """The map value at a world point, with the bridge's own float64 cell
+    arithmetic (info.resolution is float32 and rounds differently on a
+    point that sits exactly on a cell edge, which wall vertices do)."""
+    col = int((x - msg.info.origin.position.x) / resolution)
+    row = int((y - msg.info.origin.position.y) / resolution)
+    return msg.data[row * msg.info.width + col]
+
+
+def test_the_map_is_the_walls_latched_once(bridge, probe):
+    maps = []
+    # The subscription joins after the bridge published: only the latch
+    # can deliver it, which is what a stack launching later relies on.
+    probe.create_subscription(OccupancyGrid, "/map", maps.append, map_qos())
+    pump(bridge, probe, 200)
+    assert len(maps) == 1, "the map is latched once, not streamed"
+    grid = maps[0]
+    resolution = bridge.config.map_resolution_m
+    assert grid.header.frame_id == "map"
+    assert grid.info.resolution == pytest.approx(resolution, rel=1e-6)
+    assert len(grid.data) == grid.info.width * grid.info.height
+
+    # Every wall vertex is the raycaster's own polyline, and every one
+    # must land in an occupied cell; a re-derived or misplaced wall fails
+    # here on the first vertex.
+    for wall in (bridge.world.wall_left, bridge.world.wall_right):
+        for x, y in wall:
+            assert map_cell(grid, resolution, x, y) == 100
+
+    # The cars start on the drivable band, which the fill reached.
+    for index in range(2):
+        state = bridge.sim.state(index)
+        assert map_cell(grid, resolution, state.pos.x, state.pos.y) == 0
+
+    # Beyond the walls is unknown, never free: the grid corner is outside
+    # the track, and the stadium's infield is enclosed by the inner wall.
+    assert grid.data[0] == -1
+    assert map_cell(grid, resolution, 0.0, 0.0) == -1
+
+    out = bridge.write_manifests()
+    manifest = json.loads(
+        (out / "bridge_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["map"] is True
+    assert manifest["map_resolution_m"] == resolution
+
+
+def test_the_map_agrees_with_the_raycaster(bridge):
+    import slipx
+
+    grid = bridge._occupancy_grid(
+        (bridge.sim.state(0).pos.x, bridge.sim.state(0).pos.y))
+    resolution = bridge.config.map_resolution_m
+    state = bridge.sim.state(0)
+    origin = slipx.Pose()
+    origin.x = state.pos.x
+    origin.y = state.pos.y
+
+    # Side and rear bearings only: the opponent parked on the grid ahead
+    # is in the world (and in the scans) but is not a wall, so it does not
+    # belong to the map.
+    for offset_deg in (90, 120, 150, 180, 210, 240, 270):
+        bearing = state.yaw + math.radians(offset_deg)
+        hit = bridge.world(0, origin, bearing)
+        assert hit.hit, "a stadium surrounds the car on every side"
+        # March the same ray across the map: the first occupied cell must
+        # sit where the raycaster put the wall.
+        step = resolution / 4.0
+        marched = None
+        for k in range(1, int(12.0 / step)):
+            distance = k * step
+            value = map_cell(grid, resolution,
+                             origin.x + distance * math.cos(bearing),
+                             origin.y + distance * math.sin(bearing))
+            if value == 100:
+                marched = distance
+                break
+        assert marched is not None, f"no wall on the map at {offset_deg} deg"
+        assert marched == pytest.approx(hit.range, abs=0.1), \
+            f"map wall at {marched:.3f} m, raycast wall at " \
+            f"{hit.range:.3f} m, bearing {offset_deg} deg"
+
+
+def test_the_map_survives_declining_ground_truth(ros, tmp_path):
+    # The map is geometry, not truth-telling: a real car has one because
+    # SLAM gave it one, localiser or no localiser. Gating it on ground
+    # truth is the mutation this test exists to catch.
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        ground_truth=False,
+        out_dir=tmp_path,
+    ))
+    probe_node = rclpy.create_node("map_probe")
+    try:
+        maps = []
+        probe_node.create_subscription(
+            OccupancyGrid, "/map", maps.append, map_qos())
+        for _ in range(100):
+            node.step_once()
+            rclpy.spin_once(probe_node, timeout_sec=0.0)
+        assert node._map_pub is not None
+        assert maps, "the latched map must flow without ground truth"
+    finally:
+        probe_node.destroy_node()
+        node.destroy_node()
+
+
+def test_the_map_can_be_declined_and_the_manifest_says_so(ros, tmp_path):
+    node = Bridge(BridgeConfig(
+        track_dir=TRACK,
+        car_dirs=[CAR],
+        real_time_factor=1000.0,
+        map=False,
+        out_dir=tmp_path,
+    ))
+    try:
+        # No map publisher exists at all: disabled means absent, not silent.
+        assert node._map_pub is None
+        out = node.write_manifests()
+        manifest = json.loads(
+            (out / "bridge_manifest.json").read_text(encoding="utf-8"))
+        assert manifest["map"] is False
+    finally:
+        node.destroy_node()
+
+
+def test_a_map_resolution_coarser_than_the_track_is_refused(ros):
+    # A 5 m cell on a 1.5 m wide track puts the wall in the seed cell:
+    # refused by name, never published as a map that is all wall.
+    with pytest.raises(ValueError, match="map_resolution_m"):
+        Bridge(BridgeConfig(
+            track_dir=TRACK,
+            car_dirs=[CAR],
+            real_time_factor=1000.0,
+            map_resolution_m=5.0,
+        ))
 
 
 def tf_buffer(probe_node):
