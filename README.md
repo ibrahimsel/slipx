@@ -202,9 +202,10 @@ this format is copyleft, and the F1TENTH maps of real venues carry no licence at
 all, so neither can enter an Apache-2.0 tree.
 [`tools/convert_track.py`](https://github.com/ibrahimsel/slipx/blob/main/tools/convert_track.py)
 fetches one into a track directory on your own machine instead, recording the
-source, its licence and the retrieval date in the manifest. One generated track,
-`paddock_stadium`, ships and is what CI and the examples run on; it is labelled
-as generated, with no real-world counterpart.
+source, its licence and the retrieval date in the manifest. Two generated
+tracks ship, each labelled as generated with no real-world counterpart:
+`paddock_stadium`, which CI and the test suites assert against, and the
+`paddock_gp` circuit the racing demos run on.
 
 ## Sensors
 
@@ -432,7 +433,7 @@ should not invalidate every car file.
 - [**Examples**](https://github.com/ibrahimsel/slipx/tree/main/examples): three
   Python programs and the C++ reference stack, all executed by the test suite.
 - [**Autonomous racing, from the ground up**](https://github.com/ibrahimsel/slipx/tree/main/docs/racing):
-  thirteen articles and a glossary on the concepts themselves, for somebody
+  twenty-one articles and a glossary on the concepts themselves, for somebody
   arriving from robotics or computer science rather than vehicle dynamics. Slip
   angles, load transfer, understeer and oversteer, the racing line, the g-g
   diagram, combined slip, differentials, actuator lag and why a laser scan taken

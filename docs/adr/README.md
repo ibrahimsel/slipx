@@ -86,7 +86,7 @@ Use [`template.md`](template.md) for a new record.
 | # | Decision | Status |
 |---|---|---|
 | [0034](0034-a-track-is-geometry-plus-a-declared-surface.md) | A track is geometry plus a declared surface, and friction stays in the tyre file | Proposed |
-| [0035](0035-track-geometry-is-converted-never-redistributed.md) | Track geometry is fetched and converted by the user, never redistributed by us | Proposed |
+| [0035](0035-track-geometry-is-converted-never-redistributed.md) | Track geometry is fetched and converted by the user, never redistributed by us | Proposed, superseded in part by 0057 |
 | [0036](0036-schema-0-3-0-adds-the-track-kind.md) | Schema 0.3.0 adds the track manifest as a document kind | Proposed |
 | [0037](0037-sensing-never-sees-the-scene.md) | Sensing never sees the scene, and the seeded RNG moves down to meet it | Proposed |
 | [0038](0038-the-fitter-is-staged-and-depends-on-nothing-new.md) | The fitter is staged, fits what each manoeuvre identifies, and depends on nothing new | Proposed |
@@ -102,6 +102,7 @@ Use [`template.md`](template.md) for a new record.
 | [0053](0053-tf-is-rep-105-with-truth-as-the-map-correction.md) | The bridge broadcasts a REP 105 TF tree, with ground truth as the map correction | Proposed |
 | [0054](0054-the-map-is-the-raycasters-walls-latched-once.md) | The bridge latches the raycaster's walls as the occupancy map | Proposed |
 | [0055](0055-walls-are-immovable-contact-segments-in-the-sim.md) | Walls are immovable contact segments in the simulation | Proposed |
+| [0057](0057-a-second-generated-track-ships-for-the-racing-demo.md) | A second generated track ships, sized for racing rather than CI | Proposed |
 
 ## Racing
 

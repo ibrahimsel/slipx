@@ -20,6 +20,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[4]
 REFERENCE_CAR = REPO_ROOT / "examples" / "cars" / "reference_1_10"
 REFERENCE_TRACK = REPO_ROOT / "examples" / "tracks" / "paddock_stadium"
+DEMO_TRACK = REPO_ROOT / "examples" / "tracks" / "paddock_gp"
 
 
 @pytest.fixture
@@ -34,6 +35,13 @@ def reference_track() -> Path:
     """The shipped generated track directory, read-only."""
     assert REFERENCE_TRACK.is_dir(), f"reference track missing at {REFERENCE_TRACK}"
     return REFERENCE_TRACK
+
+
+@pytest.fixture
+def demo_track() -> Path:
+    """The shipped racing circuit, read-only (ADR-0057)."""
+    assert DEMO_TRACK.is_dir(), f"demo track missing at {DEMO_TRACK}"
+    return DEMO_TRACK
 
 
 @pytest.fixture

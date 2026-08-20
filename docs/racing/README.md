@@ -55,6 +55,7 @@ sit.
 | 18 | [The same race twice](18-the-same-race-twice.md) | Why does a simulation give a different answer each run, and what does it take not to? |
 | 19 | [Why simulated cars fall through walls](19-why-simulated-cars-fall-through-walls.md) | What does hitting a wall do, and what stops a car passing through one? |
 | 20 | [Which way round?](20-which-way-round.md) | How does a race know its direction, and how is a wrong-way car caught? |
+| 21 | [Overtaking](21-overtaking.md) | What does a pass actually cost, and where on a lap can it be paid? |
 
 **Part three: getting the numbers**
 

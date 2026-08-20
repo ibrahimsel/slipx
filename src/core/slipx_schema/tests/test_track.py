@@ -62,6 +62,38 @@ def test_a_manifest_can_be_named_directly(reference_track) -> None:
     assert load_track(reference_track / "track.yaml").name == "paddock_stadium"
 
 
+def test_the_shipped_circuit_loads_on_the_same_surface(demo_track) -> None:
+    # The circuit (ADR-0057) must pair with the only tyre that ships, or
+    # the racing demo would open with a surface refusal.
+    track = load_track(demo_track)
+
+    assert track.name == "paddock_gp"
+    assert track.surface == "carpet"
+    assert track.closed is True
+    assert track.geometry_licence == "Apache-2.0"
+    assert "PROVISIONAL" in track.summary()
+
+
+def test_the_circuits_width_actually_varies(demo_track) -> None:
+    # The circuit is the shipped exercise of the per-point width columns:
+    # the stadium is constant-width, so a consumer that quietly ignored the
+    # columns would pass every stadium test and still be wrong. The pinch
+    # and the widest point are the generator's designed extremes.
+    import csv
+
+    widths = []
+    with open(demo_track / "centreline.csv", newline="") as handle:
+        for row in csv.reader(handle):
+            if not row or row[0].lstrip().startswith("#"):
+                continue
+            widths.append((float(row[2]), float(row[3])))
+
+    assert min(w for w, _ in widths) == pytest.approx(0.70)
+    assert max(w for w, _ in widths) == pytest.approx(1.10, abs=0.02)
+    assert all(right == left for right, left in widths)
+    assert all(right > 0.0 for right, _ in widths)
+
+
 def test_a_directory_without_a_manifest_is_refused(tmp_path) -> None:
     with pytest.raises(TrackDirectoryError, match="track.yaml"):
         load_track(tmp_path)

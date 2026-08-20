@@ -1,6 +1,8 @@
 # ADR-0035: Track geometry is fetched and converted by the user, never redistributed by us
 
-- **Status:** Proposed
+- **Status:** Proposed; superseded in part by
+  [ADR-0057](0057-a-second-generated-track-ships-for-the-racing-demo.md)
+  (the shipped generated track is no longer singular)
 - **Date recorded:** 2026-08-15 (decision taken during P1)
 - **Requirements:** the P1 track deliverables. No SRS ID is cited: `docs/spec`
   is not present in this checkout, and a guessed ID is worse than none.

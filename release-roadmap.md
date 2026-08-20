@@ -1462,6 +1462,41 @@ computed, and the conformance script re-checked all six rows.)
   reversal dropped in each of the three procedures, both emission sites,
   wire name collision, metadata inverted, threshold validation; bridge:
   reversal ignored, seam pose, latch QoS, seam tangent, manifest key).
+- [x] **M7.13** A racing circuit, and a field that races it (ADR-0057;
+  numbered by writing order, landed before the gate below, at the user's
+  request: the stadium demo was a queue, not a race).
+  Done when: watch_a_race.sh shows a field that overtakes, on a track with
+  room for it.
+  Done 2026-08-20, recorded as ADR-0057: `examples/tracks/make_tracks.py`
+  grows a closed-form segment walk and a second shipped track,
+  `examples/tracks/paddock_gp`: a 26 m start straight, a 3.5 m sweeper, a
+  bus-stop chicane pinched to 0.70 m half-width, a hairpin behind the
+  widest braking zone on the lap and a return elbow, 100.891 m a lap at
+  0.05 m sampling, the first shipped track whose width varies, so the
+  per-point width columns are finally exercised end to end. The stadium's
+  bytes are unchanged; a new test runs a copied generator and compares
+  both tracks byte for byte, and the generator guards each have a refusal
+  test (closure, on-locus samples, width envelope, width continuity, arc
+  crowding, and lane clearance via the extracted `check_lane_clearance`);
+  the chord assertions are exercised by the true geometry only. The demo driver grows `racer` (pure pursuit for the
+  line, the scan overlaid for traffic: brake zone and lean scaled by a
+  dealt aggression, side hysteresis, a stuck detector that backs out of
+  pile-ups) and `mixed` (a seeded deal of racers and gap followers with
+  spread top speeds, lookaheads and aggression, printed one line per car;
+  the blind pursuit card is never dealt into traffic), plus a windowed
+  nearest-point search with a global re-search fallback so twenty
+  pure-Python controllers survive a 2018-sample centreline.
+  `watch_a_race.sh` defaults to the mixed field on the circuit, takes a
+  track argument and passes `SEED` through. Verified headless against a
+  live bridge (150 sim seconds, twenty cars: 78 order swaps, every car
+  lapping, none stuck, none outside the walls) and visually in RViz.
+  Article 21 (Overtaking) with a switchback glossary entry; README track
+  claims updated; ADR-0035 superseded in part. Mutation pass: 21 tried,
+  18 caught first time. The three escapes were all guard deletions inside
+  `check_circuit`, invisible to the byte compare (arc crowding, lane
+  clearance, closure); each produced a targeted refusal test and the
+  lane-clearance extraction, after which 21 of 21 are caught. No
+  reference hash moved and none could: nothing here touches slipx_core.
 - [ ] **M7.10** P3 exit gate (external fact): one course or one competition
   runs an evaluation on SlipX.
   Done when: it has happened and can be cited.

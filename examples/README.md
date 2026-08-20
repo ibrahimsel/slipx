@@ -52,7 +52,7 @@ orchestrator.
 | File | What it is for |
 |---|---|
 | [`cpp/reference_stack.hpp`](cpp/reference_stack.hpp) | A wall follower and a pure pursuit controller. They validate the simulator rather than trying to win: one drives on a LiDAR scan alone, the other on ground truth against the centreline, so a failing lap says which half of P1 broke. |
-| [`cpp/ghost_race.hpp`](cpp/ghost_race.hpp) | Twenty cars lapping the shipped track at once under the orchestrator, each with its own controller and lap counter. |
+| [`cpp/ghost_race.hpp`](cpp/ghost_race.hpp) | Twenty cars lapping the shipped stadium at once under the orchestrator, each with its own controller and lap counter. |
 | [`cpp/ghost_race_main.cpp`](cpp/ghost_race_main.cpp) | Runs that field, prints a time trial classification, and writes the recording as three CSVs. |
 | [`ghost_race_figure.py`](ghost_race_figure.py) | Draws the recording as a self-contained animated SVG. Standard library only, and it reads the CSVs and nothing else. |
 
@@ -69,15 +69,16 @@ drive the bridge (`docs/reference/ros-bridge.md`).
 
 | File | What it is for |
 |---|---|
-| [`ros/watch_a_race.sh`](ros/watch_a_race.sh) | Bridge, driver and RViz in one command: `./examples/ros/watch_a_race.sh 20 gap`. Closing RViz stops the rest. |
-| [`ros/race_demo_driver.py`](ros/race_demo_driver.py) | One node driving all N agents, mirroring the reference stack's split: `gap` follows the farthest gap in the scan alone, so opponents are avoided because they appear in the scan exactly as walls do; `pursuit` is pure pursuit on ground truth against the centreline, and parades. |
+| [`ros/watch_a_race.sh`](ros/watch_a_race.sh) | Bridge, driver and RViz in one command. `./examples/ros/watch_a_race.sh` races a seeded mixed field on the `paddock_gp` circuit; `./examples/ros/watch_a_race.sh 20 gap 3.0 paddock_stadium` is the old drill; `SEED=n` changes the deal. Closing RViz stops the rest. |
+| [`ros/race_demo_driver.py`](ros/race_demo_driver.py) | One node driving all N agents, four modes: `gap` follows the farthest gap in the scan alone, so opponents are avoided because they appear in the scan exactly as walls do; `pursuit` is pure pursuit on ground truth against the announced centreline, and parades; `racer` is pursuit that watches the scan and leans past traffic instead of lifting; `mixed` deals a seeded field of racers and gap followers with spread speeds, lookaheads and aggression, printed one line per car at start-up. |
 | [`ros/make_race_rviz.py`](ros/make_race_rviz.py) | Generates the RViz config and an open-wheel car body per car (a one-visual URDF wrapping a generated Collada mesh), dimensioned from the car's own dynamics.yaml: the latched map, and each car's body and scan in its own colour, placed by the TF the bridge broadcasts. |
 
-Unlike the ghost race, the bridge declares each car's collision footprint,
-so this field jostles for real. The walls do not push back, however: contact
-exists between agents, not between an agent and the track, so a hard enough
-bump in traffic can put a car on the wrong side of a wall, where its scan
-shows it exactly what happened.
+Unlike the ghost race, the bridge declares each car's collision footprint
+and the walls are contact segments in the simulation (ADR-0055), so this
+field jostles for real and the fence costs real speed. The default race runs
+on `paddock_gp`, a circuit generated for exactly this (ADR-0057): unequal
+corners, a chicane that pinches to single file and a wide braking zone
+before the hairpin, so a seeded field spreads out and earns its passes.
 
 A ghost race is not a race, and the code says so in more places than this one.
 These cars declare no collision footprints (contact exists between agents

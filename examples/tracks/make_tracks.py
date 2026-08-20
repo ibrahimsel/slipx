@@ -10,15 +10,25 @@ venues carry no licence at all. What ships instead is this script and what it
 produces, which is Apache-2.0 like the rest of the tree, and a converter for
 turning somebody else's track into a SlipX one on their own machine.
 
-The track produced here is a stadium: two straights joined by two semicircular
-ends. It is not a real venue and the manifest says so. It is shaped this way
-because the things that run against it need different things from it, and a
-circle gives only one of them: a lap counter needs it closed, a pure pursuit
-controller needs curvature that changes, and a wall follower needs a straight
-long enough to settle on before the next corner arrives.
+Two tracks are produced, shaped by different consumers (ADR-0057):
+
+- ``paddock_stadium``: two straights joined by two semicircular ends. It is
+  shaped this way because the things that run against it need different
+  things from it, and a circle gives only one of them: a lap counter needs
+  it closed, a pure pursuit controller needs curvature that changes, and a
+  wall follower needs a straight long enough to settle on before the next
+  corner arrives. It is what CI and the test suites assert against.
+
+- ``paddock_gp``: a circuit shaped by what a race needs rather than what the
+  machinery needs. A long start straight, a fast sweeper, a bus-stop chicane
+  that pinches to single file, a hairpin behind a wide braking zone, and a
+  return elbow, about 101 m a lap. Its width varies along the lap, which
+  makes it the shipped exercise of the per-point width columns.
+
+Neither is a real venue and both manifests say so.
 
 Every dimension below is exact, so every property of the output can be
-asserted rather than eyeballed, which is what the checks at the bottom do.
+asserted rather than eyeballed, which is what the checks do.
 
 Standard library only, like every other generator in this repository.
 
@@ -153,6 +163,302 @@ def check(points: list[tuple[float, float]]) -> None:
     assert points[1][0] > points[0][0], "the first segment runs the wrong way"
 
 
+# --------------------------------------------------------------- the circuit
+#
+# paddock_gp (ADR-0057). Built from a list of straights and arcs walked in
+# closed form, because a circuit with seven corners is past the point where
+# bespoke piecewise functions stay honest. Closure is exact by construction:
+# the signed sweeps sum to one full turn and the displacements cancel, and
+# the checks assert both rather than trusting the arithmetic.
+#
+# The corners are unequal on purpose. A field only spreads out where the
+# track asks different questions in succession: a sweeper taken flat, a
+# chicane that pinches to single file, and a hairpin behind the widest part
+# of the lap, which is where the braking-zone passes happen.
+
+CIRCUIT_SPACING_M = 0.05   # finer than the stadium: the chicane arcs are
+                           # 1 m radius, and the polyline must stay within a
+                           # millimetre of the true lap there too
+
+#: Straights are ("straight", length_m); arcs are ("arc", radius_m,
+#: sweep_deg), sweep positive to the left (anticlockwise, positive yaw under
+#: ISO 8855). The lap starts at the origin, heading +x along the start
+#: straight.
+CIRCUIT_SEGMENTS = [
+    ("straight", 26.0),       # start straight; the grid forms up here
+    ("arc", 3.5, 90.0),       # T1, a sweeper wide enough to carry speed
+    ("straight", 3.0),
+    ("arc", 2.0, 90.0),       # T2, onto the top straight
+    ("straight", 25.0),       # the second long run, into the braking zone
+    ("arc", 1.0, -90.0),      # the bus stop: right then left, one lane wide
+    ("arc", 1.0, 90.0),
+    ("straight", 12.5),       # approach to the hairpin
+    ("arc", 1.6, 180.0),      # T3, the hairpin
+    ("straight", 8.0),        # return lane
+    ("arc", 2.0, -90.0),      # T4, the only other right-hander
+    ("straight", 3.3),
+    ("arc", 2.0, 90.0),       # T5, opening back onto the start straight
+]
+
+
+def _segment_table(segments):
+    """Start arc length and start pose of every segment, plus the end pose.
+
+    The walk is closed form per segment, so the only floating error is the
+    trigonometry of headings that are multiples of ninety degrees; the
+    closure check bounds it at a nanometre.
+    """
+    table = []
+    x, y, heading, start = 0.0, 0.0, 0.0, 0.0
+    for segment in segments:
+        table.append((start, x, y, heading))
+        if segment[0] == "straight":
+            length = segment[1]
+            x += length * math.cos(heading)
+            y += length * math.sin(heading)
+        else:
+            radius, sweep = segment[1], math.radians(segment[2])
+            length = radius * abs(sweep)
+            side = 1.0 if sweep > 0.0 else -1.0
+            centre_x = x - side * radius * math.sin(heading)
+            centre_y = y + side * radius * math.cos(heading)
+            angle = heading - side * math.pi / 2.0 + sweep
+            x = centre_x + radius * math.cos(angle)
+            y = centre_y + radius * math.sin(angle)
+            heading += sweep
+        start += length
+    return table, (start, x, y, heading)
+
+
+_CIRCUIT_TABLE, _CIRCUIT_END = _segment_table(CIRCUIT_SEGMENTS)
+CIRCUIT_LAP_M = _CIRCUIT_END[0]
+
+# Named arc lengths the width profile hangs off, so a change to a segment
+# moves the widths with it instead of leaving them stranded mid-corner.
+_STARTS = [row[0] for row in _CIRCUIT_TABLE]
+CHICANE_IN = _STARTS[5]
+CHICANE_OUT = _STARTS[7]
+HAIRPIN_IN = _STARTS[8]
+HAIRPIN_OUT = _STARTS[9]
+FINAL_CORNER = _STARTS[12]
+
+#: Half-width each side of the centreline as (arc length, half width) knots,
+#: linearly interpolated and wrapping around the lap. Wide where a car needs
+#: room to try something, narrow where the track should force a queue.
+CIRCUIT_WIDTH_KNOTS = [
+    (0.0, 1.00),                 # the grid forms up on the start straight
+    (20.0, 1.00),
+    (24.0, 0.90),                # settled running width
+    (CHICANE_IN - 7.6, 0.90),
+    (CHICANE_IN - 2.6, 1.05),    # braking zone: room to attack
+    (CHICANE_IN, 0.70),          # the pinch: single file through the bus stop
+    (CHICANE_OUT, 0.70),
+    (CHICANE_OUT + 2.2, 0.90),
+    (HAIRPIN_IN - 4.3, 0.90),
+    (HAIRPIN_IN - 1.8, 1.10),    # the widest point of the lap, on purpose:
+    (HAIRPIN_IN, 1.05),          # the hairpin is where the passes happen
+    (HAIRPIN_OUT, 1.00),
+    (HAIRPIN_OUT + 2.7, 0.90),
+    (FINAL_CORNER - 2.7, 0.90),
+    (FINAL_CORNER, 1.00),        # opens back out onto the start straight
+]
+
+
+def circuit_point_at(s: float) -> tuple[float, float]:
+    """The circuit centreline point at arc length ``s`` from the start."""
+    s = s % CIRCUIT_LAP_M
+    index = len(_CIRCUIT_TABLE) - 1
+    while index > 0 and _CIRCUIT_TABLE[index][0] > s:
+        index -= 1
+    start, x, y, heading = _CIRCUIT_TABLE[index]
+    segment = CIRCUIT_SEGMENTS[index]
+    d = s - start
+
+    if segment[0] == "straight":
+        return (x + d * math.cos(heading), y + d * math.sin(heading))
+
+    radius, sweep = segment[1], math.radians(segment[2])
+    side = 1.0 if sweep > 0.0 else -1.0
+    centre_x = x - side * radius * math.sin(heading)
+    centre_y = y + side * radius * math.cos(heading)
+    angle = heading - side * math.pi / 2.0 + side * d / radius
+    return (centre_x + radius * math.cos(angle),
+            centre_y + radius * math.sin(angle))
+
+
+def circuit_width_at(s: float) -> float:
+    """The half-width at arc length ``s``, from the knots, wrapping."""
+    s = s % CIRCUIT_LAP_M
+    knots = list(CIRCUIT_WIDTH_KNOTS)
+    knots.append((CIRCUIT_LAP_M + knots[0][0], knots[0][1]))
+    for (s0, w0), (s1, w1) in zip(knots, knots[1:]):
+        if s0 <= s <= s1:
+            u = (s - s0) / (s1 - s0) if s1 > s0 else 0.0
+            return w0 + u * (w1 - w0)
+    raise AssertionError(f"no width knot interval covers s={s}")
+
+
+def circuit_centreline() -> list[tuple[float, float]]:
+    """Samples around one circuit lap, the closing point excluded."""
+    count = round(CIRCUIT_LAP_M / CIRCUIT_SPACING_M)
+    return [circuit_point_at(index * CIRCUIT_LAP_M / count)
+            for index in range(count)]
+
+
+def circuit_widths(count: int) -> list[float]:
+    return [circuit_width_at(index * CIRCUIT_LAP_M / count)
+            for index in range(count)]
+
+
+def render_circuit(points: list[tuple[float, float]],
+                   widths: list[float]) -> str:
+    lines = [
+        "# SlipX generated track: a circuit. One 26 m straight, a sweeper,",
+        "# a bus-stop chicane, a hairpin and a return elbow;"
+        f" {CIRCUIT_LAP_M:.3f} m a lap.",
+        "# NOT a real venue. Generated by examples/tracks/make_tracks.py.",
+        "# Apache-2.0, like the rest of this repository.",
+        "#",
+        "# Four columns, the form used by the TUM racetrack database and the",
+        "# F1TENTH set derived from it. Arc length is derived by the loader,",
+        "# not read, so there is no column for it. The width varies along",
+        "# the lap: wide into the braking zones, pinched at the chicane.",
+        "# x_m,y_m,w_tr_right_m,w_tr_left_m",
+    ]
+    for (x, y), w in zip(points, widths):
+        lines.append(f"{x:.6f},{y:.6f},{w:.6f},{w:.6f}")
+    return "\n".join(lines) + "\n"
+
+
+def check_lane_clearance(points: list[tuple[float, float]],
+                         widths: list[float], lap: float) -> None:
+    """Different parts of the lap must keep their distance.
+
+    For any two samples more than 3 m apart along the lap, the planar gap
+    must exceed both half-widths plus clearance, or two wall runs would
+    meet. Bucketed so the check is O(n) rather than O(n squared). A
+    function of its own so the test suite can hand it a lap that genuinely
+    self-intersects and watch it refuse.
+    """
+    nominal = lap / len(points)
+    cell = 2.5
+    buckets: dict[tuple[int, int], list[int]] = {}
+    for i, (x, y) in enumerate(points):
+        buckets.setdefault((int(x // cell), int(y // cell)), []).append(i)
+    for (bx, by), members in buckets.items():
+        near = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                near.extend(buckets.get((bx + dx, by + dy), []))
+        for i in members:
+            for j in near:
+                if j <= i:
+                    continue
+                along = abs(i - j) * nominal
+                along = min(along, lap - along)
+                if along <= 3.0:
+                    continue
+                gap = math.hypot(points[i][0] - points[j][0],
+                                 points[i][1] - points[j][1])
+                need = widths[i] + widths[j] + 0.05
+                assert gap >= need, (
+                    f"samples {i} and {j} are {gap:.3f} m apart with "
+                    f"{need:.3f} m of wall between them")
+
+
+def check_circuit(points: list[tuple[float, float]],
+                  widths: list[float]) -> None:
+    """Assert the circuit rather than looking at it.
+
+    Same policy as the stadium's check, with three additions the stadium
+    never needed: the segment walk must close, the varying width must stay
+    inside the envelope the corner radii allow, and no part of the lap may
+    come close enough to another part for their walls to meet.
+    """
+    lap, end_x, end_y, end_heading = _CIRCUIT_END
+
+    # Closure, in position, heading and total turn. A circuit that misses
+    # closure by a hair would still render, and the loader would then close
+    # it with a kink at the start line.
+    assert math.hypot(end_x, end_y) < 1e-9, f"open by {math.hypot(end_x, end_y)}"
+    assert abs(end_heading - 2.0 * math.pi) < 1e-9, end_heading
+    total_turn = sum(math.radians(s[2]) for s in CIRCUIT_SEGMENTS
+                     if s[0] == "arc")
+    assert abs(total_turn - 2.0 * math.pi) < 1e-12, total_turn
+
+    # Every sample lies on its own segment's locus.
+    count = len(points)
+    for index, (x, y) in enumerate(points):
+        s = index * lap / count
+        seg_index = len(_CIRCUIT_TABLE) - 1
+        while seg_index > 0 and _CIRCUIT_TABLE[seg_index][0] > s:
+            seg_index -= 1
+        start, sx, sy, heading = _CIRCUIT_TABLE[seg_index]
+        segment = CIRCUIT_SEGMENTS[seg_index]
+        if segment[0] == "straight":
+            off = (-(x - sx) * math.sin(heading) + (y - sy) * math.cos(heading))
+            assert abs(off) < 1e-9, f"({x}, {y}) is off its straight"
+        else:
+            radius, sweep = segment[1], math.radians(segment[2])
+            side = 1.0 if sweep > 0.0 else -1.0
+            centre_x = sx - side * radius * math.sin(heading)
+            centre_y = sy + side * radius * math.cos(heading)
+            assert abs(math.hypot(x - centre_x, y - centre_y) - radius) < 1e-9, (
+                f"({x}, {y}) is off its arc")
+
+    # The same chord discipline as the stadium, at the finer spacing: no
+    # chord exceeds its arc, and the total shortfall stays under a
+    # millimetre even through the 1 m chicane arcs.
+    nominal = lap / count
+    steps = [
+        math.hypot(points[i][0] - points[i - 1][0],
+                   points[i][1] - points[i - 1][1])
+        for i in range(1, count)
+    ]
+    assert min(steps) > 0.0, "two consecutive points coincide"
+    assert max(steps) <= nominal + 1e-12, "a chord is longer than its arc"
+    assert min(steps) > nominal - 1e-5, "the sampling is too coarse"
+    closing = math.hypot(points[0][0] - points[-1][0],
+                         points[0][1] - points[-1][1])
+    polyline = sum(steps) + closing
+    assert 0.0 <= lap - polyline < 1e-3, (
+        f"polyline is {polyline:.6f} m against a true lap of {lap:.6f} m; "
+        f"raise the sampling rate")
+
+    # The width profile: closed at the start line, its extremes exactly the
+    # designed pinch and the designed braking zone, and continuous enough
+    # that the mitred walls stay walls rather than steps.
+    assert circuit_width_at(0.0) == 1.0
+    assert min(widths) == 0.70, min(widths)
+    assert 1.08 < max(widths) <= 1.10, max(widths)
+    assert all(w > 0.0 for w in widths)
+    for i in range(count):
+        assert abs(widths[i] - widths[i - 1]) < 0.01, (
+            f"width steps by {abs(widths[i] - widths[i - 1]):.4f} at {i}")
+
+    # No wall may reach a corner's centre: on every arc sample the width
+    # toward the centre must leave real radius behind it, or the inner wall
+    # folds over itself.
+    for index in range(count):
+        s = index * lap / count
+        seg_index = len(_CIRCUIT_TABLE) - 1
+        while seg_index > 0 and _CIRCUIT_TABLE[seg_index][0] > s:
+            seg_index -= 1
+        segment = CIRCUIT_SEGMENTS[seg_index]
+        if segment[0] == "arc":
+            assert widths[index] < segment[1] - 0.05, (
+                f"width {widths[index]} crowds the {segment[1]} m arc at "
+                f"s={s:.2f}")
+
+    check_lane_clearance(points, widths, lap)
+
+    # The start is the origin, heading along the straight, and a twenty-car
+    # grid at the bridge's 1.5 m spacing fits with the lap to spare.
+    assert points[0] == (0.0, 0.0), points[0]
+    assert points[1][0] > points[0][0], "the first segment runs the wrong way"
+    assert 19 * 1.5 < sum(steps), "the demo grid no longer fits"
+
+
 def main() -> int:
     points = centreline()
     check(points)
@@ -163,6 +469,18 @@ def main() -> int:
 
     print(f"{target.relative_to(HERE.parent.parent)}: {len(points)} points, "
           f"lap {LAP_M:.3f} m")
+
+    gp_points = circuit_centreline()
+    gp_widths = circuit_widths(len(gp_points))
+    check_circuit(gp_points, gp_widths)
+
+    gp_target = HERE / "paddock_gp" / "centreline.csv"
+    gp_target.parent.mkdir(parents=True, exist_ok=True)
+    gp_target.write_text(render_circuit(gp_points, gp_widths),
+                         encoding="utf-8", newline="\n")
+
+    print(f"{gp_target.relative_to(HERE.parent.parent)}: {len(gp_points)} "
+          f"points, lap {CIRCUIT_LAP_M:.3f} m")
     return 0
 
 

@@ -191,6 +191,12 @@ Quoted for road cars in safety ratings.
 standard manoeuvre for measuring cornering stiffness and peak lateral friction.
 See [fitting a tyre model](07-fitting-a-tyre-model.md).
 
+**Switchback** (also **crossover**). Conceding the inside of a corner to an
+attacker, keeping the wider arc, and using the better exit speed to retake
+the place on the following straight. The reason an inside move into a corner
+before a long straight is only half a pass. See
+[overtaking](21-overtaking.md).
+
 **Torque-speed curve**. A permanent-magnet motor's defining relationship: a
 straight line from the stall torque at zero speed to zero torque at the free
 speed, scaling with supply voltage at both ends. A current limit clips its top
