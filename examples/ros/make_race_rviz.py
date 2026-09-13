@@ -284,6 +284,17 @@ def car_urdf(name: str, dae_path: Path) -> str:
 """
 
 
+def _size(text: str) -> tuple:
+    """"WxH" as two positive integers; the refusal names the argument."""
+    try:
+        width, height = (int(part) for part in text.lower().split("x"))
+    except ValueError:
+        raise SystemExit(f"error: size {text!r} is not WxH") from None
+    if width <= 0 or height <= 0:
+        raise SystemExit(f"error: size {text!r} is not positive")
+    return width, height
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--agents", type=int, default=20)
@@ -294,8 +305,15 @@ def main() -> int:
                         default=Path(__file__).resolve().parents[1]
                         / "cars" / "reference_1_10",
                         help="car directory, for the body dimensions")
+    parser.add_argument("--view", default="900x900",
+                        help="pixel box the track is fitted into, WxH; "
+                             "the render panel, not the window")
+    parser.add_argument("--window", default="1400x900",
+                        help="RViz window size, WxH")
     parser.add_argument("--out", type=Path, default=Path("race.rviz"))
     arguments = parser.parse_args()
+    view_w, view_h = _size(arguments.view)
+    window_w, window_h = _size(arguments.window)
 
     with open(arguments.car / "dynamics.yaml", encoding="utf-8") as handle:
         geometry = yaml.safe_load(handle)["geometry"]
@@ -310,8 +328,11 @@ def main() -> int:
             ys.append(float(row[1]))
     centre_x = 0.5 * (min(xs) + max(xs))
     centre_y = 0.5 * (min(ys) + max(ys))
-    extent = max(max(xs) - min(xs), max(ys) - min(ys)) + 4.0
-    scale = 900.0 / extent
+    # Fit the track, plus a 2 m margin all round, into the view box in
+    # whichever axis binds; a wide circuit in a wide panel gets the
+    # pixels a square box would waste.
+    scale = min(view_w / (max(xs) - min(xs) + 4.0),
+                view_h / (max(ys) - min(ys) + 4.0))
 
     out_dir = arguments.out.resolve().parent
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -327,6 +348,7 @@ def main() -> int:
         History Policy: Keep Last
         Reliability Policy: Reliable
       Color Scheme: map
+      Alpha: 0.5
       Draw Behind: true
     - Class: rviz_default_plugins/TF
       Enabled: false
@@ -365,8 +387,8 @@ def main() -> int:
       Color Transformer: FlatColor
       Color: {rviz_colour(rgb)}
       Style: Points
-      Size (Pixels): 2
-      Alpha: 0.7
+      Size (Pixels): 3
+      Alpha: 0.8
       Decay Time: 0
     - Class: rviz_default_plugins/Odometry
       Enabled: false
@@ -416,8 +438,8 @@ Visualization Manager:
       Y: {centre_y:.2f}
       Angle: 0
 Window Geometry:
-  Height: 900
-  Width: 1400
+  Height: {window_h}
+  Width: {window_w}
 """
     arguments.out.write_text(config, encoding="utf-8")
     print(f"wrote {arguments.out} and {arguments.agents} car bodies "

@@ -3,7 +3,7 @@
 <!-- Absolute URLs throughout this file, not repository-relative ones. This
      README is also the PyPI long description, and PyPI serves it from another
      origin where a relative path resolves to nothing. -->
-![SlipX: vehicle dynamics for 1/10-scale racecars](https://raw.githubusercontent.com/ibrahimsel/slipx/main/docs/assets/slipx-banner.gif)
+![SlipX: twenty cars racing the paddock_gp circuit, recorded from RViz](https://raw.githubusercontent.com/ibrahimsel/slipx/main/docs/assets/slipx-banner.gif)
 
 [![PyPI](https://img.shields.io/pypi/v/slipx)](https://pypi.org/project/slipx/)
 [![Python](https://img.shields.io/pypi/pyversions/slipx)](https://pypi.org/project/slipx/)
@@ -443,12 +443,16 @@ should not invalidate every car file.
   and
   [**changelog**](https://github.com/ibrahimsel/slipx/blob/main/CHANGELOG.md).
 
-The banner at the top is output, not an illustration:
-[`docs/assets/make_banner.py`](https://github.com/ibrahimsel/slipx/blob/main/docs/assets/make_banner.py)
-rolls the car out of `slipx_core` at the double-track tier, and it drifts
-because its rear tyre is a lower-grip compound than its front. Every figure in
-the tutorial series is generated the same way, and none of them carries a model
-of its own.
+The banner at the top is a recording, not an illustration: twenty cars on
+the `paddock_gp` circuit under the ROS 2 bridge, dealt the seeded mixed field
+of
+[`examples/ros/watch_a_race.sh`](https://github.com/ibrahimsel/slipx/blob/main/examples/ros/watch_a_race.sh),
+as RViz showed them. Every car, wall and scan in it is a state the bridge
+published out of `slipx_core`;
+[`docs/assets/record_banner.sh`](https://github.com/ibrahimsel/slipx/blob/main/docs/assets/record_banner.sh)
+records the render panel and encodes the frames, and draws nothing. Every
+figure in the tutorial series is likewise output of the library, and none of
+them carries a model of its own.
 
 ## Scope
 

@@ -1497,6 +1497,27 @@ computed, and the conformance script re-checked all six rows.)
   clearance, closure); each produced a targeted refusal test and the
   lane-clearance extraction, after which 21 of 21 are caught. No
   reference hash moved and none could: nothing here touches slipx_core.
+- [x] **M7.14** The README banner is the demo race (numbered by writing
+  order, at the user's request: the skidpad rollout predates the bridge and
+  showed one car where the project now shows a field).
+  Done when: the banner is a recording of `watch_a_race.sh` as RViz shows
+  it, produced by a checked-in script, and the README says what it is.
+  Done 2026-09-13: `docs/assets/record_banner.sh` runs the bridge, the
+  driver and RViz as `watch_a_race.sh` does, waits 40 s for the field to
+  spread, records RViz's render panel (its own X window, so no cropping)
+  for 12 s at 20 fps with ffmpeg's x11grab, and encodes the GIF in two
+  palette passes; it draws nothing. `make_race_rviz.py` fits the track
+  into a `--view` box in whichever axis binds and sizes the window with
+  `--window`; the map is drawn at half alpha and the scan points one pixel
+  larger, so twenty 14 px cars read against the band. `make_banner.py`
+  is deleted; the Makefile, CLAUDE.md and the README paragraph follow.
+  The recording needs a display, so the GIF is checked in, not built in
+  CI. Mutation pass on the generator (`test_make_race_rviz.py`): 7 tried,
+  6 caught first time (min to max, x margin dropped, axes swapped, zero
+  size accepted, window height and width swapped, case folding dropped);
+  the escape was the y margin dropped, because no test had the track's
+  height bind the fit; a short-and-wide view test catches it, after which
+  7 of 7. No reference hash moved and none could.
 - [ ] **M7.10** P3 exit gate (external fact): one course or one competition
   runs an evaluation on SlipX.
   Done when: it has happened and can be cited.

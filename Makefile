@@ -41,8 +41,8 @@ core-only: ## The core must configure and build alone
 	cmake -S . -B $(CORE_BUILD_DIR) -DSLIPX_CORE_ONLY=ON
 	cmake --build $(CORE_BUILD_DIR) -j
 
-banner: ## Regenerate the README banner (needs Pillow and a built slipx)
-	$(PYTHON) docs/assets/make_banner.py
+banner: ## Re-record the README banner (needs ROS 2, rviz2, an X display and ffmpeg)
+	bash docs/assets/record_banner.sh
 
 figures: ## Regenerate the tutorial figures (needs a built slipx)
 	$(PYTHON) docs/racing/assets/make_figures.py

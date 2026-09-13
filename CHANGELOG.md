@@ -21,6 +21,14 @@ No reference hash moves in this section so far. `slipx_scene` sits above the
 core and the core's numerical paths are untouched; the eighteen rows were
 re-checked, not re-measured.
 
+- **The README banner is the demo race, recorded.**
+  `docs/assets/record_banner.sh` runs the bridge, the driver and RViz
+  exactly as `watch_a_race.sh` does, records RViz's render panel with
+  ffmpeg once the field has spread out, and encodes the frames as the GIF;
+  it draws nothing. The skidpad rollout in `make_banner.py` goes with it.
+  `make_race_rviz.py` fits the track into a `--view` box and sizes the
+  window with `--window`, so a wide circuit gets the pixels a square box
+  wasted.
 - **A second generated track ships, and the demo grid races** (ADR-0057).
   `examples/tracks/paddock_gp` is a circuit shaped for racing rather than
   CI: a 26 m start straight, a sweeper, a bus-stop chicane pinching to

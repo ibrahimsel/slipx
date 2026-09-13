@@ -158,8 +158,10 @@ Each rule has a record; the record is the argument and this is only the index.
 - A test that mutates a module and restores it must clear `__pycache__`, or
   the next run loads the mutant.
 - Figures are hand-rolled SVG from standard-library-only scripts
-  (`docs/racing/assets/make_figures.py`, `docs/assets/make_banner.py`);
-  matplotlib is not an option. Unicode has no Latin subscript `y` or `z`, so
+  (`docs/racing/assets/make_figures.py`); matplotlib is not an option. The
+  README banner is a screen recording of the RViz demo race
+  (`docs/assets/record_banner.sh`), which needs a display, so the GIF is
+  checked in rather than built. Unicode has no Latin subscript `y` or `z`, so
   use the scripts' `sub()` helper rather than pasting codepoints; assert a
   diagram's geometry in code; and check every figure by rendering it, never
   by reading the SVG:
