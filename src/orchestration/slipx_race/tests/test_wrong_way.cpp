@@ -58,8 +58,10 @@ TEST(WrongWay, RebaseForgivesATeleportAndReArms) {
 TEST(WrongWay, RefusesAThresholdThatWouldRuleOnNoise) {
   EXPECT_THROW(WrongWayMonitor(0.0), std::invalid_argument);
   EXPECT_THROW(WrongWayMonitor(-1.0), std::invalid_argument);
+  // Braces, not parentheses: with parentheses the statement parses as a
+  // declaration of a function named quiet_NaN, which Clang rejects.
   EXPECT_THROW(
-      WrongWayMonitor(std::numeric_limits<double>::quiet_NaN()),
+      WrongWayMonitor{std::numeric_limits<double>::quiet_NaN()},
       std::invalid_argument);
 }
 
