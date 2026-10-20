@@ -254,9 +254,12 @@ def main() -> int:
     if args.pin_only:
         return 0
 
+    # Windows names the executable with a .exe suffix; without it the lookup
+    # reports a binary that is in fact there as not found.
+    suffix = ".exe" if sys.platform == "win32" else ""
     binary = (
         REPO_ROOT / args.build_dir / "src" / "orchestration" / "slipx_sim"
-        / "slipx_conformance"
+        / f"slipx_conformance{suffix}"
     )
     if not binary.exists():
         print(f"conformance binary not found at {binary}", file=sys.stderr)
